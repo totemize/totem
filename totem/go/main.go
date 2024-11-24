@@ -27,6 +27,10 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 	s.tmpl.Execute(w, s.relay.GetPet())
 }
 
+func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
+	s.stateTmpl.Execute(w, s.relay.GetPet())
+}
+
 func main() {
 	db := sqlite3.SQLite3Backend{DatabaseURL: "./nostrpet.db"}
 	if err := db.Init(); err != nil {
@@ -55,6 +59,7 @@ func main() {
 	// Set up HTTP routes
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", server.handleHome)
+	mux.HandleFunc("/state", server.handleState)
 	mux.Handle("/nostr", petRelay)
 
 	// Start periodic updates
