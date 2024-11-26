@@ -1,0 +1,12 @@
+[tool.poetry]
+name = "totem"
+version = "0.1.0"
+packages = [
+    { include = "devices" },
+    { include = "managers" },
+    { include = "utils" },
+]
+
+[tool.poetry.scripts]
+system-test = "totem.system_test:main"
+#init = "totem.init:main"
