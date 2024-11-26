@@ -4,7 +4,7 @@
 PI_USER="pi"
 PI_HOST="raspberrypi.local"
 SSH_KEY="$HOME/.ssh/id_rsa"
-APP_DIR="/home/pi/totem"
+APP_DIR="/home/pi/totem/python"
 
 function usage() {
     echo "Usage: $0 [options]"

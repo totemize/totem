@@ -7,7 +7,7 @@
 PI_USER="pi"
 PI_HOST="raspberrypi.local"
 SSH_KEY="$HOME/.ssh/id_rsa"
-APP_DIR="/home/pi/app"
+APP_DIR="/home/pi/totem/python"
 LOCAL_APP_DIR="$(pwd)/src"
 
 function usage() {
