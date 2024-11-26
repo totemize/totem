@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "nvme-device"
+version = "0.1.0"
+description = "NVMe storage drivers for Totem"
+authors = ["Your Name <you@example.com>"]
+packages = [{ include = "devices.nvme" }]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pyudev = "^0.23.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "wifi-device"
+version = "0.1.0"
+description = "Wi-Fi controller drivers for Totem"
+authors = ["Your Name <you@example.com>"]
+packages = [{ include = "devices.wifi" }]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pywifi = "^1.1.13"
+nmcli = "^0.3.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

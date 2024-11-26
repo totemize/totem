@@ -1,0 +1,14 @@
+[Unit]
+Description=Totem [Python]
+After=network.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/totem/python
+ExecStart=/usr/bin/env python3 /home/pi/totem/python/main.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
