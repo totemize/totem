@@ -1,27 +1,10 @@
 #!/bin/bash
-
-# usage:
-# ./deploy.sh -u pi -h 192.168.1.10 -k ~/.ssh/id_rsa_custom -a /home/pi/my_app -l ./my_src
-
-
 PI_USER="pi"
 PI_HOST="raspberrypi.local"
 SSH_KEY="$HOME/.ssh/id_rsa"
-APP_DIR="/home/pi/totem/python"
+APP_DIR="/home/pi/app"
 LOCAL_APP_DIR="$(pwd)/src"
-
-function usage() {
-    echo "Usage: $0 [options]"
-    echo ""
-    echo "Options:"
-    echo "  -u, --user          Raspberry Pi username (default: pi)"
-    echo "  -h, --host          Raspberry Pi host/IP (default: raspberrypi.local)"
-    echo "  -k, --key           SSH private key file (default: \$HOME/.ssh/id_rsa)"
-    echo "  -a, --app-dir       Application directory on Raspberry Pi (default: /home/pi/app)"
-    echo "  -l, --local-dir     Local application directory (default: ./src)"
-    echo "      --help          Show this help message"
-    exit 1
-}
+SETUP_SCRIPT="setup_dependencies.sh"
 
 while [[ $
     case $1 in
@@ -54,15 +37,23 @@ while [[ $
         ;;
     esac
 done
+]]
 
 echo "Deploying application to Raspberry Pi..."
 
 rsync -avz -e "ssh -i $SSH_KEY" "$LOCAL_APP_DIR/" "$PI_USER@$PI_HOST:$APP_DIR"
 
+scp -i "$SSH_KEY" "$SETUP_SCRIPT" "$PI_USER@$PI_HOST:/home/$PI_USER/"
+
+ssh -i "$SSH_KEY" "$PI_USER@$PI_HOST" << EOF
+chmod +x /home/$PI_USER/$SETUP_SCRIPT
+./$SETUP_SCRIPT
+EOF
+
 ssh -i "$SSH_KEY" "$PI_USER@$PI_HOST" << EOF
 cd "$APP_DIR"
 poetry install --no-dev
-sudo systemctl restart totem.service
+sudo systemctl restart myapp.service
 EOF
 
 echo "Deployment complete."

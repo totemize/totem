@@ -20,7 +20,6 @@ class Driver(EInkDeviceInterface):
 
         self.spi = spidev.SpiDev(0, 0)
         self.spi.max_speed_hz = 2000000
-
     
      init(self):
         logger.info("Initializing Waveshare 3.7in e-Paper HAT.")
