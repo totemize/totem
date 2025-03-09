@@ -1,6 +1,7 @@
 from devices.eink.eink import EInk
 from PIL import Image, ImageDraw, ImageFont
 from utils.logger import logger
+from typing import Optional
 
 class DisplayManager:
     def __init__(self, driver_name: Optional[str] = None):
