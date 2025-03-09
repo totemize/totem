@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "totem"
+version = "0.1.0"
+description = "Hardware control application for Raspberry Pi"
+authors = ["Your Name <you@example.com>"]
+packages = [
+    { include = "src" }, 
+    { include = "managers" }, 
+    { include = "devices" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+requests = "^2.28.1"
+
+eink-device = { path = "./devices/eink" }
+nfc-device = { path = "./devices/nfc" }
+wifi-device = { path = "./devices/wifi" }
+nvme-device = { path = "./devices/nvme" }
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+system-test = "totem.system_test:main"
+#init = "totem.init:main"

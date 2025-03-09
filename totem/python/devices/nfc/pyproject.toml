@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "nfc-device"
+version = "0.1.0"
+description = "NFC drivers for Totem"
+authors = ["Your Name <you@example.com>"]
+packages = [{ include = "devices.nfc" }]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pyscard = "^2.0.2"
+pyserial = "^3.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

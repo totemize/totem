@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "eink-device"
+version = "0.1.0"
+description = "E-Ink screen drivers for Totem"
+authors = ["Your Name <you@example.com>"]
+packages = [{ include = "devices.eink" }]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+Pillow = "^9.2.0"
+spidev = "^3.5"
+RPi.GPIO = "^0.7.0"
+numpy = "^1.23.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
