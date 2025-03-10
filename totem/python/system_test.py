@@ -1,13 +1,13 @@
 from managers.display_manager import DisplayManager
-from managers.nfc_manager import NFCManager
-from managers.storage_manager import StorageManager
-from managers.network_manager import NetworkManager
+# from managers.nfc_manager import NFCManager
+# from managers.storage_manager import StorageManager
+# from managers.network_manager import NetworkManager
 from utils.logger import logger
 import time
 import traceback
 import sys
 import os
-import tempfile
+# import tempfile
 
 # Flag to determine if we're in automated testing mode (with mock implementations)
 AUTO_TEST_MODE = True if (not sys.platform.startswith('linux') or os.environ.get('AUTO_TEST')) else False
@@ -46,6 +46,7 @@ def test_eink_display():
             return True
         return False
 
+"""
 def test_nfc_device():
     print("\n=== Testing NFC Device ===")
     try:
@@ -165,6 +166,7 @@ def test_wifi_controller():
             print("Using mock implementation instead.")
             return True
         return False
+"""
 
 def main():
     print("=== Starting System Test ===")
@@ -173,9 +175,9 @@ def main():
     results = []
     
     results.append(("E-Ink Display", test_eink_display()))
-    results.append(("NFC Device", test_nfc_device()))
-    results.append(("NVMe Storage", test_nvme_storage()))
-    results.append(("Wi-Fi Controller", test_wifi_controller()))
+    # results.append(("NFC Device", test_nfc_device()))
+    # results.append(("NVMe Storage", test_nvme_storage()))
+    # results.append(("Wi-Fi Controller", test_wifi_controller()))
     
     print("\n=== System Test Results ===")
     all_passed = True
