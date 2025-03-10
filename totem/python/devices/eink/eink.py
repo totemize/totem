@@ -44,6 +44,7 @@ class EInk:
         logger.info("Detecting E-Ink hardware...")
         try:
             spi_devices = os.listdir('/dev/')
+            spi_devices = [dev for dev in spi_devices if dev.startswith('spidev')]
             logger.debug(f"SPI devices found: {spi_devices}")
         except Exception as e:
             logger.error(f"Error accessing /dev/: {e}")
@@ -53,9 +54,9 @@ class EInk:
             'waveshare_3in7': 'waveshare_3in7',
         }
 
-
-        if 'spi0.0' in spi_devices:
-            logger.info("Detected E-Ink device: waveshare_3in7")
+        # Check if any SPI device exists
+        if spi_devices:
+            logger.info("Detected SPI device, assuming waveshare_3in7")
             return 'waveshare_3in7'
 
         logger.warning("No known E-Ink hardware detected.")

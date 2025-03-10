@@ -2,12 +2,13 @@ from managers.display_manager import DisplayManager
 # from managers.nfc_manager import NFCManager
 # from managers.storage_manager import StorageManager
 # from managers.network_manager import NetworkManager
-from utils.logger import logger
+from utils.logger import logger, setup_logger
 import time
 import traceback
 import sys
 import os
 # import tempfile
+import argparse
 
 # Flag to determine if we're in automated testing mode (with mock implementations)
 AUTO_TEST_MODE = True if (not sys.platform.startswith('linux') or os.environ.get('AUTO_TEST')) else False
@@ -20,10 +21,11 @@ def auto_input(prompt):
         return ""
     return input(prompt)
 
-def test_eink_display():
+def test_eink_display(driver_name=None):
     print("\n=== Testing E-Ink Display ===")
     try:
-        display_manager = DisplayManager()
+        logger.info(f"Initializing DisplayManager with driver: {driver_name}")
+        display_manager = DisplayManager(driver_name)
         display_manager.clear_screen()
         print("E-Ink display cleared. Please confirm the screen is blank.")
         auto_input("Press Enter to continue...")
@@ -169,12 +171,22 @@ def test_wifi_controller():
 """
 
 def main():
+    parser = argparse.ArgumentParser(description='Totem System Test')
+    parser.add_argument('--driver', help='Specify a display driver to use (e.g., waveshare_3in7)')
+    parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error'], default='info',
+                        help='Set the logging level')
+    args = parser.parse_args()
+    
+    # Setup logging
+    log_levels = {'debug': 10, 'info': 20, 'warning': 30, 'error': 40}
+    setup_logger(level=log_levels[args.log_level])
+    
     print("=== Starting System Test ===")
     print("Running in AUTO TEST MODE" if AUTO_TEST_MODE else "Running in INTERACTIVE MODE")
     
     results = []
     
-    results.append(("E-Ink Display", test_eink_display()))
+    results.append(("E-Ink Display", test_eink_display(args.driver)))
     # results.append(("NFC Device", test_nfc_device()))
     # results.append(("NVMe Storage", test_nvme_storage()))
     # results.append(("Wi-Fi Controller", test_wifi_controller()))
