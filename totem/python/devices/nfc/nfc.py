@@ -31,10 +31,17 @@ class NFC:
             if detected_driver:
                 self.driver = self._load_driver_by_name(detected_driver)
             else:
-                raise RuntimeError("No compatible NFC hardware detected.")
+                logger.warning("No hardware detected, using mock NFC device.")
+                self.driver = self._load_driver_by_name('mock_nfc')
 
     def _detect_hardware(self) -> Optional[str]:
         logger.info("Detecting NFC hardware...")
+        
+        # For non-Linux systems, don't attempt to use lsusb
+        if not sys.platform.startswith('linux'):
+            logger.warning(f"Not running on Linux (detected {sys.platform}), using mock NFC device")
+            return 'mock_nfc'
+            
         try:
             output = subprocess.check_output(['lsusb']).decode('utf-8')
             logger.debug(f"lsusb output:\n{output}")
@@ -74,6 +81,16 @@ class NFC:
             return driver_class()
         except (ImportError, AttributeError, TypeError) as e:
             logger.error(f"Error loading driver '{driver_name}': {e}")
+            # If we can't load the requested driver, fall back to mock driver
+            if driver_name != 'mock_nfc':
+                logger.warning(f"Falling back to mock NFC driver")
+                try:
+                    module_path = f"devices.nfc.drivers.mock_nfc"
+                    module = importlib.import_module(module_path)
+                    driver_class = getattr(module, 'Driver')
+                    return driver_class()
+                except (ImportError, AttributeError, TypeError) as fallback_error:
+                    logger.error(f"Error loading mock driver: {fallback_error}")
             raise
 
     def initialize(self):

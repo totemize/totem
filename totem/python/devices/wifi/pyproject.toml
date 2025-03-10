@@ -3,12 +3,15 @@ name = "wifi-device"
 version = "0.1.0"
 description = "Wi-Fi controller drivers for Totem"
 authors = ["Your Name <you@example.com>"]
-packages = [{ include = "devices.wifi" }]
+packages = [{ include = "devices" }]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-pywifi = "^1.1.13"
-nmcli = "^0.3.0"
+pywifi = { version = "^1.1.13", optional = true, markers = "sys_platform == 'linux'" }
+nmcli = { version = "^0.3.0", optional = true, markers = "sys_platform == 'linux'" }
+
+[tool.poetry.extras]
+hardware = ["pywifi", "nmcli"]
 
 [build-system]
 requires = ["poetry-core"]

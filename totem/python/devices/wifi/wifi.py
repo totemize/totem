@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import importlib
 import os
 import subprocess
+import sys
 from typing import Optional
 from utils.logger import logger
 
@@ -45,10 +46,17 @@ class WiFi:
             if detected_driver:
                 self.driver = self._load_driver_by_name(detected_driver)
             else:
-                raise RuntimeError("No compatible Wi-Fi hardware detected.")
+                logger.warning("No hardware detected, using mock WiFi device.")
+                self.driver = self._load_driver_by_name('mock_wifi')
 
     def _detect_hardware(self) -> Optional[str]:
         logger.info("Detecting Wi-Fi hardware...")
+        
+        # For non-Linux systems, don't attempt to use Linux-specific commands
+        if not sys.platform.startswith('linux'):
+            logger.warning(f"Not running on Linux (detected {sys.platform}), using mock WiFi device")
+            return 'mock_wifi'
+            
         try:
             result = subprocess.check_output(['ls', '/sys/class/net']).decode('utf-8')
             interfaces = result.strip().split('\n')
@@ -82,6 +90,16 @@ class WiFi:
             return driver_class()
         except (ImportError, AttributeError, TypeError) as e:
             logger.error(f"Error loading Wi-Fi driver '{driver_name}': {e}")
+            # If we can't load the requested driver, fall back to mock driver
+            if driver_name != 'mock_wifi':
+                logger.warning(f"Falling back to mock WiFi driver")
+                try:
+                    module_path = f"devices.wifi.drivers.mock_wifi"
+                    module = importlib.import_module(module_path)
+                    driver_class = getattr(module, 'Driver')
+                    return driver_class()
+                except (ImportError, AttributeError, TypeError) as fallback_error:
+                    logger.error(f"Error loading mock driver: {fallback_error}")
             raise
 
     def initialize(self):
