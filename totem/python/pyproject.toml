@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Hardware control application for Raspberry Pi"
 authors = ["Your Name <you@example.com>"]
 packages = [
-    { include = "src" }, 
     { include = "managers" }, 
     { include = "devices" },
     { include = "utils" },
