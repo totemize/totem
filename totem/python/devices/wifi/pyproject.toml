@@ -3,7 +3,7 @@ name = "wifi-device"
 version = "0.1.0"
 description = "Wi-Fi controller drivers for Totem"
 authors = ["Your Name <you@example.com>"]
-packages = [{ include = "devices" }]
+packages = [{ include = "**/*.py" }]
 
 [tool.poetry.dependencies]
 python = "^3.9"

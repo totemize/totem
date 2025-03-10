@@ -3,7 +3,7 @@ name = "eink-device"
 version = "0.1.0"
 description = "E-Ink screen drivers for Totem"
 authors = ["Your Name <you@example.com>"]
-packages = [{ include = "devices" }]
+packages = [{ include = "**/*.py" }]
 
 [tool.poetry.dependencies]
 python = "^3.9"
