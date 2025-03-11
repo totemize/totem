@@ -38,24 +38,44 @@ venv\Scripts\activate
 pip install pillow numpy
 ```
 
-## System Test
+## Running Tests
 
-The project includes a comprehensive system test that checks all hardware components:
+All test scripts have been moved to the `tests` directory and registered as Poetry scripts for easy execution.
 
-- E-Ink Display
-- NFC Reader
-- NVMe Storage
-- WiFi Controller
-
-### Running System Test
+### Available Test Scripts
 
 ```bash
-# Using Poetry
-poetry run python system_test.py
+# System test (checks all hardware components)
+poetry run system-test
 
-# Or using venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-python system_test.py
+# E-Ink display tests
+poetry run eink-debug
+poetry run eink-pattern
+poetry run eink-quick-test
+poetry run eink-diag
+poetry run pi5-eink-test
+
+# Storage tests
+poetry run nvme-test
+poetry run storage-test
+
+# GPIO test
+poetry run gpio-test
+```
+
+### Test Options
+
+Most tests support command line arguments:
+
+```bash
+# Run system test for a specific component
+poetry run system-test --test eink
+poetry run system-test --test nvme
+poetry run system-test --test wifi
+poetry run system-test --test nfc
+
+# Run with debug logging
+poetry run system-test --log-level debug
 ```
 
 ### Auto Test Mode
@@ -72,10 +92,10 @@ To explicitly enable auto test mode:
 
 ```bash
 # On Linux/macOS
-AUTO_TEST=1 python system_test.py
+AUTO_TEST=1 poetry run system-test
 
 # On Windows PowerShell
-$env:AUTO_TEST=1; python system_test.py
+$env:AUTO_TEST=1; poetry run system-test
 ```
 
 ## Device Drivers
@@ -99,8 +119,20 @@ python/
 │   ├── nvme/           # NVMe storage
 │   └── wifi/           # WiFi controller
 ├── managers/           # High-level managers for devices
+├── service/            # Web service components
+├── src/                # Core application code
+├── tests/              # Test scripts for all components
 ├── utils/              # Utility functions and helpers
 ├── logs/               # Log files
-├── system_test.py      # System test
+├── scripts/            # Utility scripts
+├── examples/           # Example code
 └── totem-python.service # Systemd service config
+``` 
+
+## Running the Service
+
+To start the web service:
+
+```bash
+poetry run serve
 ``` 

@@ -7,7 +7,8 @@ packages = [
     { include = "managers" }, 
     { include = "devices" },
     { include = "utils" },
-    { include = "service" }
+    { include = "service" },
+    { include = "tests" }
 ]
 
 [tool.poetry.dependencies]
@@ -46,6 +47,15 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-system-test = "system_test:main"
+system-test = "tests.system_test:main"
 serve = "service.main:start_server"
+eink-debug = "tests.test_eink_debug:main"
+eink-pattern = "tests.test_eink_pattern:main"
+nvme-test = "tests.test_nvme:main"
+storage-test = "tests.test_storage_manager:main"
+pi5-eink-test = "tests.test_pi5_eink:main"
+eink-quick-test = "tests.eink_quick_test:main"
+eink-diag = "tests.eink_diag:main"
+gpio-test = "tests.simple_gpio_test:main"
+eink-gpio-debug = "tests.eink_gpio_debug:main"
 #init = "totem.init:main"
