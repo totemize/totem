@@ -2,6 +2,7 @@ from utils.logger import logger
 from PIL import Image
 import time
 import numpy as np
+import os
 from devices.eink.eink import EInkDeviceInterface
 
 # Mock implementations for testing
@@ -37,6 +38,18 @@ class Driver(EInkDeviceInterface):
         try:
             import spidev
             import gpiod
+            
+            # Check if SPI device exists
+            if not os.path.exists('/dev/spidev0.0'):
+                logger.error("SPI device /dev/spidev0.0 not found! Make sure SPI is enabled.")
+                logger.info("Available devices in /dev: " + str([f for f in os.listdir('/dev') if f.startswith('spi')]))
+                raise FileNotFoundError("/dev/spidev0.0 not found")
+                
+            # Check if GPIO chip exists
+            if not os.path.exists('/dev/gpiochip0'):
+                logger.error("GPIO device /dev/gpiochip0 not found!")
+                raise FileNotFoundError("/dev/gpiochip0 not found")
+                
             self.USE_HARDWARE = True
             logger.info("Using Pi 5 compatible GPIO (gpiod) and SPI")
             
@@ -57,6 +70,11 @@ class Driver(EInkDeviceInterface):
             logger.info("Hardware initialized successfully")
         except Exception as e:
             logger.warning(f"Hardware libraries not available or initialization failed: {e}")
+            if hasattr(self, 'spi') and not isinstance(self.spi, MockSpiDev):
+                try:
+                    self.spi.close()
+                except:
+                    pass
             self.USE_HARDWARE = False
             self.spi = MockSpiDev()
     
