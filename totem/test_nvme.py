@@ -4,10 +4,14 @@ import sys
 import subprocess
 import argparse
 import logging
-from utils.logger import logger
-from managers.storage_manager import StorageManager
-from devices.nvme.nvme import NVME
-from devices.nvme.drivers.generic_nvme import Driver as NVMeDriver
+
+# Add python directory to path for imports
+sys.path.append(os.path.join(os.path.dirname(__file__), 'python'))
+
+from python.utils.logger import logger
+from python.managers.storage_manager import StorageManager
+from python.devices.nvme.nvme import NVME
+from python.devices.nvme.drivers.generic_nvme import Driver as NVMeDriver
 
 def confirm_action(message="Do you want to continue?"):
     """Ask for user confirmation before proceeding with an action."""
