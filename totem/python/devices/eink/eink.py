@@ -93,8 +93,16 @@ class EInk:
     def clear_display(self):
         self.driver.clear()
 
+    def clear(self):
+        """Alias for clear_display"""
+        return self.clear_display()
+
     def display_image(self, image):
         self.driver.display_image(image)
+
+    def display(self, image):
+        """Alias for display_image"""
+        return self.display_image(image)
 
     def display_bytes(self, image_bytes):
         self.driver.display_bytes(image_bytes)
