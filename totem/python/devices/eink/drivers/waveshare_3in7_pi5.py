@@ -240,7 +240,13 @@ class Driver(EInkDeviceInterface):
                 if isinstance(data, int):
                     self.spi.writebytes([data])
                 else:
-                    self.spi.writebytes(data)
+                    # Send data in chunks to avoid overflow
+                    chunk_size = 1024  # Safe chunk size
+                    for i in range(0, len(data), chunk_size):
+                        chunk = data[i:i + chunk_size]
+                        self.spi.writebytes(chunk)
+                        # Small delay between chunks to avoid overwhelming the SPI bus
+                        time.sleep(0.001)
             except Exception as e:
                 logger.error(f"Error sending data: {e}")
                 logger.error(traceback.format_exc())
@@ -252,7 +258,8 @@ class Driver(EInkDeviceInterface):
             try:
                 logger.debug("Waiting for display to be idle")
                 busy_values = self.busy_request.get_values()
-                while busy_values[self.busy_pin] == self.Value.ACTIVE:
+                # The get_values() method returns a dictionary with pin numbers as keys
+                while busy_values.get(self.busy_pin, self.Value.INACTIVE) == self.Value.ACTIVE:
                     time.sleep(0.1)
                     busy_values = self.busy_request.get_values()
             except Exception as e:
