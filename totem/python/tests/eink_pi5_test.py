@@ -25,7 +25,7 @@ def test_device_init():
         from devices.eink.eink import EInk
         
         logger.info("Creating EInk instance...")
-        display = EInk(force_driver='waveshare_3in7_pi5')
+        display = EInk(driver_name='waveshare_3in7_pi5')
         logger.info(f"Display initialized, driver: {display.driver.__class__.__name__}")
         
         # Check if hardware mode is enabled

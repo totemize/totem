@@ -197,7 +197,7 @@ def test_individual_pins_v2(pins):
         
         # Open chip
         chip = gpiod.Chip('/dev/gpiochip0')
-        logger.info(f"Successfully opened chip: {chip.name}")
+        logger.info(f"Successfully opened chip: /dev/gpiochip0")
         
         # For each pin, try to request as both input and output
         for name, pin in pins.items():
