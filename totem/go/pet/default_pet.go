@@ -22,11 +22,6 @@ func (p *DefaultPet) HandleStore(ctx context.Context, evt *nostr.Event) error {
 	currentState := p.state
 	p.mutex.RUnlock()
 
-	// Pet personality affecting storage
-	if currentState.Energy < 99 {
-		return fmt.Errorf("pet is too tired to store events right now")
-	}
-
 	if currentState.Happiness < 50 && len(evt.Content) > 250 {
 		return fmt.Errorf("pet is grumpy and doesn't like long messages")
 	}
@@ -50,10 +45,6 @@ func (p *DefaultPet) HandleDelete(ctx context.Context, evt *nostr.Event) error {
 	p.mutex.RLock()
 	currentState := p.state
 	p.mutex.RUnlock()
-
-	if currentState.Happiness > 90 {
-		return fmt.Errorf("pet is too happy and doesn't want to delete anything")
-	}
 
 	err := p.database.DeleteEvent(ctx, evt)
 	if err == nil && currentState.Energy < 50 {
@@ -84,14 +75,6 @@ func (p *DefaultPet) HandleQuery(ctx context.Context, filter nostr.Filter) (chan
 }
 
 func (p *DefaultPet) HandleCount(ctx context.Context, filter nostr.Filter) (int64, error) {
-	p.mutex.RLock()
-	currentState := p.state
-	p.mutex.RUnlock()
-
-	if currentState.Energy < 10 {
-		return 0, fmt.Errorf("pet is too exhausted to count events")
-	}
-
 	count, err := p.database.CountEvents(ctx, filter)
 	if err == nil {
 		p.mutex.Lock()
