@@ -1,4 +1,5 @@
-package pet
+// pet.go
+package main
 
 import (
 	"context"
@@ -16,14 +17,6 @@ type State struct {
 	LastFed   time.Time `json:"last_fed"`
 }
 
-// Database defines the interface for storage operations
-type Database interface {
-	SaveEvent(ctx context.Context, evt *nostr.Event) error
-	DeleteEvent(ctx context.Context, evt *nostr.Event) error
-	QueryEvents(ctx context.Context, filter nostr.Filter) (chan *nostr.Event, error)
-	CountEvents(ctx context.Context, filter nostr.Filter) (int64, error)
-}
-
 // Pet defines the interface that any pet implementation must satisfy
 type Pet interface {
 	// Core pet behaviors
@@ -31,21 +24,22 @@ type Pet interface {
 	Update()
 	GetStateEmoji() string
 
-	// Relay operation handlers
-	HandleStore(ctx context.Context, evt *nostr.Event) error
-	HandleDelete(ctx context.Context, evt *nostr.Event) error
-	HandleQuery(ctx context.Context, filter nostr.Filter) (chan *nostr.Event, error)
-	HandleCount(ctx context.Context, filter nostr.Filter) (int64, error)
+	// Event notifications
+	handleStoreEvent(ctx context.Context, evt *nostr.Event)
+	handleDeleteEvent(ctx context.Context, evt *nostr.Event)
+
+	// Filter suggestions and event rejections
+	handleQueryEvents(ctx context.Context, filter nostr.Filter) (nostr.Filter, error)
+	handleRejectEvent(ctx context.Context, evt *nostr.Event) (bool, string)
 }
 
 // BasePet provides common pet functionality
 type BasePet struct {
-	state    State
-	database Database
-	mutex    sync.RWMutex
+	state State
+	mutex sync.RWMutex
 }
 
-func NewBasePet(name string, db Database) *BasePet {
+func NewBasePet(name string) *BasePet {
 	return &BasePet{
 		state: State{
 			Name:      name,
@@ -53,7 +47,6 @@ func NewBasePet(name string, db Database) *BasePet {
 			Energy:    100,
 			LastFed:   time.Now(),
 		},
-		database: db,
 	}
 }
 
