@@ -125,10 +125,6 @@ class Driver(EInkDeviceInterface):
                 if hasattr(self, 'busy_request'):
                     logger.info("Releasing previous busy line request")
                     self.busy_request.release()
-                    
-                if hasattr(self, 'cs_request'):
-                    logger.info("Releasing previous cs line request")
-                    self.cs_request.release()
                 
                 if hasattr(self, 'chip'):
                     logger.info("Closing previous chip")
@@ -181,29 +177,19 @@ class Driver(EInkDeviceInterface):
                     else:
                         raise
                 
-                logger.info(f"Requesting cs pin {self.cs_pin} as output")
-                try:
-                    self.cs_request = self.chip.request_lines(
-                        {self.cs_pin: output_settings}, 
-                        consumer="totem-cs"
-                    )
-                except OSError as e:
-                    if "Device or resource busy" in str(e):
-                        logger.warning(f"CS pin {self.cs_pin} is busy. Another process may be using it.")
-                    else:
-                        raise
+                # Note: We're not requesting the CS pin as it's controlled by the SPI hardware
+                logger.info(f"Using hardware CS on pin {self.cs_pin} (managed by SPI driver)")
                 
-                # Check if all requests were successful
+                # Check if all required requests were successful - CS is no longer required
                 if (hasattr(self, 'reset_request') and 
                     hasattr(self, 'dc_request') and 
-                    hasattr(self, 'busy_request') and 
-                    hasattr(self, 'cs_request')):
+                    hasattr(self, 'busy_request')):
                     # Reset the display
                     self.reset()
                     self.initialized = True
                     logger.info("Pi 5 e-Paper initialization complete")
                 else:
-                    logger.warning("Some GPIO pins could not be requested. Falling back to mock mode.")
+                    logger.warning("Some required GPIO pins could not be requested. Falling back to mock mode.")
                     self.initialized = False
                     self.USE_HARDWARE = False
             except Exception as e:
@@ -237,9 +223,8 @@ class Driver(EInkDeviceInterface):
         if self.USE_HARDWARE:
             try:
                 self.dc_request.set_values({self.dc_pin: self.Value.INACTIVE})  # Command mode
-                self.cs_request.set_values({self.cs_pin: self.Value.INACTIVE})  # Chip select active
+                # CS is handled automatically by the SPI driver
                 self.spi.writebytes([command])
-                self.cs_request.set_values({self.cs_pin: self.Value.ACTIVE})  # Chip select inactive
             except Exception as e:
                 logger.error(f"Error sending command: {e}")
                 logger.error(traceback.format_exc())
@@ -250,14 +235,12 @@ class Driver(EInkDeviceInterface):
         if self.USE_HARDWARE:
             try:
                 self.dc_request.set_values({self.dc_pin: self.Value.ACTIVE})  # Data mode
-                self.cs_request.set_values({self.cs_pin: self.Value.INACTIVE})  # Chip select active
+                # CS is handled automatically by the SPI driver
                 
                 if isinstance(data, int):
                     self.spi.writebytes([data])
                 else:
                     self.spi.writebytes(data)
-                    
-                self.cs_request.set_values({self.cs_pin: self.Value.ACTIVE})  # Chip select inactive
             except Exception as e:
                 logger.error(f"Error sending data: {e}")
                 logger.error(traceback.format_exc())
@@ -281,7 +264,7 @@ class Driver(EInkDeviceInterface):
     
     def clear(self):
         logger.info("Clearing e-Paper display")
-        if self.USE_HARDWARE and hasattr(self, 'dc_request') and hasattr(self, 'cs_request'):
+        if self.USE_HARDWARE and hasattr(self, 'dc_request') and hasattr(self, 'busy_request'):
             try:
                 # Clear display - simple implementation
                 self.send_command(0x10)  # Deep sleep
@@ -355,5 +338,4 @@ class Driver(EInkDeviceInterface):
                 self.dc_request.release()
             if hasattr(self, 'busy_request'):
                 self.busy_request.release()
-            if hasattr(self, 'cs_request'):
-                self.cs_request.release() 
+            # No need to release cs_request as we're no longer requesting it 
