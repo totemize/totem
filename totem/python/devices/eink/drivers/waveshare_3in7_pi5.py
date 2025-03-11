@@ -38,6 +38,7 @@ class Driver(EInkDeviceInterface):
     def __init__(self):
         self.initialized = False
         self.USE_HARDWARE = False  # Initialize as False by default
+        self.DEBUG_MODE = False    # Debug mode for SPI/GPIO commands
         
         # GPIO pin definitions
         self.reset_pin = 17
@@ -202,16 +203,36 @@ class Driver(EInkDeviceInterface):
             logger.info("Mock initialization complete")
             self.initialized = True
     
+    def enable_debug_mode(self, enable=True):
+        """Enable or disable detailed debug logging for hardware commands"""
+        self.DEBUG_MODE = enable
+        logger.info(f"Debug mode {'enabled' if enable else 'disabled'}")
+        return self.DEBUG_MODE
+    
     def reset(self):
         if self.USE_HARDWARE:
             try:
-                logger.debug("Resetting display")
-                self.reset_request.set_values({self.reset_pin: self.Value.ACTIVE})
-                time.sleep(0.2)
+                logger.debug("Resetting display with enhanced sequence")
+                # First ensure reset is inactive (HIGH)
                 self.reset_request.set_values({self.reset_pin: self.Value.INACTIVE})
-                time.sleep(0.2)
+                time.sleep(0.05)  # Short delay
+                
+                # Reset sequence (LOW-HIGH-LOW-HIGH)
                 self.reset_request.set_values({self.reset_pin: self.Value.ACTIVE})
-                time.sleep(0.2)
+                time.sleep(0.2)  # Longer pulse
+                self.reset_request.set_values({self.reset_pin: self.Value.INACTIVE})
+                time.sleep(0.02)  # Short delay
+                self.reset_request.set_values({self.reset_pin: self.Value.ACTIVE})
+                time.sleep(0.2)  # Longer pulse
+                self.reset_request.set_values({self.reset_pin: self.Value.INACTIVE})
+                time.sleep(0.2)  # Final stabilization
+                
+                # Send power on command after reset
+                self.send_command(0x04)  # Power on
+                self.wait_until_idle()
+                
+                if self.DEBUG_MODE:
+                    logger.debug("Enhanced reset sequence completed")
             except Exception as e:
                 logger.error(f"Error during reset: {e}")
                 logger.error(traceback.format_exc())
@@ -222,9 +243,15 @@ class Driver(EInkDeviceInterface):
     def send_command(self, command):
         if self.USE_HARDWARE:
             try:
+                if self.DEBUG_MODE:
+                    logger.debug(f"SPI COMMAND: 0x{command:02X}")
+                
                 self.dc_request.set_values({self.dc_pin: self.Value.INACTIVE})  # Command mode
                 # CS is handled automatically by the SPI driver
                 self.spi.writebytes([command])
+                
+                if self.DEBUG_MODE:
+                    logger.debug(f"Command 0x{command:02X} sent successfully")
             except Exception as e:
                 logger.error(f"Error sending command: {e}")
                 logger.error(traceback.format_exc())
@@ -235,18 +262,27 @@ class Driver(EInkDeviceInterface):
         if self.USE_HARDWARE:
             try:
                 self.dc_request.set_values({self.dc_pin: self.Value.ACTIVE})  # Data mode
-                # CS is handled automatically by the SPI driver
                 
                 if isinstance(data, int):
+                    if self.DEBUG_MODE:
+                        logger.debug(f"SPI DATA: 0x{data:02X}")
                     self.spi.writebytes([data])
                 else:
                     # Send data in chunks to avoid overflow
+                    if self.DEBUG_MODE:
+                        logger.debug(f"SPI DATA ARRAY: {len(data)} bytes, first bytes: {data[:min(10, len(data))]}...")
+                    
                     chunk_size = 1024  # Safe chunk size
                     for i in range(0, len(data), chunk_size):
                         chunk = data[i:i + chunk_size]
                         self.spi.writebytes(chunk)
+                        if self.DEBUG_MODE and i == 0:
+                            logger.debug(f"First chunk ({len(chunk)} bytes) sent")
                         # Small delay between chunks to avoid overwhelming the SPI bus
                         time.sleep(0.001)
+                        
+                if self.DEBUG_MODE:
+                    logger.debug("Data sent successfully")
             except Exception as e:
                 logger.error(f"Error sending data: {e}")
                 logger.error(traceback.format_exc())
@@ -279,15 +315,87 @@ class Driver(EInkDeviceInterface):
             logger.debug("Mock wait until idle")
             time.sleep(0.5)
     
+    def test_gpio_control(self):
+        """
+        Test basic GPIO control by toggling reset and DC pins.
+        Returns True if successful, False otherwise.
+        """
+        if not self.USE_HARDWARE:
+            logger.info("Cannot test GPIO in mock mode")
+            return False
+            
+        logger.info("Testing basic GPIO control...")
+        success = True
+        
+        try:
+            # Test reset pin
+            logger.info("Testing reset pin (pin 17)")
+            self.reset_request.set_values({self.reset_pin: self.Value.ACTIVE})
+            time.sleep(0.1)
+            self.reset_request.set_values({self.reset_pin: self.Value.INACTIVE})
+            time.sleep(0.1)
+            
+            # Test DC pin
+            logger.info("Testing DC pin (pin 25)")
+            self.dc_request.set_values({self.dc_pin: self.Value.ACTIVE})
+            time.sleep(0.1)
+            self.dc_request.set_values({self.dc_pin: self.Value.INACTIVE})
+            time.sleep(0.1)
+            
+            # Test busy pin read
+            logger.info("Testing busy pin read (pin 24)")
+            busy_values = self.busy_request.get_values()
+            if busy_values:
+                busy_value = busy_values[0] if isinstance(busy_values, list) else busy_values.get(self.busy_pin)
+                logger.info(f"Busy pin current value: {busy_value}")
+            else:
+                logger.warning("Could not read busy pin")
+                success = False
+                
+            # Test basic SPI communication
+            logger.info("Testing basic SPI communication")
+            # Send a NOP command to test SPI without affecting display state
+            self.send_command(0x00)  # NOP command
+            
+            logger.info(f"GPIO test {'successful' if success else 'failed'}")
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error during GPIO test: {e}")
+            logger.error(traceback.format_exc())
+            return False
+            
     def clear(self):
         logger.info("Clearing e-Paper display")
         if self.USE_HARDWARE and hasattr(self, 'dc_request') and hasattr(self, 'busy_request'):
             try:
-                # Clear display - simple implementation
-                self.send_command(0x10)  # Deep sleep
-                time.sleep(0.1)
+                # More complete clear sequence
+                if self.DEBUG_MODE:
+                    logger.debug("Starting enhanced clear sequence")
+                
+                # Power off first if display is in an unknown state
+                self.send_command(0x02)  # Power off
+                self.wait_until_idle()
+                
+                # Power on
                 self.send_command(0x04)  # Power on
                 self.wait_until_idle()
+                
+                # Send clear command
+                self.send_command(0x10)  # Data transmission 1
+                zeros = [0x00] * (self.width * self.height // 8)
+                self.send_data(zeros)
+                
+                self.send_command(0x13)  # Data transmission 2
+                self.send_data(zeros)
+                
+                # Refresh display
+                self.send_command(0x12)  # Refresh
+                time.sleep(0.1)
+                self.wait_until_idle()
+                
+                if self.DEBUG_MODE:
+                    logger.debug("Clear sequence completed")
             except Exception as e:
                 logger.error(f"Error clearing display: {e}")
                 logger.error(traceback.format_exc())
