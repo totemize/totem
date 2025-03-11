@@ -42,6 +42,18 @@ class EInk:
 
     def _detect_hardware(self) -> Optional[str]:
         logger.info("Detecting E-Ink hardware...")
+        
+        # First, check if we're running on a Raspberry Pi 5
+        try:
+            with open('/proc/cpuinfo', 'r') as f:
+                cpuinfo = f.read()
+            if 'Raspberry Pi 5' in cpuinfo:
+                logger.info("Detected Raspberry Pi 5, using Pi 5 specific driver")
+                return 'waveshare_3in7_pi5'
+        except Exception as e:
+            logger.error(f"Error checking Raspberry Pi version: {e}")
+        
+        # Check for SPI devices
         try:
             spi_devices = os.listdir('/dev/')
             spi_devices = [dev for dev in spi_devices if dev.startswith('spidev')]
