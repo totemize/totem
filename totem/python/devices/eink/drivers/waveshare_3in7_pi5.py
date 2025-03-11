@@ -16,7 +16,56 @@ except ImportError:
     HARDWARE_AVAILABLE = False
 
 from utils.logger import logger
-from devices.eink.eink_device_interface import EInkDeviceInterface, MockSpiDev, MockGPIO, MockValue, MockDirection
+from devices.eink.eink import EInkDeviceInterface
+
+# Mock classes for testing when hardware is not available
+class MockSpiDev:
+    def __init__(self):
+        self.max_speed_hz = 0
+        self.mode = 0
+        
+    def open(self, bus, device):
+        logger.debug(f"Mock SPI: Opening bus {bus}, device {device}")
+        return
+        
+    def xfer2(self, data):
+        if isinstance(data, list):
+            logger.debug(f"Mock SPI: Transferring {len(data)} bytes")
+        return [0] * len(data)
+        
+    def close(self):
+        logger.debug("Mock SPI: Closing")
+        return
+
+# Mock GPIO classes for testing
+class MockValue:
+    ACTIVE = 1
+    INACTIVE = 0
+
+class MockDirection:
+    INPUT = "in"
+    OUTPUT = "out"
+
+class MockGPIO:
+    def __init__(self):
+        self.pins = {}
+        logger.debug("Mock GPIO: Initialized")
+        
+    def request_lines(self, pins, consumer):
+        logger.debug(f"Mock GPIO: Requesting lines {pins} for {consumer}")
+        return self
+        
+    def set_values(self, values):
+        for pin, value in values.items():
+            logger.debug(f"Mock GPIO: Setting pin {pin} to {value}")
+            self.pins[pin] = value
+        
+    def get_values(self):
+        return {pin: 0 for pin in self.pins}
+        
+    def release(self):
+        logger.debug("Mock GPIO: Releasing lines")
+        return
 
 class Driver(EInkDeviceInterface):
     # Class variables
