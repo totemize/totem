@@ -113,6 +113,27 @@ class Driver(EInkDeviceInterface):
                 # Configure GPIO lines using gpiod 2.3.0 API
                 logger.info("Requesting GPIO lines using gpiod 2.3.0 API")
                 
+                # Check if any existing requests need to be released
+                if hasattr(self, 'reset_request'):
+                    logger.info("Releasing previous reset line request")
+                    self.reset_request.release()
+                
+                if hasattr(self, 'dc_request'):
+                    logger.info("Releasing previous dc line request")
+                    self.dc_request.release()
+                    
+                if hasattr(self, 'busy_request'):
+                    logger.info("Releasing previous busy line request")
+                    self.busy_request.release()
+                    
+                if hasattr(self, 'cs_request'):
+                    logger.info("Releasing previous cs line request")
+                    self.cs_request.release()
+                
+                if hasattr(self, 'chip'):
+                    logger.info("Closing previous chip")
+                    self.chip.close()
+                
                 # Open the chip
                 logger.info("Opening GPIO chip")
                 self.chip = gpiod.Chip('/dev/gpiochip0')
@@ -123,37 +144,73 @@ class Driver(EInkDeviceInterface):
 
                 # Request each line individually with the correct settings
                 logger.info(f"Requesting reset pin {self.reset_pin} as output")
-                self.reset_request = self.chip.request_lines(
-                    {self.reset_pin: output_settings}, 
-                    consumer="totem-reset"
-                )
+                try:
+                    self.reset_request = self.chip.request_lines(
+                        {self.reset_pin: output_settings}, 
+                        consumer="totem-reset"
+                    )
+                except OSError as e:
+                    # If device is busy, try to check if it's already being used
+                    if "Device or resource busy" in str(e):
+                        logger.warning(f"Reset pin {self.reset_pin} is busy. Another process may be using it.")
+                        # We'll continue and try the other pins
+                    else:
+                        raise
                 
                 logger.info(f"Requesting dc pin {self.dc_pin} as output")
-                self.dc_request = self.chip.request_lines(
-                    {self.dc_pin: output_settings}, 
-                    consumer="totem-dc"
-                )
+                try:
+                    self.dc_request = self.chip.request_lines(
+                        {self.dc_pin: output_settings}, 
+                        consumer="totem-dc"
+                    )
+                except OSError as e:
+                    if "Device or resource busy" in str(e):
+                        logger.warning(f"DC pin {self.dc_pin} is busy. Another process may be using it.")
+                    else:
+                        raise
                 
                 logger.info(f"Requesting busy pin {self.busy_pin} as input")
-                self.busy_request = self.chip.request_lines(
-                    {self.busy_pin: input_settings}, 
-                    consumer="totem-busy"
-                )
+                try:
+                    self.busy_request = self.chip.request_lines(
+                        {self.busy_pin: input_settings}, 
+                        consumer="totem-busy"
+                    )
+                except OSError as e:
+                    if "Device or resource busy" in str(e):
+                        logger.warning(f"Busy pin {self.busy_pin} is busy. Another process may be using it.")
+                    else:
+                        raise
                 
                 logger.info(f"Requesting cs pin {self.cs_pin} as output")
-                self.cs_request = self.chip.request_lines(
-                    {self.cs_pin: output_settings}, 
-                    consumer="totem-cs"
-                )
+                try:
+                    self.cs_request = self.chip.request_lines(
+                        {self.cs_pin: output_settings}, 
+                        consumer="totem-cs"
+                    )
+                except OSError as e:
+                    if "Device or resource busy" in str(e):
+                        logger.warning(f"CS pin {self.cs_pin} is busy. Another process may be using it.")
+                    else:
+                        raise
                 
-                # Reset the display
-                self.reset()
-                self.initialized = True
-                logger.info("Pi 5 e-Paper initialization complete")
+                # Check if all requests were successful
+                if (hasattr(self, 'reset_request') and 
+                    hasattr(self, 'dc_request') and 
+                    hasattr(self, 'busy_request') and 
+                    hasattr(self, 'cs_request')):
+                    # Reset the display
+                    self.reset()
+                    self.initialized = True
+                    logger.info("Pi 5 e-Paper initialization complete")
+                else:
+                    logger.warning("Some GPIO pins could not be requested. Falling back to mock mode.")
+                    self.initialized = False
+                    self.USE_HARDWARE = False
             except Exception as e:
                 logger.error(f"Error initializing Pi 5 GPIO: {e}")
                 logger.error(f"Error traceback: {traceback.format_exc()}")
                 self.initialized = False
+                self.USE_HARDWARE = False
         else:
             # Mock initialization
             logger.info("Mock initialization complete")
@@ -161,59 +218,79 @@ class Driver(EInkDeviceInterface):
     
     def reset(self):
         if self.USE_HARDWARE:
-            logger.debug("Resetting display")
-            self.reset_request.set_values({self.reset_pin: 1})
-            time.sleep(0.2)
-            self.reset_request.set_values({self.reset_pin: 0})
-            time.sleep(0.2)
-            self.reset_request.set_values({self.reset_pin: 1})
-            time.sleep(0.2)
+            try:
+                logger.debug("Resetting display")
+                self.reset_request.set_values({self.reset_pin: self.Value.ACTIVE})
+                time.sleep(0.2)
+                self.reset_request.set_values({self.reset_pin: self.Value.INACTIVE})
+                time.sleep(0.2)
+                self.reset_request.set_values({self.reset_pin: self.Value.ACTIVE})
+                time.sleep(0.2)
+            except Exception as e:
+                logger.error(f"Error during reset: {e}")
+                logger.error(traceback.format_exc())
         else:
             logger.debug("Mock reset")
             time.sleep(0.6)
     
     def send_command(self, command):
         if self.USE_HARDWARE:
-            self.dc_request.set_values({self.dc_pin: 0})  # Command mode
-            self.cs_request.set_values({self.cs_pin: 0})  # Chip select active
-            self.spi.writebytes([command])
-            self.cs_request.set_values({self.cs_pin: 1})  # Chip select inactive
+            try:
+                self.dc_request.set_values({self.dc_pin: self.Value.INACTIVE})  # Command mode
+                self.cs_request.set_values({self.cs_pin: self.Value.INACTIVE})  # Chip select active
+                self.spi.writebytes([command])
+                self.cs_request.set_values({self.cs_pin: self.Value.ACTIVE})  # Chip select inactive
+            except Exception as e:
+                logger.error(f"Error sending command: {e}")
+                logger.error(traceback.format_exc())
         else:
             logger.debug(f"Mock send command: {command}")
     
     def send_data(self, data):
         if self.USE_HARDWARE:
-            self.dc_request.set_values({self.dc_pin: 1})  # Data mode
-            self.cs_request.set_values({self.cs_pin: 0})  # Chip select active
-            
-            if isinstance(data, int):
-                self.spi.writebytes([data])
-            else:
-                self.spi.writebytes(data)
+            try:
+                self.dc_request.set_values({self.dc_pin: self.Value.ACTIVE})  # Data mode
+                self.cs_request.set_values({self.cs_pin: self.Value.INACTIVE})  # Chip select active
                 
-            self.cs_request.set_values({self.cs_pin: 1})  # Chip select inactive
+                if isinstance(data, int):
+                    self.spi.writebytes([data])
+                else:
+                    self.spi.writebytes(data)
+                    
+                self.cs_request.set_values({self.cs_pin: self.Value.ACTIVE})  # Chip select inactive
+            except Exception as e:
+                logger.error(f"Error sending data: {e}")
+                logger.error(traceback.format_exc())
         else:
             logger.debug(f"Mock send data: {data if isinstance(data, int) else '(data array)'}")
     
     def wait_until_idle(self):
         if self.USE_HARDWARE:
-            logger.debug("Waiting for display to be idle")
-            busy_values = self.busy_request.get_values()
-            while busy_values[self.busy_pin] == 1:
-                time.sleep(0.1)
+            try:
+                logger.debug("Waiting for display to be idle")
                 busy_values = self.busy_request.get_values()
+                while busy_values[self.busy_pin] == self.Value.ACTIVE:
+                    time.sleep(0.1)
+                    busy_values = self.busy_request.get_values()
+            except Exception as e:
+                logger.error(f"Error waiting for idle: {e}")
+                logger.error(traceback.format_exc())
         else:
             logger.debug("Mock wait until idle")
             time.sleep(0.5)
     
     def clear(self):
         logger.info("Clearing e-Paper display")
-        if self.USE_HARDWARE:
-            # Clear display - simple implementation
-            self.send_command(0x10)  # Deep sleep
-            time.sleep(0.1)
-            self.send_command(0x04)  # Power on
-            self.wait_until_idle()
+        if self.USE_HARDWARE and hasattr(self, 'dc_request') and hasattr(self, 'cs_request'):
+            try:
+                # Clear display - simple implementation
+                self.send_command(0x10)  # Deep sleep
+                time.sleep(0.1)
+                self.send_command(0x04)  # Power on
+                self.wait_until_idle()
+            except Exception as e:
+                logger.error(f"Error clearing display: {e}")
+                logger.error(traceback.format_exc())
         else:
             logger.info("Mock clear display")
     
