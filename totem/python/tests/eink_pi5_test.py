@@ -54,7 +54,7 @@ def test_display(eink):
     try:
         # Clear the display
         logger.info("Clearing display...")
-        eink.clear()
+        eink.clear_display()
         time.sleep(1)
         
         # Create a test image
@@ -90,7 +90,7 @@ def test_display(eink):
         
         # Display the image
         logger.info("Displaying test image...")
-        eink.display(image)
+        eink.display_image(image)
         logger.info("Test image displayed successfully")
         
         return True
