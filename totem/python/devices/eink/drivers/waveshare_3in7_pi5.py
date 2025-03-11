@@ -20,6 +20,16 @@ class MockSpiDev:
     def close(self):
         logger.debug("Mock SPI closed")
 
+# Enum-like classes for when gpiod is not available
+class MockValue:
+    ACTIVE = 1
+    INACTIVE = 0
+
+class MockDirection:
+    INPUT = 0
+    OUTPUT = 1
+    AS_IS = 2
+
 class Driver(EInkDeviceInterface):
     # Class variables
     width = 480
@@ -35,10 +45,15 @@ class Driver(EInkDeviceInterface):
         self.busy_pin = 24
         self.cs_pin = 8
         
+        # Default to mock values
+        self.Value = MockValue
+        self.Direction = MockDirection
+        
         # Try to import Pi 5 compatible libraries
         try:
             import spidev
             import gpiod
+            from gpiod.line import Value, Direction, Edge, Bias
             
             # Check if SPI device exists
             spi_device_path = '/dev/spidev0.0'
@@ -69,12 +84,12 @@ class Driver(EInkDeviceInterface):
             self.spi.open(0, 0)
             self.spi.max_speed_hz = 2000000
             
-            # Initialize GPIO using gpiod with full path
-            logger.info("Opening GPIO chip with full path")
-            self.chip = gpiod.Chip('/dev/gpiochip0')
-            
-            # For gpiod 2.x API, we use request_lines instead of individual lines
-            # We'll defer line requests to init() method
+            # Store for later use in init()
+            self.Direction = Direction
+            self.Value = Value
+            self.Edge = Edge
+            self.Bias = Bias
+
             logger.info("Hardware initialized successfully")
         except Exception as e:
             logger.error(f"Hardware initialization failed: {e}")
@@ -93,39 +108,43 @@ class Driver(EInkDeviceInterface):
         if self.USE_HARDWARE:
             try:
                 import gpiod
+                from gpiod.line_settings import LineSettings
                 
-                # Configure GPIO lines using gpiod 2.x API
-                logger.info("Requesting GPIO lines using gpiod 2.x API")
+                # Configure GPIO lines using gpiod 2.3.0 API
+                logger.info("Requesting GPIO lines using gpiod 2.3.0 API")
                 
-                # Request output lines
-                self.output_config = gpiod.LineConfig()
-                self.output_config.direction = gpiod.Direction.OUTPUT
+                # Open the chip
+                logger.info("Opening GPIO chip")
+                self.chip = gpiod.Chip('/dev/gpiochip0')
                 
-                # Request input lines
-                self.input_config = gpiod.LineConfig()
-                self.input_config.direction = gpiod.Direction.INPUT
+                # Create settings for output and input pins
+                output_settings = LineSettings(direction=self.Direction.OUTPUT)
+                input_settings = LineSettings(direction=self.Direction.INPUT)
+
+                # Request each line individually with the correct settings
+                logger.info(f"Requesting reset pin {self.reset_pin} as output")
+                self.reset_request = self.chip.request_lines(
+                    {self.reset_pin: output_settings}, 
+                    consumer="totem-reset"
+                )
                 
-                # Request reset and data/command lines as output
-                logger.info(f"Requesting reset pin {self.reset_pin} and dc pin {self.dc_pin} as outputs")
-                self.reset_request = self.chip.request_lines({
-                    self.reset_pin: self.output_config
-                }, consumer="totem-reset")
+                logger.info(f"Requesting dc pin {self.dc_pin} as output")
+                self.dc_request = self.chip.request_lines(
+                    {self.dc_pin: output_settings}, 
+                    consumer="totem-dc"
+                )
                 
-                self.dc_request = self.chip.request_lines({
-                    self.dc_pin: self.output_config
-                }, consumer="totem-dc")
-                
-                # Request busy line as input
                 logger.info(f"Requesting busy pin {self.busy_pin} as input")
-                self.busy_request = self.chip.request_lines({
-                    self.busy_pin: self.input_config
-                }, consumer="totem-busy")
+                self.busy_request = self.chip.request_lines(
+                    {self.busy_pin: input_settings}, 
+                    consumer="totem-busy"
+                )
                 
-                # Request chip select line as output
                 logger.info(f"Requesting cs pin {self.cs_pin} as output")
-                self.cs_request = self.chip.request_lines({
-                    self.cs_pin: self.output_config
-                }, consumer="totem-cs")
+                self.cs_request = self.chip.request_lines(
+                    {self.cs_pin: output_settings}, 
+                    consumer="totem-cs"
+                )
                 
                 # Reset the display
                 self.reset()
