@@ -266,21 +266,67 @@ class Driver(NVMEDeviceInterface):
             logger.error(f"Error reading file {file_path}: {e}")
             return ""
     
-    def write_file(self, file_path, data):
-        """Write data to a file."""
+    def write_file(self, file_path, data, options=None):
+        """Write data to a file with specified options."""
         try:
             # If path is not absolute, prepend the NVMe mount point
             if not os.path.isabs(file_path):
                 file_path = os.path.join('/mnt/nvme', file_path)
-                
+            
+            # Process options
+            if options is None:
+                options = {}
+            
+            # Default options
+            append_mode = options.get("append", False)
+            atomic_write = options.get("atomic", True)
+            sync_after_write = options.get("sync", False)
+            file_permissions = options.get("permissions", None)
+            
             # Create directory if it doesn't exist
             directory = os.path.dirname(file_path)
             if directory:
                 os.makedirs(directory, exist_ok=True)
             
-            with open(file_path, 'w') as file:
-                file.write(data)
-            logger.debug(f"Wrote {len(data)} bytes to {file_path}")
+            # Choose the file mode based on append option
+            mode = 'ab' if append_mode else 'wb'
+            
+            if atomic_write:
+                # Create a temporary file in the same directory
+                temp_file = f"{file_path}.tmp"
+                
+                # If appending, first copy the original file content
+                if append_mode and os.path.exists(file_path):
+                    with open(file_path, 'rb') as src, open(temp_file, 'wb') as dst:
+                        dst.write(src.read())
+                
+                # Open temp file in write mode
+                with open(temp_file, 'wb') as file:
+                    # If appending, write original content first
+                    if append_mode and os.path.exists(file_path):
+                        with open(file_path, 'rb') as src:
+                            file.write(src.read())
+                    # Write new data
+                    file.write(data)
+                    # Force write to disk if sync option is set
+                    if sync_after_write and hasattr(os, 'fsync'):
+                        os.fsync(file.fileno())
+                
+                # Rename temp file to target file (atomic operation)
+                os.rename(temp_file, file_path)
+            else:
+                # Direct write without atomic operation
+                with open(file_path, mode) as file:
+                    file.write(data)
+                    # Force write to disk if sync option is set
+                    if sync_after_write and hasattr(os, 'fsync'):
+                        os.fsync(file.fileno())
+            
+            # Set file permissions if specified
+            if file_permissions is not None:
+                os.chmod(file_path, file_permissions)
+                
+            logger.debug(f"Wrote {len(data)} bytes to {file_path} with options: {options}")
             return True
         except Exception as e:
             logger.error(f"Error writing to file {file_path}: {e}")

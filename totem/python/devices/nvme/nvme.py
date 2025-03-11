@@ -17,7 +17,7 @@ class NVMEDeviceInterface(ABC):
         pass
 
     @abstractmethod
-    def write_file(self, file_path, data):
+    def write_file(self, file_path, data, options=None):
         """Write data to file."""
         pass
 
@@ -72,5 +72,5 @@ class NVME:
     def read_file(self, file_path):
         return self.driver.read_file(file_path)
 
-    def write_file(self, file_path, data):
-        return self.driver.write_file(file_path, data) 
+    def write_file(self, file_path, data, options=None):
+        return self.driver.write_file(file_path, data, options) 
