@@ -54,28 +54,115 @@ def test_nvme_storage(driver_name=None):
         logger.info(f"Initializing StorageManager with driver: {driver_name or 'default'}")
         storage_manager = StorageManager(driver_name)
         
-        # Create a test file with a unique name
-        test_file_path = f"nvme_test_{int(time.time())}.txt"
-        test_data = "NVMe Storage Test Data - " + "X" * 100
-
-        print(f"Writing test data to {test_file_path}...")
-        storage_manager.write_data(test_file_path, test_data)
-        print(f"Data written to storage at {test_file_path}.")
-
-        print(f"Reading data from {test_file_path}...")
-        read_data = storage_manager.read_data(test_file_path)
-        print(f"Data read from storage: {read_data[:50]}...")
-
-        if read_data == test_data:
-            print("\n✅ NVMe Storage Test Passed: Data integrity confirmed.")
+        # Generate unique test file paths
+        timestamp = int(time.time())
+        base_path = f"nvme_test_{timestamp}"
+        
+        # Test 1: Basic write with default options
+        test_file_1 = f"{base_path}_basic.txt"
+        test_data_1 = f"NVMe Storage Test Data - {'X' * 100}"
+        test_bytes_1 = test_data_1.encode('utf-8')
+        
+        print(f"\nTest 1: Basic write and read")
+        print(f"Writing data to {test_file_1}...")
+        storage_manager.write_data(test_file_1, test_bytes_1)
+        print(f"Data written to storage.")
+        
+        print(f"Reading data from {test_file_1}...")
+        read_data_1 = storage_manager.read_data(test_file_1)
+        if read_data_1 == test_data_1:
+            print("✅ Basic write/read test passed: Data integrity confirmed.")
+            basic_test_passed = True
         else:
-            print("\n❌ NVMe Storage Test Failed: Data mismatch.")
-            print(f"Original: {test_data[:50]}...")
-            print(f"Read: {read_data[:50]}...")
-            return False
-
+            print("❌ Basic write/read test failed: Data mismatch.")
+            basic_test_passed = False
+        
+        # Test 2: Write with append option
+        test_file_2 = f"{base_path}_append.txt"
+        part1 = b"First part of the data. "
+        part2 = b"Second part appended later."
+        
+        print(f"\nTest 2: Append mode")
+        print(f"Writing first part to {test_file_2}...")
+        storage_manager.write_data(test_file_2, part1)
+        
+        print(f"Appending second part...")
+        storage_manager.write_data(test_file_2, part2, {"append": True})
+        
+        expected_content = part1.decode('utf-8') + part2.decode('utf-8')
+        read_data_2 = storage_manager.read_data(test_file_2)
+        
+        if read_data_2 == expected_content:
+            print("✅ Append test passed: Data correctly appended.")
+            append_test_passed = True
+        else:
+            print("❌ Append test failed: Data mismatch.")
+            append_test_passed = False
+        
+        # Test 3: Write with custom permissions (if on Linux)
+        test_file_3 = f"{base_path}_permissions.txt"
+        test_data_3 = b"Testing permissions setting"
+        permissions_test_passed = True
+        
+        if os.name == 'posix' and not AUTO_TEST_MODE:
+            print(f"\nTest 3: Custom permissions")
+            print(f"Writing to {test_file_3} with custom permissions (0o600)...")
+            storage_manager.write_data(test_file_3, test_data_3, {"permissions": 0o600})
+            
+            # Check if permissions were set correctly
+            try:
+                file_path = os.path.join('/mnt/nvme' if driver_name == 'generic_nvme' else '', test_file_3)
+                if os.path.exists(file_path):
+                    permissions = oct(os.stat(file_path).st_mode)[-3:]
+                    print(f"File permissions: {permissions}")
+                    if permissions == '600':
+                        print("✅ Permissions test passed: Correct permissions set.")
+                    else:
+                        print(f"❌ Permissions test failed: Expected 600, got {permissions}.")
+                        permissions_test_passed = False
+                else:
+                    print(f"❌ Permissions test inconclusive: File not found at expected path.")
+                    permissions_test_passed = False
+            except Exception as e:
+                print(f"❌ Permissions test failed: {e}")
+                permissions_test_passed = False
+        else:
+            print(f"\nTest 3: Custom permissions (skipped - not on Linux or in AUTO_TEST_MODE)")
+        
+        # Test 4: Write with multiple options
+        test_file_4 = f"{base_path}_combined.txt"
+        test_data_4 = b"Testing combined options: atomic, sync, and custom permissions"
+        
+        print(f"\nTest 4: Combined options")
+        options = {
+            "atomic": True,
+            "sync": True,
+            "permissions": 0o644
+        }
+        print(f"Writing to {test_file_4} with combined options: {options}...")
+        storage_manager.write_data(test_file_4, test_data_4, options)
+        
+        read_data_4 = storage_manager.read_data(test_file_4)
+        if read_data_4 == test_data_4.decode('utf-8'):
+            print("✅ Combined options test passed: Data written correctly.")
+            combined_test_passed = True
+        else:
+            print("❌ Combined options test failed: Data mismatch.")
+            combined_test_passed = False
+        
+        # Summary
+        print("\n=== NVMe Storage Test Summary ===")
+        print(f"Basic write/read: {'✅ PASSED' if basic_test_passed else '❌ FAILED'}")
+        print(f"Append mode: {'✅ PASSED' if append_test_passed else '❌ FAILED'}")
+        print(f"Custom permissions: {'✅ PASSED' if permissions_test_passed else '❌ FAILED'}")
+        print(f"Combined options: {'✅ PASSED' if combined_test_passed else '❌ FAILED'}")
+        
+        all_tests_passed = all([basic_test_passed, append_test_passed, 
+                               permissions_test_passed, combined_test_passed])
+        
+        print(f"\nOverall NVMe Storage Test: {'✅ PASSED' if all_tests_passed else '❌ FAILED'}")
         print("NVMe Storage Test Completed.\n")
-        return True
+        return all_tests_passed
     except Exception as e:
         print(f"NVMe Storage Test Failed: {e}")
         logger.error(f"NVMe Storage Test Failed: {traceback.format_exc()}")
