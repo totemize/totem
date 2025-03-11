@@ -109,7 +109,7 @@ def main():
     # Run GPIO debug test if requested
     if args.gpio_debug:
         logger.info("Running GPIO debug test...")
-        from eink_gpio_debug import main as gpio_debug
+        from tests.eink_gpio_debug import main as gpio_debug
         gpio_debug()
     
     # Initialize device
