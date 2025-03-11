@@ -73,13 +73,8 @@ class Driver(EInkDeviceInterface):
             logger.info("Opening GPIO chip with full path")
             self.chip = gpiod.Chip('/dev/gpiochip0')
             
-            # Configure pins
-            logger.info("Getting GPIO lines")
-            self.reset_line = self.chip.get_line(self.reset_pin)
-            self.dc_line = self.chip.get_line(self.dc_pin)
-            self.busy_line = self.chip.get_line(self.busy_pin)
-            self.cs_line = self.chip.get_line(self.cs_pin)
-            
+            # For gpiod 2.x API, we use request_lines instead of individual lines
+            # We'll defer line requests to init() method
             logger.info("Hardware initialized successfully")
         except Exception as e:
             logger.error(f"Hardware initialization failed: {e}")
@@ -97,11 +92,40 @@ class Driver(EInkDeviceInterface):
         
         if self.USE_HARDWARE:
             try:
-                # Configure GPIO lines
-                self.reset_line.request(consumer="totem", type=gpiod.LINE_REQ_DIR_OUT)
-                self.dc_line.request(consumer="totem", type=gpiod.LINE_REQ_DIR_OUT)
-                self.busy_line.request(consumer="totem", type=gpiod.LINE_REQ_DIR_IN)
-                self.cs_line.request(consumer="totem", type=gpiod.LINE_REQ_DIR_OUT)
+                import gpiod
+                
+                # Configure GPIO lines using gpiod 2.x API
+                logger.info("Requesting GPIO lines using gpiod 2.x API")
+                
+                # Request output lines
+                self.output_config = gpiod.LineConfig()
+                self.output_config.direction = gpiod.Direction.OUTPUT
+                
+                # Request input lines
+                self.input_config = gpiod.LineConfig()
+                self.input_config.direction = gpiod.Direction.INPUT
+                
+                # Request reset and data/command lines as output
+                logger.info(f"Requesting reset pin {self.reset_pin} and dc pin {self.dc_pin} as outputs")
+                self.reset_request = self.chip.request_lines({
+                    self.reset_pin: self.output_config
+                }, consumer="totem-reset")
+                
+                self.dc_request = self.chip.request_lines({
+                    self.dc_pin: self.output_config
+                }, consumer="totem-dc")
+                
+                # Request busy line as input
+                logger.info(f"Requesting busy pin {self.busy_pin} as input")
+                self.busy_request = self.chip.request_lines({
+                    self.busy_pin: self.input_config
+                }, consumer="totem-busy")
+                
+                # Request chip select line as output
+                logger.info(f"Requesting cs pin {self.cs_pin} as output")
+                self.cs_request = self.chip.request_lines({
+                    self.cs_pin: self.output_config
+                }, consumer="totem-cs")
                 
                 # Reset the display
                 self.reset()
@@ -109,6 +133,7 @@ class Driver(EInkDeviceInterface):
                 logger.info("Pi 5 e-Paper initialization complete")
             except Exception as e:
                 logger.error(f"Error initializing Pi 5 GPIO: {e}")
+                logger.error(f"Error traceback: {traceback.format_exc()}")
                 self.initialized = False
         else:
             # Mock initialization
@@ -118,11 +143,11 @@ class Driver(EInkDeviceInterface):
     def reset(self):
         if self.USE_HARDWARE:
             logger.debug("Resetting display")
-            self.reset_line.set_value(1)
+            self.reset_request.set_values({self.reset_pin: 1})
             time.sleep(0.2)
-            self.reset_line.set_value(0)
+            self.reset_request.set_values({self.reset_pin: 0})
             time.sleep(0.2)
-            self.reset_line.set_value(1)
+            self.reset_request.set_values({self.reset_pin: 1})
             time.sleep(0.2)
         else:
             logger.debug("Mock reset")
@@ -130,32 +155,34 @@ class Driver(EInkDeviceInterface):
     
     def send_command(self, command):
         if self.USE_HARDWARE:
-            self.dc_line.set_value(0)  # Command mode
-            self.cs_line.set_value(0)  # Chip select active
+            self.dc_request.set_values({self.dc_pin: 0})  # Command mode
+            self.cs_request.set_values({self.cs_pin: 0})  # Chip select active
             self.spi.writebytes([command])
-            self.cs_line.set_value(1)  # Chip select inactive
+            self.cs_request.set_values({self.cs_pin: 1})  # Chip select inactive
         else:
             logger.debug(f"Mock send command: {command}")
     
     def send_data(self, data):
         if self.USE_HARDWARE:
-            self.dc_line.set_value(1)  # Data mode
-            self.cs_line.set_value(0)  # Chip select active
+            self.dc_request.set_values({self.dc_pin: 1})  # Data mode
+            self.cs_request.set_values({self.cs_pin: 0})  # Chip select active
             
             if isinstance(data, int):
                 self.spi.writebytes([data])
             else:
                 self.spi.writebytes(data)
                 
-            self.cs_line.set_value(1)  # Chip select inactive
+            self.cs_request.set_values({self.cs_pin: 1})  # Chip select inactive
         else:
             logger.debug(f"Mock send data: {data if isinstance(data, int) else '(data array)'}")
     
     def wait_until_idle(self):
         if self.USE_HARDWARE:
             logger.debug("Waiting for display to be idle")
-            while self.busy_line.get_value() == 1:
+            busy_values = self.busy_request.get_values()
+            while busy_values[self.busy_pin] == 1:
                 time.sleep(0.1)
+                busy_values = self.busy_request.get_values()
         else:
             logger.debug("Mock wait until idle")
             time.sleep(0.5)
@@ -226,11 +253,11 @@ class Driver(EInkDeviceInterface):
         
         if hasattr(self, 'USE_HARDWARE') and self.USE_HARDWARE and hasattr(self, 'chip'):
             # Cleanup GPIO
-            if hasattr(self, 'reset_line'):
-                self.reset_line.release()
-            if hasattr(self, 'dc_line'):
-                self.dc_line.release()
-            if hasattr(self, 'busy_line'):
-                self.busy_line.release()
-            if hasattr(self, 'cs_line'):
-                self.cs_line.release() 
+            if hasattr(self, 'reset_request'):
+                self.reset_request.release()
+            if hasattr(self, 'dc_request'):
+                self.dc_request.release()
+            if hasattr(self, 'busy_request'):
+                self.busy_request.release()
+            if hasattr(self, 'cs_request'):
+                self.cs_request.release() 
