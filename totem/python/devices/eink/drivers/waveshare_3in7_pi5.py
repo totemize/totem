@@ -69,9 +69,9 @@ class Driver(EInkDeviceInterface):
             self.spi.open(0, 0)
             self.spi.max_speed_hz = 2000000
             
-            # Initialize GPIO using gpiod
-            logger.info("Opening GPIO chip")
-            self.chip = gpiod.Chip('gpiochip0')
+            # Initialize GPIO using gpiod with full path
+            logger.info("Opening GPIO chip with full path")
+            self.chip = gpiod.Chip('/dev/gpiochip0')
             
             # Configure pins
             logger.info("Getting GPIO lines")
