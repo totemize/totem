@@ -192,7 +192,7 @@ class Driver(EInkDeviceInterface):
         if hasattr(self, 'spi') and not isinstance(self.spi, MockSpiDev):
             self.spi.close()
         
-        if self.USE_HARDWARE and hasattr(self, 'chip'):
+        if hasattr(self, 'USE_HARDWARE') and self.USE_HARDWARE and hasattr(self, 'chip'):
             # Cleanup GPIO
             if hasattr(self, 'reset_line'):
                 self.reset_line.release()
