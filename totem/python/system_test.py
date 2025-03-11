@@ -1,4 +1,9 @@
-from managers.display_manager import DisplayManager
+try:
+    from managers.display_manager import DisplayManager
+    DISPLAY_MANAGER_AVAILABLE = True
+except ImportError:
+    logger.warning("DisplayManager could not be imported, E-Ink tests will be unavailable")
+    DISPLAY_MANAGER_AVAILABLE = False
 # from managers.nfc_manager import NFCManager
 from managers.storage_manager import StorageManager
 # from managers.network_manager import NetworkManager
@@ -268,7 +273,7 @@ def main():
     
     results = []
     
-    if args.test in ['eink', 'all']:
+    if args.test in ['eink', 'all'] and DISPLAY_MANAGER_AVAILABLE:
         results.append(("E-Ink Display", test_eink_display(args.driver if args.test == 'eink' else None)))
     
     if args.test in ['nvme', 'all']:
