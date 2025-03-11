@@ -3,6 +3,7 @@ from PIL import Image
 import time
 import numpy as np
 import os
+import traceback
 from devices.eink.eink import EInkDeviceInterface
 
 # Mock implementations for testing
@@ -40,28 +41,40 @@ class Driver(EInkDeviceInterface):
             import gpiod
             
             # Check if SPI device exists
-            if not os.path.exists('/dev/spidev0.0'):
-                logger.error("SPI device /dev/spidev0.0 not found! Make sure SPI is enabled.")
+            spi_device_path = '/dev/spidev0.0'
+            logger.info(f"Checking for SPI device at {spi_device_path}")
+            if not os.path.exists(spi_device_path):
+                logger.error(f"SPI device {spi_device_path} not found! Make sure SPI is enabled.")
                 logger.info("Available devices in /dev: " + str([f for f in os.listdir('/dev') if f.startswith('spi')]))
-                raise FileNotFoundError("/dev/spidev0.0 not found")
+                raise FileNotFoundError(f"{spi_device_path} not found")
                 
             # Check if GPIO chip exists
-            if not os.path.exists('/dev/gpiochip0'):
-                logger.error("GPIO device /dev/gpiochip0 not found!")
-                raise FileNotFoundError("/dev/gpiochip0 not found")
+            gpio_chip_path = '/dev/gpiochip0'
+            logger.info(f"Checking for GPIO device at {gpio_chip_path}")
+            if not os.path.exists(gpio_chip_path):
+                logger.error(f"GPIO device {gpio_chip_path} not found!")
+                raise FileNotFoundError(f"{gpio_chip_path} not found")
+                
+            # Check permissions
+            logger.info(f"Checking permissions for user {os.getuid()}")
+            logger.info(f"SPI device permissions: {oct(os.stat(spi_device_path).st_mode)}")
+            logger.info(f"GPIO device permissions: {oct(os.stat(gpio_chip_path).st_mode)}")
                 
             self.USE_HARDWARE = True
             logger.info("Using Pi 5 compatible GPIO (gpiod) and SPI")
             
             # Initialize SPI
+            logger.info("Opening SPI device")
             self.spi = spidev.SpiDev()
             self.spi.open(0, 0)
             self.spi.max_speed_hz = 2000000
             
             # Initialize GPIO using gpiod
+            logger.info("Opening GPIO chip")
             self.chip = gpiod.Chip('gpiochip0')
             
             # Configure pins
+            logger.info("Getting GPIO lines")
             self.reset_line = self.chip.get_line(self.reset_pin)
             self.dc_line = self.chip.get_line(self.dc_pin)
             self.busy_line = self.chip.get_line(self.busy_pin)
@@ -69,7 +82,8 @@ class Driver(EInkDeviceInterface):
             
             logger.info("Hardware initialized successfully")
         except Exception as e:
-            logger.warning(f"Hardware libraries not available or initialization failed: {e}")
+            logger.error(f"Hardware initialization failed: {e}")
+            logger.error(f"Error traceback: {traceback.format_exc()}")
             if hasattr(self, 'spi') and not isinstance(self.spi, MockSpiDev):
                 try:
                     self.spi.close()
