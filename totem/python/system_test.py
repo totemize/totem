@@ -1,13 +1,13 @@
 from managers.display_manager import DisplayManager
 # from managers.nfc_manager import NFCManager
-# from managers.storage_manager import StorageManager
+from managers.storage_manager import StorageManager
 # from managers.network_manager import NetworkManager
 from utils.logger import logger, setup_logger
 import time
 import traceback
 import sys
 import os
-# import tempfile
+import tempfile
 import argparse
 
 # Flag to determine if we're in automated testing mode (with mock implementations)
@@ -48,6 +48,44 @@ def test_eink_display(driver_name=None):
             return True
         return False
 
+def test_nvme_storage(driver_name=None):
+    print("\n=== Testing NVMe Storage ===")
+    try:
+        logger.info(f"Initializing StorageManager with driver: {driver_name or 'default'}")
+        storage_manager = StorageManager(driver_name)
+        
+        # Create a test file with a unique name
+        test_file_path = f"nvme_test_{int(time.time())}.txt"
+        test_data = "NVMe Storage Test Data - " + "X" * 100
+
+        print(f"Writing test data to {test_file_path}...")
+        storage_manager.write_data(test_file_path, test_data)
+        print(f"Data written to storage at {test_file_path}.")
+
+        print(f"Reading data from {test_file_path}...")
+        read_data = storage_manager.read_data(test_file_path)
+        print(f"Data read from storage: {read_data[:50]}...")
+
+        if read_data == test_data:
+            print("\n✅ NVMe Storage Test Passed: Data integrity confirmed.")
+        else:
+            print("\n❌ NVMe Storage Test Failed: Data mismatch.")
+            print(f"Original: {test_data[:50]}...")
+            print(f"Read: {read_data[:50]}...")
+            return False
+
+        print("NVMe Storage Test Completed.\n")
+        return True
+    except Exception as e:
+        print(f"NVMe Storage Test Failed: {e}")
+        logger.error(f"NVMe Storage Test Failed: {traceback.format_exc()}")
+        # In auto test mode, continue if we encounter certain expected errors
+        if AUTO_TEST_MODE:
+            print("Auto test mode: This error is expected when no real hardware is available.")
+            print("Using mock implementation instead.")
+            return True
+        return False
+
 """
 def test_nfc_device():
     print("\n=== Testing NFC Device ===")
@@ -70,51 +108,6 @@ def test_nfc_device():
     except Exception as e:
         print(f"NFC Device Test Failed: {e}")
         logger.error(f"NFC Device Test Failed: {traceback.format_exc()}")
-        # In auto test mode, continue if we encounter certain expected errors
-        if AUTO_TEST_MODE:
-            print("Auto test mode: This error is expected when no real hardware is available.")
-            print("Using mock implementation instead.")
-            return True
-        return False
-
-def test_nvme_storage():
-    print("\n=== Testing NVMe Storage ===")
-    try:
-        storage_manager = StorageManager()
-        # Use a local path for testing
-        
-        # Create a test file in the temp directory
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            test_file_path = tmp.name
-        
-        test_data = "NVMe Storage Test Data"
-
-        storage_manager.write_data(test_file_path, test_data)
-        print(f"Data written to storage at {test_file_path}.")
-
-        read_data = storage_manager.read_data(test_file_path)
-        print(f"Data read from storage: {read_data}")
-
-        if read_data == test_data:
-            print("NVMe Storage Test Passed: Data integrity confirmed.")
-        else:
-            print("NVMe Storage Test Failed: Data mismatch.")
-
-        # Clean up the test file
-        try:
-            os.remove(test_file_path)
-            print(f"Test file {test_file_path} removed.")
-        except Exception as cleanup_error:
-            print(f"Warning: Could not remove test file: {cleanup_error}")
-
-        print("Please confirm the storage is operational.")
-        auto_input("Press Enter to continue...")
-
-        print("NVMe Storage Test Completed.\n")
-        return True
-    except Exception as e:
-        print(f"NVMe Storage Test Failed: {e}")
-        logger.error(f"NVMe Storage Test Failed: {traceback.format_exc()}")
         # In auto test mode, continue if we encounter certain expected errors
         if AUTO_TEST_MODE:
             print("Auto test mode: This error is expected when no real hardware is available.")
@@ -172,9 +165,11 @@ def test_wifi_controller():
 
 def main():
     parser = argparse.ArgumentParser(description='Totem System Test')
-    parser.add_argument('--driver', help='Specify a display driver to use (e.g., waveshare_3in7)')
+    parser.add_argument('--driver', help='Specify a driver to use (e.g., waveshare_3in7, generic_nvme)')
     parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error'], default='info',
                         help='Set the logging level')
+    parser.add_argument('--test', '-t', choices=['eink', 'nvme', 'all'], default='all',
+                        help='Specify which test to run')
     args = parser.parse_args()
     
     # Setup logging
@@ -186,9 +181,13 @@ def main():
     
     results = []
     
-    results.append(("E-Ink Display", test_eink_display(args.driver)))
+    if args.test in ['eink', 'all']:
+        results.append(("E-Ink Display", test_eink_display(args.driver if args.test == 'eink' else None)))
+    
+    if args.test in ['nvme', 'all']:
+        results.append(("NVMe Storage", test_nvme_storage(args.driver if args.test == 'nvme' else None)))
+    
     # results.append(("NFC Device", test_nfc_device()))
-    # results.append(("NVMe Storage", test_nvme_storage()))
     # results.append(("Wi-Fi Controller", test_wifi_controller()))
     
     print("\n=== System Test Results ===")
