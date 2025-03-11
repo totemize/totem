@@ -59,11 +59,13 @@ def test_display(eink):
         
         # Create a test image
         logger.info("Creating test image...")
-        image = Image.new('1', (eink.width, eink.height), 255)  # 255: white
+        width = eink.driver.width
+        height = eink.driver.height
+        image = Image.new('1', (width, height), 255)  # 255: white
         draw = ImageDraw.Draw(image)
         
         # Add a border
-        draw.rectangle([(0, 0), (eink.width-1, eink.height-1)], outline=0)
+        draw.rectangle([(0, 0), (width-1, height-1)], outline=0)
         
         # Draw some text
         try:
@@ -78,15 +80,15 @@ def test_display(eink):
         # Draw test patterns
         # Horizontal lines
         for y in range(100, 180, 10):
-            draw.line([(10, y), (eink.width-10, y)], fill=0, width=1)
+            draw.line([(10, y), (width-10, y)], fill=0, width=1)
         
         # Vertical lines
-        for x in range(50, eink.width-50, 50):
+        for x in range(50, width-50, 50):
             draw.line([(x, 100), (x, 170)], fill=0, width=1)
         
         # Draw circles
         for r in range(10, 40, 10):
-            draw.ellipse([(eink.width//2-r, 200-r), (eink.width//2+r, 200+r)], outline=0)
+            draw.ellipse([(width//2-r, 200-r), (width//2+r, 200+r)], outline=0)
         
         # Display the image
         logger.info("Displaying test image...")
