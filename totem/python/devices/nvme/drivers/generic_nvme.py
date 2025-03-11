@@ -254,6 +254,10 @@ class Driver(NVMEDeviceInterface):
     def read_file(self, file_path):
         """Read data from a file."""
         try:
+            # If path is not absolute, prepend the NVMe mount point
+            if not os.path.isabs(file_path):
+                file_path = os.path.join('/mnt/nvme', file_path)
+                
             with open(file_path, 'r') as file:
                 data = file.read()
             logger.debug(f"Read {len(data)} bytes from {file_path}")
@@ -265,6 +269,10 @@ class Driver(NVMEDeviceInterface):
     def write_file(self, file_path, data):
         """Write data to a file."""
         try:
+            # If path is not absolute, prepend the NVMe mount point
+            if not os.path.isabs(file_path):
+                file_path = os.path.join('/mnt/nvme', file_path)
+                
             # Create directory if it doesn't exist
             directory = os.path.dirname(file_path)
             if directory:
