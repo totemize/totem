@@ -113,15 +113,18 @@ class EInkDiagnostics:
         logger.info("Checking for processes using GPIO pins")
         try:
             import subprocess
+            import os
             # Use specific command to check gpiochip usage without relying on lsof
             cmd = "ps aux | grep gpiod"
             output = subprocess.check_output(cmd, shell=True, text=True)
             logger.info(f"Processes using GPIO: {output}")
             
             # Kill any existing Python processes that might have GPIO access
+            # but protect the current process and SSH session
             logger.info("Killing any Python processes that might be using GPIO")
             try:
-                subprocess.run("pkill -f 'python.*eink'", shell=True)
+                current_pid = os.getpid()
+                subprocess.run(f"ps aux | grep python | grep -v {current_pid} | grep -v sshd | grep -E 'eink|gpio' | awk '{{print $2}}' | xargs kill -9 2>/dev/null || true", shell=True)
                 time.sleep(1)  # Give processes time to terminate
             except:
                 pass

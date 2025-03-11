@@ -266,7 +266,8 @@ def main():
     args = parser.parse_args()
     
     # Set logging level
-    log_level = getattr(logger, args.log_level.upper())
+    import logging
+    log_level = getattr(logging, args.log_level.upper())
     logger.setLevel(log_level)
     
     print("=== NVMe Storage Test ===")

@@ -18,8 +18,9 @@ logger = logging.getLogger('eink-quick-test')
 # Kill any existing Python processes
 def kill_python_processes():
     try:
+        current_pid = os.getpid()
         logger.info("Killing any Python processes that might be using GPIO")
-        subprocess.run("pkill -f python || true", shell=True)
+        subprocess.run(f"ps aux | grep python | grep -v {current_pid} | grep -v sshd | grep -E 'eink|gpio' | awk '{{print $2}}' | xargs kill -9 2>/dev/null || true", shell=True)
         time.sleep(2)  # Give processes time to terminate
         return True
     except Exception as e:

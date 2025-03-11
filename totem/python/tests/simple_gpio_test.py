@@ -139,12 +139,16 @@ def test_gpio():
     logger.info("All GPIO tests completed successfully")
     return True
 
-if __name__ == "__main__":
+def main():
+    """Main entry point for the GPIO test script."""
     logger.info("=== Starting Simple GPIO Test for E-Ink Display ===")
     result = test_gpio()
     if result:
         logger.info("✅ All tests PASSED")
-        sys.exit(0)
+        return 0
     else:
         logger.error("❌ Some tests FAILED")
-        sys.exit(1) 
+        return 1
+
+if __name__ == "__main__":
+    sys.exit(main()) 

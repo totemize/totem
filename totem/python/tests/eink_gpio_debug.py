@@ -235,7 +235,10 @@ def test_individual_pins_v2(pins):
                 
                 # Try reading value
                 values = request.get_values()
-                logger.info(f"Pin {name} value: {values[pin]}")
+                if pin in values:
+                    logger.info(f"Pin {name} value: {values[pin]}")
+                else:
+                    logger.info(f"Pin {name} value not available in return dictionary")
                 
                 # Release the line
                 request.release()

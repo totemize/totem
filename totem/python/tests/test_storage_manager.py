@@ -112,8 +112,10 @@ def test_write_with_options():
     
     return all([success_1, success_2, success_3, success_4, success_5])
 
+def main():
+    """Main entry point for the storage manager test script."""
+    test_write_with_options()
+    return 0
+
 if __name__ == "__main__":
-    import sys
-    success = test_write_with_options()
-    print(f"\n{'✅ All tests passed!' if success else '❌ Some tests failed!'}")
-    sys.exit(0 if success else 1) 
+    main() 
