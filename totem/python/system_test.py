@@ -53,6 +53,79 @@ def test_eink_display(driver_name=None):
             return True
         return False
 
+def test_eink_debug_mode():
+    """Special debug mode for the E-Ink display hardware"""
+    print("\n=== E-Ink Hardware Debug Mode ===")
+    
+    try:
+        # Initialize display manager
+        logger.info("Initializing display manager")
+        display_manager = DisplayManager()
+        
+        # Get direct access to the driver
+        driver = display_manager.eink_device.driver
+        
+        # Set debug mode
+        driver.enable_debug_mode(True)
+        logger.info("Debug mode enabled")
+        
+        # Get hardware status
+        hw_status = driver.USE_HARDWARE
+        logger.info(f"Hardware mode: {'ENABLED' if hw_status else 'DISABLED (mock mode)'}")
+        
+        # Check reset pin
+        logger.info("Testing reset pin")
+        if hasattr(driver, 'reset_request'):
+            logger.info("Reset pin initialized")
+            try:
+                driver.reset_request.set_values({driver.reset_pin: driver.Value.ACTIVE})
+                time.sleep(0.1)
+                driver.reset_request.set_values({driver.reset_pin: driver.Value.INACTIVE})
+                time.sleep(0.1)
+                logger.info("Reset pin toggle successful")
+            except Exception as e:
+                logger.error(f"Reset pin toggle failed: {e}")
+        else:
+            logger.warning("Reset pin not initialized")
+        
+        # Perform full reset sequence
+        logger.info("Performing reset sequence")
+        driver.reset()
+        logger.info("Reset sequence completed")
+        
+        # Try to clear the display
+        logger.info("Clearing display")
+        driver.clear()
+        logger.info("Clear operation completed")
+        
+        # Try to display a test pattern
+        logger.info("Creating test pattern")
+        from PIL import Image, ImageDraw
+        width, height = driver.width, driver.height
+        image = Image.new('1', (width, height), 255)  # White background
+        draw = ImageDraw.Draw(image)
+        
+        # Draw a black border
+        draw.rectangle([(0, 0), (width-1, height-1)], outline=0)
+        
+        # Draw diagonal lines
+        draw.line([(0, 0), (width-1, height-1)], fill=0, width=3)
+        draw.line([(0, height-1), (width-1, 0)], fill=0, width=3)
+        
+        # Display the image
+        logger.info("Displaying test pattern")
+        driver.display_image(image)
+        logger.info("Test pattern displayed")
+        
+        print("=== E-Ink Hardware Debug Mode Completed ===")
+        print("Please check if the pattern appears on the display")
+        
+        return True
+    except Exception as e:
+        print(f"E-Ink debug mode failed: {e}")
+        logger.error(f"E-Ink debug mode failed: {traceback.format_exc()}")
+        return False
+
 def test_nvme_storage(driver_name=None):
     print("\n=== Testing NVMe Storage ===")
     try:
@@ -277,7 +350,7 @@ def main():
     parser.add_argument('--driver', help='Specify a driver to use (e.g., waveshare_3in7, generic_nvme)')
     parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error'], default='info',
                         help='Set the logging level')
-    parser.add_argument('--test', '-t', choices=['eink', 'nvme', 'all'], default='all',
+    parser.add_argument('--test', '-t', choices=['eink', 'nvme', 'all', 'eink-debug'], default='all',
                         help='Specify which test to run')
     args = parser.parse_args()
     
@@ -290,7 +363,11 @@ def main():
     
     results = []
     
-    if args.test in ['eink', 'all'] and DISPLAY_MANAGER_AVAILABLE:
+    # Special debug mode for E-Ink display
+    if args.test == 'eink-debug' and DISPLAY_MANAGER_AVAILABLE:
+        results.append(("E-Ink Debug Mode", test_eink_debug_mode()))
+    # Normal tests
+    elif args.test in ['eink', 'all'] and DISPLAY_MANAGER_AVAILABLE:
         results.append(("E-Ink Display", test_eink_display(args.driver if args.test == 'eink' else None)))
     
     if args.test in ['nvme', 'all']:
