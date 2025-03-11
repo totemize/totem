@@ -116,7 +116,13 @@ def test_nvme_storage(driver_name=None):
             
             # Check if permissions were set correctly
             try:
-                file_path = os.path.join('/mnt/nvme' if driver_name == 'generic_nvme' else '', test_file_3)
+                # First determine the current driver type by checking if the storage_manager uses generic_nvme
+                # We can do this by checking if the basic_test file exists in /mnt/nvme
+                is_nvme = os.path.exists(f"/mnt/nvme/{test_file_1}")
+                
+                # Use the path accordingly
+                file_path = os.path.join('/mnt/nvme', test_file_3) if is_nvme else test_file_3
+                
                 if os.path.exists(file_path):
                     permissions = oct(os.stat(file_path).st_mode)[-3:]
                     print(f"File permissions: {permissions}")
@@ -126,8 +132,19 @@ def test_nvme_storage(driver_name=None):
                         print(f"❌ Permissions test failed: Expected 600, got {permissions}.")
                         permissions_test_passed = False
                 else:
-                    print(f"❌ Permissions test inconclusive: File not found at expected path.")
-                    permissions_test_passed = False
+                    # Try the other path if first check fails
+                    alt_path = test_file_3 if is_nvme else os.path.join('/mnt/nvme', test_file_3)
+                    if os.path.exists(alt_path):
+                        permissions = oct(os.stat(alt_path).st_mode)[-3:]
+                        print(f"File permissions: {permissions}")
+                        if permissions == '600':
+                            print("✅ Permissions test passed: Correct permissions set.")
+                        else:
+                            print(f"❌ Permissions test failed: Expected 600, got {permissions}.")
+                            permissions_test_passed = False
+                    else:
+                        print(f"❌ Permissions test inconclusive: File not found at expected path or alternate path.")
+                        permissions_test_passed = False
             except Exception as e:
                 print(f"❌ Permissions test failed: {e}")
                 permissions_test_passed = False
