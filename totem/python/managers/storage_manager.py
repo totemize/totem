@@ -7,19 +7,33 @@ class StorageManager:
         self.nvme_device = NVME(driver_name)
         self.nvme_device.initialize()
 
-    def write_data(self, file_path: str, data: str) -> bool:
+    def write_data(self, file_path: str, data: bytes, options: Optional[dict] = None) -> bool:
         """
-        Write data to a file at the specified path
+        Write data to a file at the specified path.
         
         Args:
-            file_path: Path where to write the data
-            data: Data to write
-            
+            file_path (str): Path where to write the data.
+            data (bytes): Byte array data to write.
+            options (Optional[dict]): A dictionary with write options. Supported options:
+                - append (bool): If True, append data to file. Defaults to False.
+                - atomic (bool): If True, perform atomic write. Defaults to True.
+                - sync (bool): If True, force a filesystem sync after write. Defaults to False.
+                - permissions (Optional[int]): File permissions to set after writing. Defaults to None.
+                
         Returns:
-            bool: True if write was successful
+            bool: True if write was successful.
         """
-        logger.info(f"Writing data to {file_path}")
-        return self.nvme_device.write_file(file_path, data)
+        logger.info(f"Writing data to {file_path} with options: {options}")
+        if options is None:
+            options = {}
+        default_options = {
+            "append": False,
+            "atomic": True,
+            "sync": False,
+            "permissions": None
+        }
+        config = {**default_options, **options}
+        return self.nvme_device.write_file(file_path, data, config)
         
     def read_data(self, file_path: str) -> str:
         """
