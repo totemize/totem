@@ -258,13 +258,23 @@ class Driver(EInkDeviceInterface):
             try:
                 logger.debug("Waiting for display to be idle")
                 busy_values = self.busy_request.get_values()
-                # The get_values() method returns a dictionary with pin numbers as keys
-                while busy_values.get(self.busy_pin, self.Value.INACTIVE) == self.Value.ACTIVE:
-                    time.sleep(0.1)
-                    busy_values = self.busy_request.get_values()
+                # Check if we have any values returned
+                if busy_values:
+                    # For gpiod 2.x, busy_values might be a list with a single value
+                    busy_value = busy_values[0] if isinstance(busy_values, list) else busy_values.get(self.busy_pin)
+                    while busy_value == self.Value.ACTIVE:
+                        time.sleep(0.1)
+                        busy_values = self.busy_request.get_values()
+                        busy_value = busy_values[0] if isinstance(busy_values, list) else busy_values.get(self.busy_pin)
+                else:
+                    # If we can't read the busy pin, just wait a fixed time
+                    logger.warning("Could not read busy pin, waiting fixed time instead")
+                    time.sleep(1.0)
             except Exception as e:
                 logger.error(f"Error waiting for idle: {e}")
                 logger.error(traceback.format_exc())
+                # Still wait a bit in case of error
+                time.sleep(1.0)
         else:
             logger.debug("Mock wait until idle")
             time.sleep(0.5)
