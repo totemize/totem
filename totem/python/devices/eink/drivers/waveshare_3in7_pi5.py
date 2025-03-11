@@ -19,27 +19,13 @@ class MockSpiDev:
         logger.debug("Mock SPI closed")
 
 class Driver(EInkDeviceInterface):
-    # Class variable for hardware status
-    USE_HARDWARE = False
-    
-    @classmethod
-    def _detect_hardware(cls):
-        try:
-            import spidev
-            import gpiod
-            cls.USE_HARDWARE = True
-            logger.info("Using Pi 5 compatible GPIO (gpiod) and SPI")
-        except ImportError as e:
-            logger.warning(f"Hardware libraries not available: {e}")
-            cls.USE_HARDWARE = False
+    # Class variables
+    width = 480
+    height = 280
     
     def __init__(self):
-        # Detect hardware availability
-        self._detect_hardware()
-        
-        self.width = 480
-        self.height = 280
         self.initialized = False
+        self.USE_HARDWARE = False  # Initialize as False by default
         
         # GPIO pin definitions
         self.reset_pin = 17
@@ -47,30 +33,31 @@ class Driver(EInkDeviceInterface):
         self.busy_pin = 24
         self.cs_pin = 8
         
-        # Initialize hardware or mock
-        if self.USE_HARDWARE:
-            try:
-                # Initialize SPI
-                self.spi = spidev.SpiDev()
-                self.spi.open(0, 0)
-                self.spi.max_speed_hz = 2000000
-                
-                # Initialize GPIO using gpiod
-                self.chip = gpiod.Chip('gpiochip0')
-                
-                # Configure pins
-                self.reset_line = self.chip.get_line(self.reset_pin)
-                self.dc_line = self.chip.get_line(self.dc_pin)
-                self.busy_line = self.chip.get_line(self.busy_pin)
-                self.cs_line = self.chip.get_line(self.cs_pin)
-                
-                # Request lines (will be done in init())
-                logger.info("Hardware initialized successfully")
-            except Exception as e:
-                logger.error(f"Error initializing hardware: {e}")
-                self.USE_HARDWARE = False
-                self.spi = MockSpiDev()
-        else:
+        # Try to import Pi 5 compatible libraries
+        try:
+            import spidev
+            import gpiod
+            self.USE_HARDWARE = True
+            logger.info("Using Pi 5 compatible GPIO (gpiod) and SPI")
+            
+            # Initialize SPI
+            self.spi = spidev.SpiDev()
+            self.spi.open(0, 0)
+            self.spi.max_speed_hz = 2000000
+            
+            # Initialize GPIO using gpiod
+            self.chip = gpiod.Chip('gpiochip0')
+            
+            # Configure pins
+            self.reset_line = self.chip.get_line(self.reset_pin)
+            self.dc_line = self.chip.get_line(self.dc_pin)
+            self.busy_line = self.chip.get_line(self.busy_pin)
+            self.cs_line = self.chip.get_line(self.cs_pin)
+            
+            logger.info("Hardware initialized successfully")
+        except Exception as e:
+            logger.warning(f"Hardware libraries not available or initialization failed: {e}")
+            self.USE_HARDWARE = False
             self.spi = MockSpiDev()
     
     def init(self):
