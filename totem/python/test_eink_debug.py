@@ -12,6 +12,18 @@ from utils.logger import logger
 from managers.display_manager import DisplayManager
 from PIL import Image, ImageDraw, ImageFont
 import argparse
+import logging
+
+# Setup logging based on environment variable
+log_level_str = os.environ.get('TOTEM_LOG_LEVEL', 'INFO')
+try:
+    log_level = getattr(logging, log_level_str.upper())
+except AttributeError:
+    log_level = logging.INFO
+
+# Configure root logger
+logging.basicConfig(level=log_level, 
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 def test_basic_gpio():
     """Test basic GPIO control to verify driver functionality"""

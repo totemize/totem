@@ -70,9 +70,12 @@ echo "Checking device permissions..."
 ls -l /dev/spidev0.0
 ls -l /dev/gpiochip0
 
-# Run all tests with debug logging
+# Configure Python logging
+export TOTEM_LOG_LEVEL=DEBUG
+
+# Run all tests
 echo "Running E-Ink debug tests..."
-python test_eink_debug.py --all --log-level debug
+python test_eink_debug.py --all
 
 # If we get here, the script completed without errors
 echo "Test script completed. Check the logs for details." 
