@@ -35,7 +35,7 @@ class StorageManager:
         config = {**default_options, **options}
         return self.nvme_device.write_file(file_path, data, config)
         
-    def read_data(self, file_path: str) -> str:
+    def read_data(self, file_path: str) -> bytes:
         """
         Read data from the specified file path
         
@@ -43,7 +43,7 @@ class StorageManager:
             file_path: Path to read from
             
         Returns:
-            str: Data read from file
+            bytes: Data read from file
         """
         logger.info(f"Reading data from {file_path}")
         return self.nvme_device.read_file(file_path) 

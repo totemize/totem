@@ -258,13 +258,13 @@ class Driver(NVMEDeviceInterface):
             if not os.path.isabs(file_path):
                 file_path = os.path.join('/mnt/nvme', file_path)
                 
-            with open(file_path, 'r') as file:
+            with open(file_path, 'rb') as file:
                 data = file.read()
             logger.debug(f"Read {len(data)} bytes from {file_path}")
             return data
         except Exception as e:
             logger.error(f"Error reading file {file_path}: {e}")
-            return ""
+            return b""
     
     def write_file(self, file_path, data, options=None):
         """Write data to a file with specified options."""
