@@ -199,47 +199,66 @@ class Driver(EInkDeviceInterface):
     
     def _init_display(self):
         """Initialize the display with command sequence"""
-        # Send initialization commands
-        self.send_command(self.DRIVER_OUTPUT_CONTROL)
-        self.send_data(0xF9)  # (HEIGHT-1) & 0xFF
-        self.send_data(0x00)  # ((HEIGHT-1) >> 8) & 0xFF
-        self.send_data(0x00)  # GD = 0, SM = 0, TB = 0
+        logger.info("Initializing display with proper command sequence for 2.13 inch E-Paper")
         
+        # Reset the display first
+        self.reset()
+        
+        # Send initialization commands according to Waveshare documentation
+        logger.debug("Sending driver output control")
+        self.send_command(self.DRIVER_OUTPUT_CONTROL)
+        self.send_data(0x79)  # (HEIGHT-1) & 0xFF = 122-1 = 121 = 0x79
+        self.send_data(0x00)  # ((HEIGHT-1) >> 8) & 0xFF
+        self.send_data(0x00)  # GD=0, SM=0, TB=0
+        
+        logger.debug("Sending booster soft start control")
         self.send_command(self.BOOSTER_SOFT_START_CONTROL)
         self.send_data(0xD7)
         self.send_data(0xD6)
         self.send_data(0x9D)
         
+        logger.debug("Sending write VCOM register")
         self.send_command(self.WRITE_VCOM_REGISTER)
         self.send_data(0xA8)  # VCOM 7C
         
+        logger.debug("Sending dummy line period")
         self.send_command(self.SET_DUMMY_LINE_PERIOD)
         self.send_data(0x1A)  # 4 dummy lines per gate
         
+        logger.debug("Sending gate time")
         self.send_command(self.SET_GATE_TIME)
         self.send_data(0x08)  # 2us per line
         
+        logger.debug("Sending data entry mode")
         self.send_command(self.DATA_ENTRY_MODE_SETTING)
         self.send_data(0x03)  # X increment; Y increment
         
         # Set the look-up table for full refresh
+        logger.debug("Setting LUT with Waveshare 2.13 inch specific values")
         self._set_lut()
         
-        logger.info("Display initialization complete.")
+        logger.info("Display initialization completed successfully")
         
     def _set_lut(self):
         """Set the look-up table for display refresh"""
-        # LUT for full refresh
+        logger.info("Setting LUT for Waveshare 2.13 inch E-Paper display")
+        
+        # Waveshare 2.13 inch E-Paper HAT specific LUT settings for full refresh
+        # These values are taken from Waveshare's official examples
         lut_full_update = [
-            0x22, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x11,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E,
+            0x22, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x11, 
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+            0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 
             0x01, 0x00, 0x00, 0x00, 0x00, 0x00
         ]
         
+        logger.debug("Sending LUT register commands")
         self.send_command(self.WRITE_LUT_REGISTER)
-        for i in range(30):
+        for i in range(len(lut_full_update)):
             self.send_data(lut_full_update[i])
+            
+        if self.DEBUG_MODE:
+            logger.debug(f"LUT values set: {[hex(x) for x in lut_full_update]}")
     
     def _init_gpio_v2(self):
         """Initialize GPIO using v2 API"""
@@ -586,12 +605,28 @@ class Driver(EInkDeviceInterface):
         self.send_data((y >> 8) & 0xFF)
 
     def _update(self):
-        """Update the display"""
+        """Update the display with current data"""
+        logger.info("Updating display with enhanced refresh sequence")
+        
+        # Display update control
+        logger.debug("Sending display update control command")
         self.send_command(self.DISPLAY_UPDATE_CONTROL_2)
-        self.send_data(0xC4)
+        self.send_data(0xC4)  # Enable clock and analog, Load temperature value
+        
+        # Activate display update sequence
+        logger.debug("Sending master activation command")
         self.send_command(self.MASTER_ACTIVATION)
+        
+        # Terminate frame read/write
+        logger.debug("Sending terminate frame read/write command")
         self.send_command(self.TERMINATE_FRAME_READ_WRITE)
+        
+        # Wait until the update is complete
+        logger.debug("Waiting for display to be idle (update to complete)")
         self.wait_until_idle()
+        
+        if self.DEBUG_MODE:
+            logger.debug("Display update sequence completed")
             
     def clear(self):
         logger.info("Clearing e-Paper display")
@@ -631,25 +666,33 @@ class Driver(EInkDeviceInterface):
             try:
                 # Process image
                 if image.mode != '1':
+                    logger.debug(f"Converting image from {image.mode} to 1-bit mode")
                     image = image.convert('1')
                 
                 if image.size[0] != self.width or image.size[1] != self.height:
+                    logger.debug(f"Resizing image from {image.size} to {self.width}x{self.height}")
                     image = image.resize((self.width, self.height))
         
                 # Get image data
+                logger.debug("Converting image to buffer data")
                 pixels = np.array(image)
                 buffer = np.packbits(~pixels.astype(bool)).tolist()  # Invert: 0 = black, 1 = white
                 
                 # Set window and cursor
+                logger.debug("Setting window and cursor position")
                 self._set_window(0, 0, self.width-1, self.height-1)
                 self._set_cursor(0, 0)
                 
                 # Send data
+                logger.debug(f"Sending data to RAM (buffer size: {len(buffer)} bytes)")
                 self.send_command(self.WRITE_RAM)
                 self.send_data(buffer)
                 
                 # Update display
+                logger.debug("Triggering display update")
                 self._update()
+                
+                logger.info("Image displayed successfully")
             except Exception as e:
                 logger.error(f"Error displaying image: {e}")
                 logger.error(traceback.format_exc())
