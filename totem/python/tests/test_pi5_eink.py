@@ -9,16 +9,34 @@ import time
 # Add the parent directory to the path so we can import our modules
 script_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.abspath(os.path.join(script_dir, '..'))  # Python directory
-totem_dir = os.path.abspath(os.path.join(parent_dir, '..'))  # Totem root directory
-sys.path.insert(0, totem_dir)
+sys.path.insert(0, parent_dir)
 
 # Configure import paths
-from totem.python.utils.logger import setup_logger, get_logger
 try:
-    from totem.python.devices.eink.drivers.waveshare_3in7_pi5 import Driver
+    from utils.logger import setup_logger, get_logger
+except ImportError:
+    # Try alternate import path
+    sys.path.insert(0, os.path.abspath(os.path.join(parent_dir, '..')))  # Totem root directory
+    from totem.python.utils.logger import setup_logger, get_logger
+
+try:
+    # First try relative import
+    from devices.eink.drivers.waveshare_3in7_pi5 import Driver
     DRIVER_AVAILABLE = True
 except ImportError:
-    DRIVER_AVAILABLE = False
+    try:
+        # Try alternate import path
+        from totem.python.devices.eink.drivers.waveshare_3in7_pi5 import Driver
+        DRIVER_AVAILABLE = True
+    except ImportError:
+        # Debug which file exists
+        driver_path = os.path.join(parent_dir, "devices/eink/drivers/waveshare_3in7_pi5.py")
+        alt_driver_path = os.path.join(os.path.abspath(os.path.join(parent_dir, '..')), 
+                                   "totem/python/devices/eink/drivers/waveshare_3in7_pi5.py")
+        print(f"Looking for driver at: {driver_path} (exists: {os.path.exists(driver_path)})")
+        print(f"Looking for driver at: {alt_driver_path} (exists: {os.path.exists(alt_driver_path)})")
+        DRIVER_AVAILABLE = False
+
 from PIL import Image, ImageDraw, ImageFont
 
 def main():
