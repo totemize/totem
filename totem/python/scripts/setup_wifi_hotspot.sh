@@ -9,8 +9,8 @@ echo "Totem: Wi-Fi Hotspot Setup"
 echo "============================================"
 
 # Default configuration
-SSID="TotemAP"
-PASSWORD="totempassword"
+SSID="totem"
+PASSWORD="yourproblemnow"
 CHANNEL=7
 COUNTRY="US"
 

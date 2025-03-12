@@ -12,8 +12,8 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Default configuration
-WIFI_SSID="TotemAP"
-WIFI_PASSWORD="totempassword"
+WIFI_SSID="totem"
+WIFI_PASSWORD="yourproblemnow"
 WIFI_CHANNEL=7
 WIFI_COUNTRY="US"
 SKIP_CONFIRM=false
