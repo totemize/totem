@@ -594,8 +594,33 @@ class Driver(EInkDeviceInterface):
                 if self.has_v2_api:
                     from gpiod.line import Value
                     while True:
+                        # The values are returned as a dictionary with the pin number as key
                         values = self.busy_request.get_values()
-                        busy_value = values[self.busy_pin]
+                        # Debug output to understand the structure of values
+                        if self.DEBUG_MODE:
+                            logger.debug(f"get_values() returned type: {type(values)}, value: {values}")
+                            logger.debug(f"busy_pin: {self.busy_pin}")
+                            if hasattr(values, 'keys'):
+                                logger.debug(f"keys: {list(values.keys())}")
+                            elif hasattr(values, 'indices'):
+                                logger.debug(f"indices: {list(range(len(values)))}")
+                            else:
+                                logger.debug(f"values has no keys or indices")
+                        
+                        # Try to access the value based on whether it's a dict or list
+                        if hasattr(values, 'get'):
+                            # It's a dictionary, try with the pin number as key
+                            busy_value = values.get(self.busy_pin)
+                            if busy_value is None:
+                                # Try with 0 as key (might be the first and only value)
+                                busy_value = values.get(0)
+                        else:
+                            # Might be a list or tuple, try with index 0
+                            busy_value = values[0] if values else None
+                            
+                        if self.DEBUG_MODE:
+                            logger.debug(f"busy_value: {busy_value}")
+                            
                         if busy_value == Value.INACTIVE:  # HIGH is idle
                             break
                         time.sleep(0.01)
