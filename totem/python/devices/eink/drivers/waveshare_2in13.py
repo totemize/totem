@@ -1,56 +1,158 @@
-from devices.eink.eink import EInkDeviceInterface
-from utils.logger import logger
-from PIL import Image
-import time
-import numpy as np
+#!/usr/bin/env python3
+"""
+Waveshare 2.13inch E-Paper HAT Driver
+Resolution: 250x122 pixels
+Interface: SPI
+Color: Black and White
+"""
 
-# Mock implementations to replace hardware-dependent libraries
-class MockSpiDev:
-    def __init__(self, bus=0, device=0):
-        self.bus = bus
-        self.device = device
-        self.max_speed_hz = 0
-        logger.debug(f"Initialized mock SPI device on bus {bus}, device {device}")
+try:
+    from totem.python.devices.eink.eink import EInkDeviceInterface
+    from totem.python.utils.logger import logger
+    import time
     
-    def writebytes(self, data):
-        logger.debug(f"SPI write: {data[:10]}{'...' if len(data) > 10 else ''}")
-        return
+    # Try to import optional dependencies
+    try:
+        from PIL import Image
+        PIL_AVAILABLE = True
+    except ImportError:
+        PIL_AVAILABLE = False
+        logger.warning("PIL not available. Image display functions will be limited.")
+        
+    try:
+        import numpy as np
+        NUMPY_AVAILABLE = True
+    except ImportError:
+        NUMPY_AVAILABLE = False
+        logger.warning("NumPy not available. Some operations may be slower.")
     
-    def close(self):
-        logger.debug("SPI connection closed")
-        return
-
-class MockGPIO:
-    BCM = 1
-    OUT = 1
-    IN = 0
-    HIGH = 1
-    LOW = 0
+    # For testing without hardware
+    class MockSpiDev:
+        def __init__(self):
+            pass
+            
+        def open(self, bus, device):
+            logger.debug(f"Mock SPI opened on bus {bus}, device {device}")
+            
+        def max_speed_hz(self, speed):
+            logger.debug(f"Mock SPI speed set to {speed}")
+            
+        def mode(self, mode):
+            logger.debug(f"Mock SPI mode set to {mode}")
+            
+        def xfer2(self, data):
+            logger.debug(f"Mock SPI data transfer: {len(data)} bytes")
+            return [0] * len(data)
+            
+        def close(self):
+            logger.debug("Mock SPI closed")
     
-    @staticmethod
-    def setmode(mode):
-        logger.debug(f"GPIO mode set to {mode}")
-        return
-    
-    @staticmethod
-    def setup(pin, mode):
-        logger.debug(f"GPIO pin {pin} set to mode {mode}")
-        return
-    
-    @staticmethod
-    def output(pin, value):
-        logger.debug(f"GPIO pin {pin} set to {value}")
-        return
-    
-    @staticmethod
-    def input(pin):
-        logger.debug(f"Reading GPIO pin {pin}")
-        return 1  # Always return idle for testing
-    
-    @staticmethod
-    def cleanup():
-        logger.debug("GPIO cleanup complete")
-        return
+    class MockGPIO:
+        BOARD = 1
+        OUT = 2
+        IN = 3
+        HIGH = 1
+        LOW = 0
+        
+        @staticmethod
+        def setmode(mode):
+            logger.debug(f"Mock GPIO mode set to {mode}")
+            
+        @staticmethod
+        def setup(pin, mode):
+            logger.debug(f"Mock GPIO setup pin {pin} as {'output' if mode == MockGPIO.OUT else 'input'}")
+            
+        @staticmethod
+        def output(pin, value):
+            logger.debug(f"Mock GPIO output pin {pin} set to {value}")
+            
+        @staticmethod
+        def input(pin):
+            logger.debug(f"Mock GPIO input from pin {pin}")
+            return 1
+            
+        @staticmethod
+        def cleanup():
+            logger.debug("Mock GPIO cleanup")
+            
+except ImportError:
+    try:
+        # Fall back to direct imports for testing
+        import sys
+        import os
+        # Add the parent directory to the path
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+        
+        from python.devices.eink.eink import EInkDeviceInterface
+        from python.utils.logger import logger
+        import time
+        
+        # Try to import optional dependencies
+        try:
+            from PIL import Image
+            PIL_AVAILABLE = True
+        except ImportError:
+            PIL_AVAILABLE = False
+            logger.warning("PIL not available. Image display functions will be limited.")
+            
+        try:
+            import numpy as np
+            NUMPY_AVAILABLE = True
+        except ImportError:
+            NUMPY_AVAILABLE = False
+            logger.warning("NumPy not available. Some operations may be slower.")
+        
+        # Mock implementations same as above
+        class MockSpiDev:
+            def __init__(self):
+                pass
+                
+            def open(self, bus, device):
+                logger.debug(f"Mock SPI opened on bus {bus}, device {device}")
+                
+            def max_speed_hz(self, speed):
+                logger.debug(f"Mock SPI speed set to {speed}")
+                
+            def mode(self, mode):
+                logger.debug(f"Mock SPI mode set to {mode}")
+                
+            def xfer2(self, data):
+                logger.debug(f"Mock SPI data transfer: {len(data)} bytes")
+                return [0] * len(data)
+                
+            def close(self):
+                logger.debug("Mock SPI closed")
+        
+        class MockGPIO:
+            BOARD = 1
+            OUT = 2
+            IN = 3
+            HIGH = 1
+            LOW = 0
+            
+            @staticmethod
+            def setmode(mode):
+                logger.debug(f"Mock GPIO mode set to {mode}")
+                
+            @staticmethod
+            def setup(pin, mode):
+                logger.debug(f"Mock GPIO setup pin {pin} as {'output' if mode == MockGPIO.OUT else 'input'}")
+                
+            @staticmethod
+            def output(pin, value):
+                logger.debug(f"Mock GPIO output pin {pin} set to {value}")
+                
+            @staticmethod
+            def input(pin):
+                logger.debug(f"Mock GPIO input from pin {pin}")
+                return 1
+                
+            @staticmethod
+            def cleanup():
+                logger.debug("Mock GPIO cleanup")
+    except ImportError as e:
+        logger.error(f"Failed to import required modules: {e}")
+        raise
 
 # Use mock implementations instead of hardware libraries
 try:
@@ -250,32 +352,37 @@ class Driver(EInkDeviceInterface):
         self.wait_until_idle()
 
     def display_image(self, image):
-        if not self.initialized:
-            self.init()
+        """
+        Display an image on the e-Paper display
+        Args:
+            image: PIL Image object
+        """
+        if not PIL_AVAILABLE:
+            logger.error("PIL is not available. Cannot display image.")
+            return False
+        
+        logger.info("Displaying image on e-Paper display")
+        if self.hardware_available:
+            # Convert image to 1-bit black and white
+            if image.mode != '1':
+                image = image.convert('1')
             
-        logger.info("Displaying image on e-Paper display.")
-
-        # Process image
-        if image.mode != '1':
-            image = image.convert('1')
-        
-        if image.size[0] != self.width or image.size[1] != self.height:
-            image = image.resize((self.width, self.height))
-
-        # Get image data
-        pixels = np.array(image)
-        buffer = np.packbits(~pixels.astype(bool)).tolist()  # Invert: 0 = black, 1 = white
-        
-        # Set window and cursor
-        self._set_window(0, 0, self.width-1, self.height-1)
-        self._set_cursor(0, 0)
-        
-        # Send data
-        self.send_command(self.WRITE_RAM)
-        self.send_data(buffer)
-        
-        # Update display
-        self._update()
+            # Resize image to fit the display if needed
+            if image.size != (self.WIDTH, self.HEIGHT):
+                image = image.resize((self.WIDTH, self.HEIGHT))
+            
+            # Convert to bytes and send to display
+            buf = bytearray(self.WIDTH * self.HEIGHT // 8)
+            for y in range(self.HEIGHT):
+                for x in range(self.WIDTH):
+                    if image.getpixel((x, y)) == 0:  # Black pixel
+                        buf[(x + y * self.WIDTH) // 8] |= 0x80 >> (x % 8)
+            
+            self.display_bytes(buf)
+            return True
+        else:
+            logger.info(f"Mock display image with size {image.size}")
+            return True
 
     def display_bytes(self, image_bytes):
         if not self.initialized:
