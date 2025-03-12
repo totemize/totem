@@ -8,12 +8,14 @@ import time
 
 # Add the parent directory to the path so we can import our modules
 script_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.abspath(os.path.join(script_dir, '..', '..'))
-sys.path.insert(0, parent_dir)
+parent_dir = os.path.abspath(os.path.join(script_dir, '..'))  # Python directory
+totem_dir = os.path.abspath(os.path.join(parent_dir, '..'))  # Totem root directory
+sys.path.insert(0, totem_dir)
 
-from utils.logger import setup_logger, get_logger
+# Configure import paths
+from totem.python.utils.logger import setup_logger, get_logger
 try:
-    from devices.eink.drivers.waveshare_3in7_pi5 import Driver
+    from totem.python.devices.eink.drivers.waveshare_3in7_pi5 import Driver
     DRIVER_AVAILABLE = True
 except ImportError:
     DRIVER_AVAILABLE = False
