@@ -87,6 +87,7 @@ class MockSpiDev:
     
 class MockGPIO:
     BOARD = 1
+    BCM = 0  # Add BCM mode
     OUT = 2
     IN = 3
     HIGH = 1
