@@ -3,10 +3,22 @@ import os
 import sys
 import subprocess
 import argparse
-from utils.logger import logger
-from managers.storage_manager import StorageManager
-from devices.nvme.nvme import NVME
-from devices.nvme.drivers.generic_nvme import Driver as NVMeDriver
+import time
+
+# Setup direct logging without using the logger module yet
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('totem')
+
+# Add the parent directory to the path so we can import our modules
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.abspath(os.path.join(script_dir, '..'))  # Python directory
+sys.path.insert(0, parent_dir)
+
+# We'll import the modules when needed to avoid dependency issues
 
 def confirm_action(message="Do you want to continue?"):
     """Ask for user confirmation before proceeding with an action."""

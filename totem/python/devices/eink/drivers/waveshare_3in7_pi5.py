@@ -21,8 +21,24 @@ except ImportError as e:
     logger_import_msg = f"Hardware libraries import failed: {e}"
 
 # Import our utility modules after setting the hardware flag
-from utils.logger import logger
-from devices.eink.eink import EInkDeviceInterface
+try:
+    # Try totem package imports first
+    from totem.python.utils.logger import logger
+    from totem.python.devices.eink.eink import EInkDeviceInterface
+except ImportError:
+    try:
+        # Fall back to direct imports for testing
+        import sys
+        # Add parent directories to path if needed
+        script_dir = os.path.dirname(os.path.abspath(__file__))  # drivers directory
+        devices_dir = os.path.dirname(os.path.dirname(script_dir))  # devices directory
+        python_dir = os.path.dirname(devices_dir)  # python directory
+        sys.path.insert(0, python_dir)
+        
+        from utils.logger import logger
+        from devices.eink.eink import EInkDeviceInterface
+    except ImportError as e:
+        raise ImportError(f"Failed to import required modules: {e}")
 
 # Log the import status
 logger.info(logger_import_msg)
