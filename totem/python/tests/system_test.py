@@ -146,8 +146,8 @@ def test_nvme_storage():
         logger.info("Initializing StorageManager with driver: default")
         storage_manager = StorageManager(driver_name='generic_nvme')
         
-        # Use the /tmp directory instead of direct NVMe access to avoid permission issues
-        test_dir = os.path.join('/tmp', 'nvme_test_' + str(int(time.time())))
+        # Use the /mnt/nvme directory for NVMe access
+        test_dir = os.path.join('/mnt/nvme', 'nvme_test_' + str(int(time.time())))
         os.makedirs(test_dir, exist_ok=True)
         
         # Generate a unique identifier for test files to avoid conflicts
