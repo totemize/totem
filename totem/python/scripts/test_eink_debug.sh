@@ -75,7 +75,7 @@ export TOTEM_LOG_LEVEL=DEBUG
 
 # Run all tests
 echo "Running E-Ink debug tests..."
-python test_eink_debug.py --all
+python ../tests/test_eink_debug.py --all
 
 # If we get here, the script completed without errors
 echo "Test script completed. Check the logs for details." 
