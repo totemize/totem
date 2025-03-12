@@ -6,154 +6,113 @@ Interface: SPI
 Color: Black and White
 """
 
+import os
+import time
+import logging
+import sys
+import traceback
+
+# Add the parent directory to the path so we can import our modules
+script_dir = os.path.dirname(os.path.abspath(__file__))  # drivers directory
+eink_dir = os.path.dirname(script_dir)  # eink directory
+devices_dir = os.path.dirname(eink_dir)  # devices directory
+python_dir = os.path.dirname(devices_dir)  # python directory
+sys.path.insert(0, python_dir)
+
+# Import logger first before using it
 try:
-    from totem.python.devices.eink.eink import EInkDeviceInterface
+    # Try totem package imports first
     from totem.python.utils.logger import logger
-    import time
-    
-    # Try to import optional dependencies
-    try:
-        from PIL import Image
-        PIL_AVAILABLE = True
-    except ImportError:
-        PIL_AVAILABLE = False
-        logger.warning("PIL not available. Image display functions will be limited.")
-        
-    try:
-        import numpy as np
-        NUMPY_AVAILABLE = True
-    except ImportError:
-        NUMPY_AVAILABLE = False
-        logger.warning("NumPy not available. Some operations may be slower.")
-    
-    # For testing without hardware
-    class MockSpiDev:
-        def __init__(self):
-            pass
-            
-        def open(self, bus, device):
-            logger.debug(f"Mock SPI opened on bus {bus}, device {device}")
-            
-        def max_speed_hz(self, speed):
-            logger.debug(f"Mock SPI speed set to {speed}")
-            
-        def mode(self, mode):
-            logger.debug(f"Mock SPI mode set to {mode}")
-            
-        def xfer2(self, data):
-            logger.debug(f"Mock SPI data transfer: {len(data)} bytes")
-            return [0] * len(data)
-            
-        def close(self):
-            logger.debug("Mock SPI closed")
-    
-    class MockGPIO:
-        BOARD = 1
-        OUT = 2
-        IN = 3
-        HIGH = 1
-        LOW = 0
-        
-        @staticmethod
-        def setmode(mode):
-            logger.debug(f"Mock GPIO mode set to {mode}")
-            
-        @staticmethod
-        def setup(pin, mode):
-            logger.debug(f"Mock GPIO setup pin {pin} as {'output' if mode == MockGPIO.OUT else 'input'}")
-            
-        @staticmethod
-        def output(pin, value):
-            logger.debug(f"Mock GPIO output pin {pin} set to {value}")
-            
-        @staticmethod
-        def input(pin):
-            logger.debug(f"Mock GPIO input from pin {pin}")
-            return 1
-            
-        @staticmethod
-        def cleanup():
-            logger.debug("Mock GPIO cleanup")
-            
 except ImportError:
     try:
         # Fall back to direct imports for testing
-        import sys
-        import os
-        # Add the parent directory to the path
-        sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
-        
-        from python.devices.eink.eink import EInkDeviceInterface
-        from python.utils.logger import logger
-        import time
-        
-        # Try to import optional dependencies
-        try:
-            from PIL import Image
-            PIL_AVAILABLE = True
-        except ImportError:
-            PIL_AVAILABLE = False
-            logger.warning("PIL not available. Image display functions will be limited.")
-            
-        try:
-            import numpy as np
-            NUMPY_AVAILABLE = True
-        except ImportError:
-            NUMPY_AVAILABLE = False
-            logger.warning("NumPy not available. Some operations may be slower.")
-        
-        # Mock implementations same as above
-        class MockSpiDev:
-            def __init__(self):
-                pass
-                
-            def open(self, bus, device):
-                logger.debug(f"Mock SPI opened on bus {bus}, device {device}")
-                
-            def max_speed_hz(self, speed):
-                logger.debug(f"Mock SPI speed set to {speed}")
-                
-            def mode(self, mode):
-                logger.debug(f"Mock SPI mode set to {mode}")
-                
-            def xfer2(self, data):
-                logger.debug(f"Mock SPI data transfer: {len(data)} bytes")
-                return [0] * len(data)
-                
-            def close(self):
-                logger.debug("Mock SPI closed")
-        
-        class MockGPIO:
-            BOARD = 1
-            OUT = 2
-            IN = 3
-            HIGH = 1
-            LOW = 0
-            
-            @staticmethod
-            def setmode(mode):
-                logger.debug(f"Mock GPIO mode set to {mode}")
-                
-            @staticmethod
-            def setup(pin, mode):
-                logger.debug(f"Mock GPIO setup pin {pin} as {'output' if mode == MockGPIO.OUT else 'input'}")
-                
-            @staticmethod
-            def output(pin, value):
-                logger.debug(f"Mock GPIO output pin {pin} set to {value}")
-                
-            @staticmethod
-            def input(pin):
-                logger.debug(f"Mock GPIO input from pin {pin}")
-                return 1
-                
-            @staticmethod
-            def cleanup():
-                logger.debug("Mock GPIO cleanup")
+        from utils.logger import logger
     except ImportError as e:
-        logger.error(f"Failed to import required modules: {e}")
-        raise
+        # Create a basic logger if all else fails
+        logger = logging.getLogger("eink")
+        logger.setLevel(logging.INFO)
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        logger.addHandler(handler)
+        logger.error(f"Failed to import logger: {e}")
 
+# Import our device interface
+try:
+    # Try totem package imports first
+    from totem.python.devices.eink.eink import EInkDeviceInterface
+except ImportError:
+    try:
+        # Fall back to direct imports for testing
+        from devices.eink.eink import EInkDeviceInterface
+    except ImportError as e:
+        logger.error(f"Failed to import EInkDeviceInterface: {e}")
+        logger.error(traceback.format_exc())
+        raise ImportError(f"Failed to import required modules: {e}")
+
+# Try to import optional dependencies
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    logger.warning("PIL not available. Image display functions will be limited.")
+    
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
+    logger.warning("NumPy not available. Some operations may be slower.")
+
+# For testing without hardware
+class MockSpiDev:
+    def __init__(self):
+        pass
+            
+    def open(self, bus, device):
+        logger.debug(f"Mock SPI opened on bus {bus}, device {device}")
+            
+    def max_speed_hz(self, speed):
+        logger.debug(f"Mock SPI speed set to {speed}")
+            
+    def mode(self, mode):
+        logger.debug(f"Mock SPI mode set to {mode}")
+            
+    def xfer2(self, data):
+        logger.debug(f"Mock SPI data transfer: {len(data)} bytes")
+        return [0] * len(data)
+            
+    def close(self):
+        logger.debug("Mock SPI closed")
+    
+class MockGPIO:
+    BOARD = 1
+    OUT = 2
+    IN = 3
+    HIGH = 1
+    LOW = 0
+        
+    @staticmethod
+    def setmode(mode):
+        logger.debug(f"Mock GPIO mode set to {mode}")
+            
+    @staticmethod
+    def setup(pin, mode):
+        logger.debug(f"Mock GPIO setup pin {pin} as {'output' if mode == MockGPIO.OUT else 'input'}")
+            
+    @staticmethod
+    def output(pin, value):
+        logger.debug(f"Mock GPIO output pin {pin} set to {value}")
+            
+    @staticmethod
+    def input(pin):
+        logger.debug(f"Mock GPIO input from pin {pin}")
+        return 1
+            
+    @staticmethod
+    def cleanup():
+        logger.debug("Mock GPIO cleanup")
+            
 # Use mock implementations instead of hardware libraries
 try:
     import spidev
