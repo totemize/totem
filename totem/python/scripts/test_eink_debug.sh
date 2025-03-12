@@ -17,7 +17,7 @@ elif [ -d "venv" ]; then
 fi
 
 # Make sure the test script is executable
-chmod +x test_eink_debug.py
+chmod +x ../tests/test_eink_debug.py
 
 # Check if the GPIO pin values are properly set
 echo "Checking GPIO pins..."
