@@ -1,31 +1,25 @@
 #!/usr/bin/env python3
 """
-Waveshare 3.7inch e-Paper HAT driver for Raspberry Pi 5.
+Waveshare 2.13inch e-Paper HAT driver for Raspberry Pi 5.
+Resolution: 250x122 pixels
+Interface: SPI
+Color: Black and White
 """
 
 import os
 import time
 import traceback
 import logging
-
-# Import hardware-dependent libraries with proper error handling
-HARDWARE_AVAILABLE = False
 try:
     import gpiod
     import spidev
     import numpy as np
     HARDWARE_AVAILABLE = True
-    logger_import_msg = "Hardware libraries successfully imported"
-except ImportError as e:
+except ImportError:
     HARDWARE_AVAILABLE = False
-    logger_import_msg = f"Hardware libraries import failed: {e}"
 
-# Import our utility modules after setting the hardware flag
 from utils.logger import logger
 from devices.eink.eink import EInkDeviceInterface
-
-# Log the import status
-logger.info(logger_import_msg)
 
 # Mock classes for testing when hardware is not available
 class MockSpiDev:
@@ -77,9 +71,34 @@ class MockGPIO:
         return
 
 class Driver(EInkDeviceInterface):
-    # Class variables
-    width = 480
-    height = 280
+    """Driver for Waveshare 2.13inch e-Paper HAT (Pi 5 compatible)"""
+    
+    # Display constants
+    width = 250
+    height = 122
+    
+    # Display commands
+    DRIVER_OUTPUT_CONTROL                  = 0x01
+    BOOSTER_SOFT_START_CONTROL             = 0x0C
+    GATE_SCAN_START_POSITION               = 0x0F
+    DEEP_SLEEP_MODE                        = 0x10
+    DATA_ENTRY_MODE_SETTING                = 0x11
+    SW_RESET                               = 0x12
+    TEMPERATURE_SENSOR_CONTROL             = 0x1A
+    MASTER_ACTIVATION                      = 0x20
+    DISPLAY_UPDATE_CONTROL_1               = 0x21
+    DISPLAY_UPDATE_CONTROL_2               = 0x22
+    WRITE_RAM                              = 0x24
+    WRITE_VCOM_REGISTER                    = 0x2C
+    WRITE_LUT_REGISTER                     = 0x32
+    SET_DUMMY_LINE_PERIOD                  = 0x3A
+    SET_GATE_TIME                          = 0x3B
+    BORDER_WAVEFORM_CONTROL                = 0x3C
+    SET_RAM_X_ADDRESS_START_END_POSITION   = 0x44
+    SET_RAM_Y_ADDRESS_START_END_POSITION   = 0x45
+    SET_RAM_X_ADDRESS_COUNTER              = 0x4E
+    SET_RAM_Y_ADDRESS_COUNTER              = 0x4F
+    TERMINATE_FRAME_READ_WRITE             = 0xFF
     
     def __init__(self):
         self.initialized = False
@@ -109,10 +128,6 @@ class Driver(EInkDeviceInterface):
         
         # Try to import Pi 5 compatible libraries
         try:
-            if not HARDWARE_AVAILABLE:
-                logger.warning("Hardware libraries not available, falling back to mock implementations")
-                raise ImportError("Hardware libraries not available")
-                
             # Check if SPI device exists
             spi_device_path = '/dev/spidev0.0'
             logger.info(f"Checking for SPI device at {spi_device_path}")
@@ -136,31 +151,27 @@ class Driver(EInkDeviceInterface):
             self.USE_HARDWARE = True
             logger.info("Using Pi 5 compatible GPIO (gpiod) and SPI")
             
-            # Initialize SPI - ensure spidev is available
-            if not 'spidev' in globals():
-                logger.error("spidev module not available in the global namespace")
-                raise ImportError("spidev module not properly imported")
-                
+            # Initialize SPI
             logger.info("Opening SPI device")
             self.spi = spidev.SpiDev()
             self.spi.open(0, 0)
-            self.spi.max_speed_hz = 2000000
+            self.spi.max_speed_hz = 2000000  # 2MHz
+            self.spi.mode = 0
             
             logger.info("Hardware initialized successfully")
         except Exception as e:
             logger.error(f"Hardware initialization failed: {e}")
             logger.error(f"Error traceback: {traceback.format_exc()}")
-            if hasattr(self, 'spi') and hasattr(self.spi, 'close') and not isinstance(self.spi, MockSpiDev):
+            if hasattr(self, 'spi') and not isinstance(self.spi, MockSpiDev):
                 try:
                     self.spi.close()
                 except:
                     pass
             self.USE_HARDWARE = False
             self.spi = MockSpiDev()
-            logger.info("Falling back to mock SPI implementation")
     
     def init(self):
-        logger.info("Initializing Waveshare 3.7in e-Paper HAT (Pi 5 compatible).")
+        logger.info("Initializing Waveshare 2.13in e-Paper HAT (Pi 5 compatible).")
         
         if self.USE_HARDWARE:
             try:
@@ -172,6 +183,9 @@ class Driver(EInkDeviceInterface):
                     self._init_gpio_v2()
                 else:
                     self._init_gpio_v1()
+                    
+                # Initialize the display
+                self._init_display()
             except Exception as e:
                 logger.error(f"Error initializing Pi 5 GPIO: {e}")
                 logger.error(f"Error traceback: {traceback.format_exc()}")
@@ -182,6 +196,50 @@ class Driver(EInkDeviceInterface):
             # Mock initialization
             logger.info("Mock initialization complete")
             self.initialized = True
+    
+    def _init_display(self):
+        """Initialize the display with command sequence"""
+        # Send initialization commands
+        self.send_command(self.DRIVER_OUTPUT_CONTROL)
+        self.send_data(0xF9)  # (HEIGHT-1) & 0xFF
+        self.send_data(0x00)  # ((HEIGHT-1) >> 8) & 0xFF
+        self.send_data(0x00)  # GD = 0, SM = 0, TB = 0
+        
+        self.send_command(self.BOOSTER_SOFT_START_CONTROL)
+        self.send_data(0xD7)
+        self.send_data(0xD6)
+        self.send_data(0x9D)
+        
+        self.send_command(self.WRITE_VCOM_REGISTER)
+        self.send_data(0xA8)  # VCOM 7C
+        
+        self.send_command(self.SET_DUMMY_LINE_PERIOD)
+        self.send_data(0x1A)  # 4 dummy lines per gate
+        
+        self.send_command(self.SET_GATE_TIME)
+        self.send_data(0x08)  # 2us per line
+        
+        self.send_command(self.DATA_ENTRY_MODE_SETTING)
+        self.send_data(0x03)  # X increment; Y increment
+        
+        # Set the look-up table for full refresh
+        self._set_lut()
+        
+        logger.info("Display initialization complete.")
+        
+    def _set_lut(self):
+        """Set the look-up table for display refresh"""
+        # LUT for full refresh
+        lut_full_update = [
+            0x22, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x11,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E, 0x1E,
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00
+        ]
+        
+        self.send_command(self.WRITE_LUT_REGISTER)
+        for i in range(30):
+            self.send_data(lut_full_update[i])
     
     def _init_gpio_v2(self):
         """Initialize GPIO using v2 API"""
@@ -240,7 +298,7 @@ class Driver(EInkDeviceInterface):
         # Note: We're not requesting the CS pin as it's controlled by the SPI hardware
         logger.info(f"Using hardware CS on pin {self.cs_pin} (managed by SPI driver)")
         
-        # Check if all required requests were successful - CS is no longer required
+        # Check if all required requests were successful
         if (hasattr(self, 'reset_request') and 
             hasattr(self, 'dc_request') and 
             hasattr(self, 'busy_request')):
@@ -379,10 +437,6 @@ class Driver(EInkDeviceInterface):
                 else:
                     self._reset_v1()
                 
-                # Send power on command after reset
-                self.send_command(0x04)  # Power on
-                self.wait_until_idle()
-                
                 if self.DEBUG_MODE:
                     logger.debug("Enhanced reset sequence completed")
             except Exception as e:
@@ -398,13 +452,9 @@ class Driver(EInkDeviceInterface):
         
         # First ensure reset is inactive (HIGH)
         self.reset_request.set_values({self.reset_pin: Value.INACTIVE})
-        time.sleep(0.05)  # Short delay
+        time.sleep(0.2)  # Short delay
         
         # Reset sequence (LOW-HIGH-LOW-HIGH)
-        self.reset_request.set_values({self.reset_pin: Value.ACTIVE})
-        time.sleep(0.2)  # Longer pulse
-        self.reset_request.set_values({self.reset_pin: Value.INACTIVE})
-        time.sleep(0.02)  # Short delay
         self.reset_request.set_values({self.reset_pin: Value.ACTIVE})
         time.sleep(0.2)  # Longer pulse
         self.reset_request.set_values({self.reset_pin: Value.INACTIVE})
@@ -414,13 +464,9 @@ class Driver(EInkDeviceInterface):
         """Reset sequence using v1 API"""
         # First ensure reset is inactive (HIGH)
         self.reset_line.set_value(1)
-        time.sleep(0.05)  # Short delay
+        time.sleep(0.2)  # Short delay
         
-        # Reset sequence (LOW-HIGH-LOW-HIGH)
-        self.reset_line.set_value(0)
-        time.sleep(0.2)  # Longer pulse
-        self.reset_line.set_value(1)
-        time.sleep(0.02)  # Short delay
+        # Reset sequence (LOW-HIGH)
         self.reset_line.set_value(0)
         time.sleep(0.2)  # Longer pulse
         self.reset_line.set_value(1)
@@ -438,7 +484,7 @@ class Driver(EInkDeviceInterface):
                 else:
                     self.dc_line.set_value(0)  # DC LOW for command
                 
-                self.spi.writebytes([command])
+                self.spi.xfer2([command])
             except Exception as e:
                 logger.error(f"Error sending command: {e}")
                 if self.DEBUG_MODE:
@@ -465,13 +511,13 @@ class Driver(EInkDeviceInterface):
                     self.dc_line.set_value(1)  # DC HIGH for data
                 
                 if isinstance(data, int):
-                    self.spi.writebytes([data])
+                    self.spi.xfer2([data])
                 else:
                     # Write data in chunks to avoid buffer issues
                     chunk_size = 1024
                     for i in range(0, len(data), chunk_size):
                         chunk = data[i:i+chunk_size]
-                        self.spi.writebytes(chunk)
+                        self.spi.xfer2(chunk)
             except Exception as e:
                 logger.error(f"Error sending data: {e}")
                 if self.DEBUG_MODE:
@@ -515,35 +561,60 @@ class Driver(EInkDeviceInterface):
             if self.DEBUG_MODE:
                 logger.debug("Mock wait until idle")
             time.sleep(0.1)
+    
+    def _set_window(self, x_start, y_start, x_end, y_end):
+        """Set window for data transmission"""
+        self.send_command(self.SET_RAM_X_ADDRESS_START_END_POSITION)
+        # X start
+        self.send_data((x_start >> 3) & 0xFF)
+        # X end
+        self.send_data((x_end >> 3) & 0xFF)
+        
+        self.send_command(self.SET_RAM_Y_ADDRESS_START_END_POSITION)
+        # Y start
+        self.send_data(y_start & 0xFF)
+        self.send_data((y_start >> 8) & 0xFF)
+        # Y end
+        self.send_data(y_end & 0xFF)
+        self.send_data((y_end >> 8) & 0xFF)
+
+    def _set_cursor(self, x, y):
+        """Set cursor position for data transmission"""
+        self.send_command(self.SET_RAM_X_ADDRESS_COUNTER)
+        self.send_data((x >> 3) & 0xFF)
+        
+        self.send_command(self.SET_RAM_Y_ADDRESS_COUNTER)
+        self.send_data(y & 0xFF)
+        self.send_data((y >> 8) & 0xFF)
+
+    def _update(self):
+        """Update the display"""
+        self.send_command(self.DISPLAY_UPDATE_CONTROL_2)
+        self.send_data(0xC4)
+        self.send_command(self.MASTER_ACTIVATION)
+        self.send_command(self.TERMINATE_FRAME_READ_WRITE)
+        self.wait_until_idle()
             
     def clear(self):
         logger.info("Clearing e-Paper display")
-        if self.USE_HARDWARE and self.initialized:
+        if not self.initialized:
+            self.init()
+            
+        if self.USE_HARDWARE:
             try:
-                # More complete clear sequence
-                if self.DEBUG_MODE:
-                    logger.debug("Starting enhanced clear sequence")
+                # Set window and cursor
+                self._set_window(0, 0, self.width-1, self.height-1)
+                self._set_cursor(0, 0)
                 
-                # Power off first if display is in an unknown state
-                self.send_command(0x02)  # Power off
-                self.wait_until_idle()
+                # Send write RAM command
+                self.send_command(self.WRITE_RAM)
                 
-                # Power on
-                self.send_command(0x04)  # Power on
-                self.wait_until_idle()
-                
-                # Send clear command
-                self.send_command(0x10)  # Data transmission 1
-                zeros = [0x00] * (self.width * self.height // 8)
+                # Send all white pixels
+                zeros = [0xFF] * (self.width * self.height // 8)  # 0xFF = white
                 self.send_data(zeros)
                 
-                self.send_command(0x13)  # Data transmission 2
-                self.send_data(zeros)
-                
-                # Refresh display
-                self.send_command(0x12)  # Refresh
-                time.sleep(0.1)
-                self.wait_until_idle()
+                # Update display
+                self._update()
                 
                 if self.DEBUG_MODE:
                     logger.debug("Clear sequence completed")
@@ -555,49 +626,66 @@ class Driver(EInkDeviceInterface):
     
     def display_image(self, image):
         logger.info("Displaying image on e-Paper display")
-        if self.USE_HARDWARE and self.initialized:
-            # Format image
-            if image.mode != '1':
-                image = image.convert('1')
+        if not self.initialized:
+            self.init()
             
-            if image.size[0] != self.width or image.size[1] != self.height:
-                image = image.resize((self.width, self.height))
-            
-            # Convert to byte array
-            pixels = np.array(image)
-            buffer = np.packbits(1 - pixels).tolist()
-            
-            # Send to display
-            self.send_command(0x13)  # Data transmission 2
-            self.send_data(buffer)
-            
-            # Refresh display
-            self.send_command(0x12)
-            time.sleep(0.1)
-            self.wait_until_idle()
+        if self.USE_HARDWARE:
+            try:
+                # Process image
+                if image.mode != '1':
+                    image = image.convert('1')
+                
+                if image.size[0] != self.width or image.size[1] != self.height:
+                    image = image.resize((self.width, self.height))
+        
+                # Get image data
+                pixels = np.array(image)
+                buffer = np.packbits(~pixels.astype(bool)).tolist()  # Invert: 0 = black, 1 = white
+                
+                # Set window and cursor
+                self._set_window(0, 0, self.width-1, self.height-1)
+                self._set_cursor(0, 0)
+                
+                # Send data
+                self.send_command(self.WRITE_RAM)
+                self.send_data(buffer)
+                
+                # Update display
+                self._update()
+            except Exception as e:
+                logger.error(f"Error displaying image: {e}")
+                logger.error(traceback.format_exc())
         else:
             logger.info(f"Mock display image with size {image.size}")
     
     def display_bytes(self, image_bytes):
         logger.info("Displaying raw bytes on e-Paper display")
-        if self.USE_HARDWARE and self.initialized:
-            self.send_command(0x13)  # Data transmission 2
+        if not self.initialized:
+            self.init()
+            
+        if self.USE_HARDWARE:
+            # Check data size
+            if len(image_bytes) != int(self.width * self.height / 8):
+                raise ValueError(f"Incorrect byte array size for display. Expected {int(self.width * self.height / 8)} bytes, got {len(image_bytes)}.")
+                
+            # Set window and cursor
+            self._set_window(0, 0, self.width-1, self.height-1)
+            self._set_cursor(0, 0)
+            
+            # Send data
+            self.send_command(self.WRITE_RAM)
             self.send_data(list(image_bytes))
             
-            # Refresh display
-            self.send_command(0x12)
-            time.sleep(0.1)
-            self.wait_until_idle()
+            # Update display
+            self._update()
         else:
             logger.info("Mock display bytes")
     
     def sleep(self):
         logger.info("Putting e-Paper to sleep")
         if self.USE_HARDWARE and self.initialized:
-            self.send_command(0x02)  # Power off
-            self.wait_until_idle()
-            self.send_command(0x07)  # Deep sleep
-            self.send_data(0xA5)
+            self.send_command(self.DEEP_SLEEP_MODE)
+            self.send_data(0x01)  # Enter deep sleep
         else:
             logger.info("Mock sleep")
     

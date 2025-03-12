@@ -1,33 +1,83 @@
 #!/bin/bash
-# E-Ink Test Runner
-# Runs the quick E-Ink hardware test and saves output to a log file
+# E-Ink Display Test Runner
+# This script allows testing of different E-Ink displays
 
-# Ensure we're in the correct directory
-cd "$(dirname "$0")"
+# Set the base directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+BASE_DIR="$(cd "${SCRIPT_DIR}/../.." &> /dev/null && pwd)"
 
-# Activate the virtual environment
-if [ -d ".venv" ]; then
-    source .venv/bin/activate
-fi
+# Function to run a test script
+run_test() {
+  local script_path="$1"
+  echo "Running test script: $script_path"
+  python3 "$script_path"
+  return $?
+}
 
-# Kill any existing Python processes that might interfere
-pkill -f python || true
-sleep 2
+# Function to check for the spidev module
+check_spidev() {
+  python3 -c "import spidev" &> /dev/null
+  if [ $? -ne 0 ]; then
+    echo "ERROR: spidev module is not available."
+    echo "Would you like to run the dependency fix script now? (y/n)"
+    read -r response
+    if [[ "$response" =~ ^[Yy]$ ]]; then
+      sudo "${SCRIPT_DIR}/fix_eink_dependencies.sh"
+      echo "Please reboot your system and run this script again."
+      exit 1
+    else
+      echo "Cannot continue without spidev. Exiting."
+      exit 1
+    fi
+  fi
+}
 
-# Run the test and capture output to a log file
-echo "Running E-Ink quick test..."
-python eink_quick_test.py > eink_test_output.log 2>&1
+# Main menu
+echo "=== E-Ink Display Test ==="
+echo "Please select the display to test:"
+echo "1) 2.13-inch E-Paper HAT (250×122)"
+echo "2) 3.7-inch E-Paper HAT (480×280)"
+echo "3) Run system diagnostics"
+echo "4) Install/fix dependencies"
+echo "q) Quit"
 
-# Check the result
-EXIT_CODE=$?
-if [ $EXIT_CODE -eq 0 ]; then
-    echo "Test completed successfully. See eink_test_output.log for details."
-else
-    echo "Test failed with exit code $EXIT_CODE. See eink_test_output.log for details."
-fi
+read -r choice
+case $choice in
+  1)
+    echo "Testing 2.13-inch E-Paper HAT..."
+    check_spidev
+    run_test "${SCRIPT_DIR}/test_2in13_eink.py"
+    ;;
+  2)
+    echo "Testing 3.7-inch E-Paper HAT..."
+    check_spidev
+    run_test "${SCRIPT_DIR}/test_pi5_eink.py"
+    ;;
+  3)
+    echo "Running E-Ink display diagnostics..."
+    # Find the python directory
+    PYTHON_DIR="${BASE_DIR}/python"
+    # Try to run the diagnostic script
+    diagnostic_script="${PYTHON_DIR}/scripts/eink_diagnostics.py"
+    if [ -f "$diagnostic_script" ]; then
+      python3 "$diagnostic_script"
+    else
+      echo "Diagnostic script not found at: $diagnostic_script"
+      exit 1
+    fi
+    ;;
+  4)
+    echo "Installing/fixing E-Ink dependencies..."
+    sudo "${SCRIPT_DIR}/fix_eink_dependencies.sh"
+    ;;
+  q|Q)
+    echo "Exiting."
+    exit 0
+    ;;
+  *)
+    echo "Invalid option. Exiting."
+    exit 1
+    ;;
+esac
 
-# Print the last few lines of the log for quick reference
-echo "Last 10 lines of log:"
-tail -n 10 eink_test_output.log
-
-exit $EXIT_CODE 
+exit 0 
