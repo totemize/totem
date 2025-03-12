@@ -162,9 +162,25 @@ class Driver(EInkDeviceInterface):
     TERMINATE_FRAME_READ_WRITE             = 0xFF
     
     def __init__(self):
+        self.initialized = False
+        self.hardware_available = False  # Add hardware_available attribute
+        
+        # Try to import hardware libraries
+        try:
+            import RPi.GPIO as GPIO
+            import spidev
+            self.GPIO = GPIO
+            self.spi = spidev.SpiDev()
+            self.hardware_available = True
+            logger.info("Hardware SPI and GPIO available")
+        except ImportError:
+            self.GPIO = MockGPIO
+            self.spi = MockSpiDev()
+            self.hardware_available = False
+            logger.warning("Hardware SPI and GPIO not available, using mock implementations")
+        
         self.width = self.WIDTH
         self.height = self.HEIGHT
-        self.initialized = False
 
         # Define GPIO pin connections
         self.reset_pin = 17
@@ -173,7 +189,6 @@ class Driver(EInkDeviceInterface):
         self.cs_pin = 8
 
         # Init SPI
-        self.spi = spidev() if isinstance(spidev, type) else spidev.SpiDev(0, 0)
         if hasattr(self.spi, 'max_speed_hz'):
             self.spi.max_speed_hz = 2000000  # 2MHz
     
