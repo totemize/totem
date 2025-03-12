@@ -3,9 +3,20 @@
 Test script for Raspberry Pi 5 e-ink display support.
 """
 import sys
+import os
 import time
+
+# Add the parent directory to the path so we can import our modules
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.abspath(os.path.join(script_dir, '..', '..'))
+sys.path.insert(0, parent_dir)
+
 from utils.logger import setup_logger, get_logger
-from devices.eink.eink import EInk
+try:
+    from devices.eink.drivers.waveshare_3in7_pi5 import Driver
+    DRIVER_AVAILABLE = True
+except ImportError:
+    DRIVER_AVAILABLE = False
 from PIL import Image, ImageDraw, ImageFont
 
 def main():
@@ -22,23 +33,15 @@ def main():
             logger.info("✅ gpiod library is available")
         except ImportError as e:
             logger.error(f"❌ gpiod library is not available: {e}")
-            logger.info("Installing gpiod using pip...")
-            try:
-                import subprocess
-                subprocess.run([sys.executable, "-m", "pip", "install", "gpiod"], check=True)
-                logger.info("gpiod installed successfully, please restart the script")
-                return
-            except Exception as e:
-                logger.error(f"Failed to install gpiod: {e}")
-                logger.info("Please install gpiod manually: sudo apt install python3-gpiod")
-                return
+            logger.info("Please install gpiod manually: sudo apt install python3-gpiod")
+            return
         
         # Try to read cpuinfo
         logger.info("Checking Raspberry Pi version...")
         try:
-            with open('/proc/cpuinfo', 'r') as f:
-                cpuinfo = f.read()
-                if 'Raspberry Pi 5' in cpuinfo:
+            with open('/proc/device-tree/model', 'r') as f:
+                model = f.read()
+                if 'Raspberry Pi 5' in model:
                     logger.info("✅ Detected Raspberry Pi 5")
                 else:
                     logger.warning("⚠️ Not running on a Raspberry Pi 5")
@@ -46,25 +49,33 @@ def main():
             logger.error(f"Failed to check Pi version: {e}")
         
         # Initialize the e-ink display
-        logger.info("Initializing e-ink display with automatic driver detection")
-        eink = EInk()  # Let it auto-detect the hardware
-        eink.initialize()
+        if not DRIVER_AVAILABLE:
+            logger.error("❌ E-Ink driver not available")
+            return
+        
+        logger.info("Initializing e-ink display driver")
+        eink = Driver()
+        eink.init()
         
         # Clear the display
         logger.info("Clearing the display")
-        eink.clear_display()
+        eink.clear()
         time.sleep(1)
         
         # Create a test image
         logger.info("Creating test image")
-        width = eink.driver.width
-        height = eink.driver.height
+        width = eink.width
+        height = eink.height
         image = Image.new('1', (width, height), 255)  # 255: white
         draw = ImageDraw.Draw(image)
         
         # Add text
         try:
-            font = ImageFont.truetype("FreeSans.ttf", 24)
+            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+            if os.path.exists(font_path):
+                font = ImageFont.truetype(font_path, 24)
+            else:
+                font = ImageFont.load_default()
         except IOError:
             font = ImageFont.load_default()
         
