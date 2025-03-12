@@ -198,53 +198,45 @@ class Driver(EInkDeviceInterface):
             self.initialized = True
     
     def _init_display(self):
-        """Initialize the display with command sequence"""
-        logger.info("Initializing display with proper command sequence for 2.13 inch E-Paper")
+        """Initialize the display."""
+        self.logger.debug("Initializing display")
         
-        # Reset the display first
-        self.reset()
+        # Reset the display
+        self._reset()
         
-        # Send initialization commands according to Waveshare documentation
-        logger.debug("Sending driver output control")
-        self.send_command(self.DRIVER_OUTPUT_CONTROL)
-        self.send_data(0x79)  # (HEIGHT-1) & 0xFF = 122-1 = 121 = 0x79
-        self.send_data(0x00)  # ((HEIGHT-1) >> 8) & 0xFF
-        self.send_data(0x00)  # GD=0, SM=0, TB=0
+        # Send initialization commands
+        self._send_command(self.DRIVER_OUTPUT_CONTROL)
+        self._send_data(0x79)  # (HEIGHT-1) & 0xFF = 121 = 0x79
+        self._send_data(0x00)  # ((HEIGHT-1) >> 8) & 0xFF
+        self._send_data(0x00)  # GD=0, SM=0, TB=0
         
-        logger.debug("Sending booster soft start control")
-        self.send_command(self.BOOSTER_SOFT_START_CONTROL)
-        self.send_data(0xD7)
-        self.send_data(0xD6)
-        self.send_data(0x9D)
+        self._send_command(self.BOOSTER_SOFT_START_CONTROL)
+        self._send_data(0xD7)
+        self._send_data(0xD6)
+        self._send_data(0x9D)
         
-        logger.debug("Sending write VCOM register")
-        self.send_command(self.WRITE_VCOM_REGISTER)
-        self.send_data(0xA8)  # VCOM 7C
+        self._send_command(self.WRITE_VCOM_REGISTER)
+        self._send_data(0xA8)  # VCOM 7C
         
-        logger.debug("Sending dummy line period")
-        self.send_command(self.SET_DUMMY_LINE_PERIOD)
-        self.send_data(0x1A)  # 4 dummy lines per gate
+        self._send_command(self.SET_DUMMY_LINE_PERIOD)
+        self._send_data(0x1A)  # 4 dummy lines per gate
         
-        logger.debug("Sending gate time")
-        self.send_command(self.SET_GATE_TIME)
-        self.send_data(0x08)  # 2us per line
+        self._send_command(self.SET_GATE_TIME)
+        self._send_data(0x08)  # 2us per line
         
-        logger.debug("Sending data entry mode")
-        self.send_command(self.DATA_ENTRY_MODE_SETTING)
-        self.send_data(0x03)  # X increment; Y increment
+        self._send_command(self.DATA_ENTRY_MODE_SETTING)
+        self._send_data(0x03)  # X increment; Y increment
         
-        # Set the look-up table for full refresh
-        logger.debug("Setting LUT with Waveshare 2.13 inch specific values")
+        # Set the look-up table for display refresh
         self._set_lut()
         
-        logger.info("Display initialization completed successfully")
-        
+        self.logger.debug("Display initialization complete")
+
     def _set_lut(self):
-        """Set the look-up table for display refresh"""
-        logger.info("Setting LUT for Waveshare 2.13 inch E-Paper display")
+        """Set the look-up table for display refresh."""
+        self.logger.debug("Setting LUT")
         
-        # Waveshare 2.13 inch E-Paper HAT specific LUT settings for full refresh
-        # These values are taken from Waveshare's official examples
+        # LUT for Waveshare 2.13 inch E-Paper (full refresh)
         lut_full_update = [
             0x22, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x11, 
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -252,14 +244,12 @@ class Driver(EInkDeviceInterface):
             0x01, 0x00, 0x00, 0x00, 0x00, 0x00
         ]
         
-        logger.debug("Sending LUT register commands")
-        self.send_command(self.WRITE_LUT_REGISTER)
+        self._send_command(self.WRITE_LUT_REGISTER)
         for i in range(len(lut_full_update)):
-            self.send_data(lut_full_update[i])
-            
-        if self.DEBUG_MODE:
-            logger.debug(f"LUT values set: {[hex(x) for x in lut_full_update]}")
-    
+            self._send_data(lut_full_update[i])
+        
+        self.logger.debug("LUT set complete")
+
     def _init_gpio_v2(self):
         """Initialize GPIO using v2 API"""
         logger.info("Initializing GPIO using gpiod v2 API")
@@ -551,33 +541,42 @@ class Driver(EInkDeviceInterface):
                     logger.debug(f"Mock send data: 0x{data:02X}")
     
     def wait_until_idle(self):
-        if self.USE_HARDWARE:
-            try:
-                if self.DEBUG_MODE:
-                    logger.debug("Waiting for display to be idle")
-                
-                # Different waiting logic for v1/v2 API
+        """Wait until the display is idle (BUSY pin high)."""
+        self.logger.debug("Waiting for display to be idle")
+        
+        if self.mock_mode:
+            self.logger.debug("Mock mode: simulating wait")
+            time.sleep(1)
+            return
+        
+        try:
+            start_time = time.time()
+            timeout = 10  # 10 seconds timeout
+            
+            while True:
+                # Check if BUSY pin is HIGH (idle)
                 if self.has_v2_api:
-                    from gpiod.line import Value
-                    # Simplified approach - just sleep for a fixed time
-                    # This avoids the issue with get_values() and busy pin access
-                    logger.debug("Using fixed delay instead of busy pin polling")
-                    time.sleep(1.0)  # Fixed delay instead of polling busy pin
+                    values = self.busy_line.get_values()
+                    if values and values[0] == 1:
+                        break
                 else:
-                    while self.busy_line.get_value() == 0:  # LOW is busy
-                        time.sleep(0.01)
-                        
-                if self.DEBUG_MODE:
-                    logger.debug("Display is now idle")
-            except Exception as e:
-                logger.error(f"Error waiting for idle: {e}")
-                if self.DEBUG_MODE:
-                    logger.error(traceback.format_exc())
-                time.sleep(1)  # Safe default wait time
-        else:
-            if self.DEBUG_MODE:
-                logger.debug("Mock wait until idle")
-            time.sleep(0.1)
+                    if self.busy_line.get_value() == 1:
+                        break
+                
+                # Check for timeout
+                if time.time() - start_time > timeout:
+                    self.logger.warning("Timeout waiting for display to be idle")
+                    break
+                
+                # Short delay to prevent CPU hogging
+                time.sleep(0.1)
+            
+            self.logger.debug("Display is idle")
+        except Exception as e:
+            self.logger.error(f"Error waiting for idle: {e}")
+            # Fall back to a fixed delay if there's an error
+            self.logger.warning("Using fixed delay instead")
+            time.sleep(2)
     
     def _set_window(self, x_start, y_start, x_end, y_end):
         """Set window for data transmission"""
@@ -605,28 +604,42 @@ class Driver(EInkDeviceInterface):
         self.send_data((y >> 8) & 0xFF)
 
     def _update(self):
-        """Update the display with current data"""
-        logger.info("Updating display with enhanced refresh sequence")
+        """Update the display with the current buffer."""
+        self.logger.debug("Updating display")
         
-        # Display update control
-        logger.debug("Sending display update control command")
-        self.send_command(self.DISPLAY_UPDATE_CONTROL_2)
-        self.send_data(0xC4)  # Enable clock and analog, Load temperature value
+        # Set window for the entire display
+        self._send_command(self.SET_RAM_X_ADDRESS_START_END_POSITION)
+        self._send_data(0x00)  # X start address = 0
+        self._send_data(0x1F)  # X end address = 31 (250/8 - 1)
         
-        # Activate display update sequence
-        logger.debug("Sending master activation command")
-        self.send_command(self.MASTER_ACTIVATION)
+        self._send_command(self.SET_RAM_Y_ADDRESS_START_END_POSITION)
+        self._send_data(0x00)  # Y start address = 0 (lower 8 bits)
+        self._send_data(0x00)  # Y start address = 0 (upper 8 bits)
+        self._send_data(0x79)  # Y end address = 121 (lower 8 bits)
+        self._send_data(0x00)  # Y end address = 121 (upper 8 bits)
         
-        # Terminate frame read/write
-        logger.debug("Sending terminate frame read/write command")
-        self.send_command(self.TERMINATE_FRAME_READ_WRITE)
+        # Set cursor to the beginning
+        self._send_command(self.SET_RAM_X_ADDRESS_COUNTER)
+        self._send_data(0x00)  # X address counter = 0
         
-        # Wait until the update is complete
-        logger.debug("Waiting for display to be idle (update to complete)")
+        self._send_command(self.SET_RAM_Y_ADDRESS_COUNTER)
+        self._send_data(0x00)  # Y address counter = 0 (lower 8 bits)
+        self._send_data(0x00)  # Y address counter = 0 (upper 8 bits)
+        
+        # Send the image data
+        self._send_command(self.WRITE_RAM)
+        self._send_data(self.buffer)
+        
+        # Trigger display update
+        self._send_command(self.DISPLAY_UPDATE_CONTROL_2)
+        self._send_data(0xC4)  # Enable clock and analog, disable oscillator
+        self._send_command(self.MASTER_ACTIVATION)
+        self._send_command(self.TERMINATE_FRAME_READ_WRITE)
+        
+        # Wait for the display to finish updating
         self.wait_until_idle()
         
-        if self.DEBUG_MODE:
-            logger.debug("Display update sequence completed")
+        self.logger.debug("Display update complete")
             
     def clear(self):
         logger.info("Clearing e-Paper display")
