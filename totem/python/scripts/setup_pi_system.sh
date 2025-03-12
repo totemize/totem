@@ -14,6 +14,25 @@ if [ -f "$(dirname "$0")/setup_dependencies.sh" ]; then
     echo "Backed up original setup_dependencies.sh"
 fi
 
+# Function to safely install packages
+install_package() {
+    local package=$1
+    echo "Installing $package..."
+    if ! sudo apt-get install -y "$package"; then
+        echo "Warning: Failed to install $package, checking alternatives..."
+        # Try alternative packages based on common substitutions
+        case "$package" in
+            "libtiff5")
+                # Try libtiff6 or libtiff5-dev instead
+                sudo apt-get install -y libtiff6 || sudo apt-get install -y libtiff5-dev || true
+                ;;
+            *)
+                echo "No alternative found for $package"
+                ;;
+        esac
+    fi
+}
+
 # 1. Update system
 echo "Updating system packages..."
 sudo apt-get update
@@ -46,8 +65,7 @@ ESSENTIAL_PACKAGES=(
 
 for package in "${ESSENTIAL_PACKAGES[@]}"; do
     if ! dpkg -l | grep -q "^ii  $package "; then
-        echo "Installing $package..."
-        sudo apt-get install -y "$package"
+        install_package "$package"
     else
         echo "$package already installed."
     fi
@@ -60,7 +78,7 @@ EINK_PACKAGES=(
     libssl-dev
     libjpeg-dev
     libopenjp2-7
-    libtiff5
+    libtiff6       # Changed from libtiff5 to libtiff6 for Debian Bookworm
     libatlas-base-dev
     libfreetype6-dev
     liblcms2-dev
@@ -73,10 +91,9 @@ EINK_PACKAGES=(
     python3-gpiod
 )
 
-for package in "${EINK_PACKAGES[@]}"; do
+for package in "${ESSENTIAL_PACKAGES[@]}"; do
     if ! dpkg -l | grep -q "^ii  $package "; then
-        echo "Installing $package..."
-        sudo apt-get install -y "$package"
+        install_package "$package"
     else
         echo "$package already installed."
     fi

@@ -2,7 +2,8 @@
 # Main installation script for Totem on Raspberry Pi 5
 # This script orchestrates the complete setup by calling component scripts in the correct order
 
-set -e  # Exit on error
+# Don't exit immediately on error, we'll handle errors ourselves
+set +e
 
 # Define text colors
 GREEN='\033[0;32m'
@@ -52,18 +53,30 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Check if running on Raspberry Pi 5
-PI_MODEL=$(grep -oP 'Model\s*:\s*\K.*' /proc/cpuinfo 2>/dev/null | head -n 1)
-if [[ ! $PI_MODEL =~ "Raspberry Pi 5" ]]; then
-    echo -e "${YELLOW}Warning: This does not appear to be a Raspberry Pi 5 (detected: $PI_MODEL).${NC}"
-    echo -e "${YELLOW}The scripts are optimized for Raspberry Pi 5 with Raspberry Pi OS.${NC}"
-    
+# Check if running on Raspberry Pi
+if [ ! -f /proc/cpuinfo ]; then
+    echo -e "${YELLOW}Warning: This doesn't appear to be a Raspberry Pi.${NC}"
     if [ "$SKIP_CONFIRM" = false ]; then
         read -p "Do you want to continue anyway? (y/N) " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             echo -e "${RED}Installation aborted.${NC}"
             exit 1
+        fi
+    fi
+else
+    PI_MODEL=$(grep -oP 'Model\s*:\s*\K.*' /proc/cpuinfo 2>/dev/null | head -n 1)
+    if [[ -n "$PI_MODEL" && ! $PI_MODEL =~ "Raspberry Pi 5" ]]; then
+        echo -e "${YELLOW}Warning: This appears to be $PI_MODEL, not a Raspberry Pi 5.${NC}"
+        echo -e "${YELLOW}The scripts are optimized for Raspberry Pi 5 with Raspberry Pi OS.${NC}"
+        
+        if [ "$SKIP_CONFIRM" = false ]; then
+            read -p "Do you want to continue anyway? (y/N) " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                echo -e "${RED}Installation aborted.${NC}"
+                exit 1
+            fi
         fi
     fi
 fi
@@ -106,30 +119,53 @@ fi
 
 # Step 1: System setup
 echo -e "\n${GREEN}Step 1/3: Setting up system dependencies and GPIO configuration...${NC}"
-if "$SCRIPTS_DIR/setup_pi_system.sh"; then
+"$SCRIPTS_DIR/setup_pi_system.sh"
+if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ System setup completed successfully${NC}"
 else
     echo -e "${RED}✗ System setup failed${NC}"
-    exit 1
+    echo -e "${YELLOW}Would you like to continue with the remaining steps? (y/N)${NC}"
+    if [ "$SKIP_CONFIRM" = false ]; then
+        read -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo -e "${RED}Installation aborted.${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${YELLOW}Continuing with installation despite errors...${NC}"
+    fi
 fi
 
 # Step 2: Wi-Fi hotspot setup
 echo -e "\n${GREEN}Step 2/3: Setting up Wi-Fi hotspot...${NC}"
-if "$SCRIPTS_DIR/setup_wifi_hotspot.sh" --ssid "$WIFI_SSID" --password "$WIFI_PASSWORD" \
-    --channel "$WIFI_CHANNEL" --country "$WIFI_COUNTRY"; then
+"$SCRIPTS_DIR/setup_wifi_hotspot.sh" --ssid "$WIFI_SSID" --password "$WIFI_PASSWORD" \
+    --channel "$WIFI_CHANNEL" --country "$WIFI_COUNTRY"
+if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Wi-Fi hotspot setup completed successfully${NC}"
 else
     echo -e "${RED}✗ Wi-Fi hotspot setup failed${NC}"
-    exit 1
+    echo -e "${YELLOW}Would you like to continue with the remaining steps? (y/N)${NC}"
+    if [ "$SKIP_CONFIRM" = false ]; then
+        read -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo -e "${RED}Installation aborted.${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${YELLOW}Continuing with installation despite errors...${NC}"
+    fi
 fi
 
 # Step 3: Network routing setup
 echo -e "\n${GREEN}Step 3/3: Setting up network routing...${NC}"
-if "$SCRIPTS_DIR/setup_network_routing.sh"; then
+"$SCRIPTS_DIR/setup_network_routing.sh"
+if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Network routing setup completed successfully${NC}"
 else
     echo -e "${RED}✗ Network routing setup failed${NC}"
-    exit 1
+    # This is the last step, so we don't need to ask about continuing
 fi
 
 # Installation complete
