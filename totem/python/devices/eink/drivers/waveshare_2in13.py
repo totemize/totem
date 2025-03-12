@@ -82,6 +82,9 @@ class MockSpiDev:
         logger.debug(f"Mock SPI data transfer: {len(data)} bytes")
         return [0] * len(data)
             
+    def writebytes(self, data):
+        logger.debug(f"Mock SPI writebytes: {len(data)} bytes")
+            
     def close(self):
         logger.debug("Mock SPI closed")
     
