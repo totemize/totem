@@ -365,11 +365,94 @@ class Driver(EInkDeviceInterface):
                 pass
     
     def enable_debug_mode(self, enable=True):
-        """Enable or disable detailed debug logging for hardware commands"""
+        """Enable or disable debug mode for the driver"""
         self.DEBUG_MODE = enable
         logger.info(f"Debug mode {'enabled' if enable else 'disabled'}")
-        return self.DEBUG_MODE
-    
+        return True
+        
+    def test_gpio_control(self):
+        """Test GPIO control by toggling reset and DC pins
+        
+        This method is used for diagnostic testing of the GPIO control.
+        It verifies that the GPIO pins can be properly controlled.
+        
+        Returns:
+            bool: True if the test is successful, False otherwise
+        """
+        logger.info("Testing GPIO control...")
+        
+        # Check if hardware is available
+        if not self.USE_HARDWARE:
+            logger.warning("Hardware not available, using mock implementation")
+            # In mock mode, always return true as we can't test real hardware
+            return True
+            
+        try:
+            # First, make sure we have access to the GPIO pins
+            if not hasattr(self, 'reset_request') or not hasattr(self, 'dc_request'):
+                logger.error("GPIO pins not properly initialized")
+                return False
+                
+            # Test reset pin by toggling it
+            logger.info("Testing reset pin...")
+            if self.has_v2_api:
+                from gpiod.line import Value
+                # v2 API
+                try:
+                    self.reset_request.set_values({self.reset_pin: Value.ACTIVE})
+                    time.sleep(0.1)
+                    self.reset_request.set_values({self.reset_pin: Value.INACTIVE})
+                    time.sleep(0.1)
+                    logger.info("Reset pin toggle successful")
+                except Exception as e:
+                    logger.error(f"Failed to toggle reset pin: {e}")
+                    return False
+            else:
+                # v1 API
+                try:
+                    self.reset_line.set_value(1)
+                    time.sleep(0.1)
+                    self.reset_line.set_value(0)
+                    time.sleep(0.1)
+                    logger.info("Reset pin toggle successful")
+                except Exception as e:
+                    logger.error(f"Failed to toggle reset pin: {e}")
+                    return False
+            
+            # Test DC pin by toggling it
+            logger.info("Testing DC pin...")
+            if self.has_v2_api:
+                from gpiod.line import Value
+                # v2 API
+                try:
+                    self.dc_request.set_values({self.dc_pin: Value.ACTIVE})
+                    time.sleep(0.1)
+                    self.dc_request.set_values({self.dc_pin: Value.INACTIVE})
+                    time.sleep(0.1)
+                    logger.info("DC pin toggle successful")
+                except Exception as e:
+                    logger.error(f"Failed to toggle DC pin: {e}")
+                    return False
+            else:
+                # v1 API
+                try:
+                    self.dc_line.set_value(1)
+                    time.sleep(0.1)
+                    self.dc_line.set_value(0)
+                    time.sleep(0.1)
+                    logger.info("DC pin toggle successful")
+                except Exception as e:
+                    logger.error(f"Failed to toggle DC pin: {e}")
+                    return False
+            
+            logger.info("GPIO control test successful")
+            return True
+            
+        except Exception as e:
+            logger.error(f"GPIO control test failed: {e}")
+            logger.error(traceback.format_exc())
+            return False
+            
     def reset(self):
         if self.USE_HARDWARE:
             try:
