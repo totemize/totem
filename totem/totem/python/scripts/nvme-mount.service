@@ -1,0 +1,12 @@
+[Unit]
+Description=Mount NVMe Drive at Boot
+After=local-fs.target
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/totem/totem/totem/python/scripts/mount_nvme_boot.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target 
