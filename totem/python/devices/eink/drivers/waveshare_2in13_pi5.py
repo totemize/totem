@@ -540,12 +540,10 @@ class Driver(EInkDeviceInterface):
                 # Different waiting logic for v1/v2 API
                 if self.has_v2_api:
                     from gpiod.line import Value
-                    while True:
-                        values = self.busy_request.get_values()
-                        busy_value = values[self.busy_pin]
-                        if busy_value == Value.INACTIVE:  # HIGH is idle
-                            break
-                        time.sleep(0.01)
+                    # Simplified approach - just sleep for a fixed time
+                    # This avoids the issue with get_values() and busy pin access
+                    logger.debug("Using fixed delay instead of busy pin polling")
+                    time.sleep(1.0)  # Fixed delay instead of polling busy pin
                 else:
                     while self.busy_line.get_value() == 0:  # LOW is busy
                         time.sleep(0.01)
