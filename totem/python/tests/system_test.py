@@ -1,3 +1,25 @@
+#!/usr/bin/env python3
+"""
+System test script for testing all hardware components
+"""
+import sys
+import os
+import time
+import traceback
+import tempfile
+import argparse
+
+# Add the parent directory to the path so we can import our modules
+script_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.abspath(os.path.join(script_dir, '..'))  # Python directory
+sys.path.insert(0, parent_dir)
+
+# Import logger first before using it
+from utils.logger import logger, setup_logger
+
+# Flag to determine if we're in automated testing mode (with mock implementations)
+AUTO_TEST_MODE = True if (not sys.platform.startswith('linux') or os.environ.get('AUTO_TEST')) else False
+
 try:
     from managers.display_manager import DisplayManager
     DISPLAY_MANAGER_AVAILABLE = True
@@ -7,16 +29,6 @@ except ImportError:
 # from managers.nfc_manager import NFCManager
 from managers.storage_manager import StorageManager
 # from managers.network_manager import NetworkManager
-from utils.logger import logger, setup_logger
-import time
-import traceback
-import sys
-import os
-import tempfile
-import argparse
-
-# Flag to determine if we're in automated testing mode (with mock implementations)
-AUTO_TEST_MODE = True if (not sys.platform.startswith('linux') or os.environ.get('AUTO_TEST')) else False
 
 def auto_input(prompt):
     """Automatically proceeds if in auto test mode, otherwise asks for user input"""
