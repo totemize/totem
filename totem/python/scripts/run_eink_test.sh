@@ -5,12 +5,16 @@
 # Set the base directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 BASE_DIR="$(cd "${SCRIPT_DIR}/../.." &> /dev/null && pwd)"
+TESTS_DIR="${BASE_DIR}/python/tests"
 
 # Function to run a test script
 run_test() {
   local script_path="$1"
   echo "Running test script: $script_path"
-  python3 "$script_path"
+  
+  # Get the directory of the script for Python to find modules
+  cd "$(dirname "$script_path")" || exit 1
+  python3 "$(basename "$script_path")"
   return $?
 }
 
@@ -46,19 +50,28 @@ case $choice in
   1)
     echo "Testing 2.13-inch E-Paper HAT..."
     check_spidev
-    run_test "${SCRIPT_DIR}/test_2in13_eink.py"
+    if [ -f "${TESTS_DIR}/test_2in13_eink.py" ]; then
+      run_test "${TESTS_DIR}/test_2in13_eink.py"
+    else
+      echo "2.13-inch test script not found at: ${TESTS_DIR}/test_2in13_eink.py"
+      echo "Using the script at: ${SCRIPT_DIR}/test_2in13_eink.py instead"
+      run_test "${SCRIPT_DIR}/test_2in13_eink.py"
+    fi
     ;;
   2)
     echo "Testing 3.7-inch E-Paper HAT..."
     check_spidev
-    run_test "${SCRIPT_DIR}/test_pi5_eink.py"
+    if [ -f "${TESTS_DIR}/test_pi5_eink.py" ]; then
+      run_test "${TESTS_DIR}/test_pi5_eink.py"
+    else
+      echo "Error: 3.7-inch test script not found at: ${TESTS_DIR}/test_pi5_eink.py"
+      exit 1
+    fi
     ;;
   3)
     echo "Running E-Ink display diagnostics..."
-    # Find the python directory
-    PYTHON_DIR="${BASE_DIR}/python"
     # Try to run the diagnostic script
-    diagnostic_script="${PYTHON_DIR}/scripts/eink_diagnostics.py"
+    diagnostic_script="${SCRIPT_DIR}/eink_diagnostics.py"
     if [ -f "$diagnostic_script" ]; then
       python3 "$diagnostic_script"
     else
