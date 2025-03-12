@@ -18,7 +18,25 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.abspath(os.path.join(script_dir, '..'))  # Python directory
 sys.path.insert(0, parent_dir)
 
-# We'll import the modules when needed to avoid dependency issues
+# Define a function to import the required modules
+def import_modules():
+    try:
+        # Try direct imports first
+        from managers.storage_manager import StorageManager
+        from devices.nvme.nvme import NVME
+        from devices.nvme.drivers.generic_nvme import Driver as NVMeDriver
+        return StorageManager, NVME, NVMeDriver
+    except ImportError:
+        # Try alternate import path
+        sys.path.insert(0, os.path.abspath(os.path.join(parent_dir, '..')))  # Totem root directory
+        try:
+            from totem.python.managers.storage_manager import StorageManager
+            from totem.python.devices.nvme.nvme import NVME
+            from totem.python.devices.nvme.drivers.generic_nvme import Driver as NVMeDriver
+            return StorageManager, NVME, NVMeDriver
+        except ImportError as e:
+            logger.error(f"Failed to import required modules: {e}")
+            raise
 
 def confirm_action(message="Do you want to continue?"):
     """Ask for user confirmation before proceeding with an action."""
@@ -92,6 +110,9 @@ def dump_partition_info(partition, mount_point=None):
 def test_with_direct_driver():
     """Test NVMe functionality using the driver directly."""
     logger.info("Testing NVMe detection with direct driver access")
+    
+    # Import required modules
+    _, NVME, NVMeDriver = import_modules()
     
     # Initialize the driver directly
     nvme_driver = NVMeDriver()
@@ -241,17 +262,18 @@ def test_with_direct_driver():
 
 def test_with_storage_manager():
     """Test NVMe functionality using the StorageManager."""
+    logger.info("Testing NVMe with StorageManager")
+    
+    # Import required modules
+    StorageManager, _, _ = import_modules()
+    
     try:
-        logger.info("Testing NVMe with StorageManager")
-        
-        # Initialize storage manager
-        storage_manager = StorageManager(driver_name='generic_nvme')
-        
         # Create test file and read it back
         test_file_path = "nvme_test_file.txt"
         test_data = "NVMe Storage Test Data - " + "X" * 100
         
         print(f"Writing test data to {test_file_path}...")
+        storage_manager = StorageManager(driver_name='generic_nvme')
         storage_manager.write_data(test_file_path, test_data)
         
         print(f"Reading data from {test_file_path}...")
