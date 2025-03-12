@@ -4,6 +4,9 @@
 
 set -e  # Exit on error
 
+# Navigate to the Python directory where pyproject.toml is located
+cd ~/totem/totem/python
+
 # Full path to Poetry
 POETRY_PATH="/home/totem/.local/share/pypoetry/venv/bin/poetry"
 
