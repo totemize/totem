@@ -270,7 +270,8 @@ def test_with_storage_manager():
     try:
         # Create test file and read it back
         test_file_path = "nvme_test_file.txt"
-        test_data = "NVMe Storage Test Data - " + "X" * 100
+        test_data_str = "NVMe Storage Test Data - " + "X" * 100
+        test_data = test_data_str.encode('utf-8')  # Convert string to bytes
         
         print(f"Writing test data to {test_file_path}...")
         storage_manager = StorageManager(driver_name='generic_nvme')
@@ -279,12 +280,18 @@ def test_with_storage_manager():
         print(f"Reading data from {test_file_path}...")
         read_data = storage_manager.read_data(test_file_path)
         
-        if read_data == test_data:
+        # Convert read data back to string for comparison if it's bytes
+        if isinstance(read_data, bytes):
+            read_data_str = read_data.decode('utf-8')
+        else:
+            read_data_str = read_data
+        
+        if read_data_str == test_data_str:
             print("\n✅ NVMe Storage Test Passed: Data integrity confirmed.")
         else:
             print("\n❌ NVMe Storage Test Failed: Data mismatch.")
-            print(f"Original: {test_data[:50]}...")
-            print(f"Read: {read_data[:50]}...")
+            print(f"Original: {test_data_str[:50]}...")
+            print(f"Read: {read_data_str[:50] if read_data_str else '...'}...")
         
         return True
     except Exception as e:
