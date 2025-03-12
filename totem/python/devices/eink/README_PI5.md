@@ -19,10 +19,10 @@ Our Pi 5 specific driver (`waveshare_3in7_pi5.py`) uses the `gpiod` library inst
 ```bash
 # Install system packages
 sudo apt-get update
-sudo apt-get install -y libgpiod-dev python3-libgpiod gpiod
+sudo apt-get install -y libgpiod-dev python3-libgpiod gpiod python3-pip python3-spidev
 
 # Install the Python packages in your Poetry environment
-poetry add gpiod
+poetry add gpiod spidev
 ```
 
 2. The driver files are already in the correct location, and the detection system will automatically use the Pi 5 specific driver when running on a Raspberry Pi 5.
@@ -41,13 +41,49 @@ This script will:
 3. Initialize the e-ink display
 4. Display a test pattern
 
+You can also use our quick test script:
+
+```bash
+python python/scripts/eink_quick_test.py
+```
+
+## Common Issues
+
+### Missing spidev Module
+
+If you see an error like:
+
+```
+Hardware initialization failed: name 'spidev' is not defined
+```
+
+It means the `spidev` Python module is not installed. This is a common issue when setting up the display for the first time. 
+
+To fix this:
+
+```bash
+# Install using pip
+sudo pip3 install spidev
+
+# If using Poetry
+poetry add spidev
+```
+
+Alternatively, run our automated fix script which handles all dependencies:
+
+```bash
+sudo python/scripts/fix_eink_dependencies.sh
+```
+
+For a comprehensive list of troubleshooting steps, see the `README_TROUBLESHOOTING.md` file.
+
 ## Troubleshooting
 
 If you encounter issues:
 
-1. Make sure gpiod is correctly installed:
+1. Make sure required modules are correctly installed:
    ```bash
-   python -c "import gpiod; print('gpiod available')"
+   python -c "import gpiod, spidev; print('Modules available')"
    ```
 
 2. Check permissions:
@@ -66,9 +102,19 @@ If you encounter issues:
    ls -l /dev/spidev*
    ```
 
-5. Try running with sudo to rule out permission issues:
+5. Set correct permissions:
+   ```bash
+   sudo chmod 666 /dev/spidev0.0 /dev/spidev0.1 /dev/gpiochip0
+   ```
+
+6. Try running with sudo to rule out permission issues:
    ```bash
    sudo poetry run python test_pi5_eink.py
+   ```
+
+7. Run our diagnostic script for detailed analysis:
+   ```bash
+   python python/scripts/diagnose_eink.py
    ```
 
 ## Pin Connections
