@@ -163,76 +163,98 @@ class Driver(EInkDeviceInterface):
     
     def __init__(self):
         self.initialized = False
-        self.hardware_available = False  # Add hardware_available attribute
+        self.hardware_available = False  # Initialize hardware availability flag
         
-        # Try to import hardware libraries
+        # Try to import hardware libraries with proper error handling
         try:
             import RPi.GPIO as GPIO
             import spidev
             self.GPIO = GPIO
-            self.spi = spidev.SpiDev()
+            self.spi = None  # Will be initialized during init()
             self.hardware_available = True
-            logger.info("Hardware SPI and GPIO available")
-        except ImportError:
+            logger.info("Hardware SPI and GPIO libraries available")
+        except ImportError as e:
+            logger.warning(f"Hardware libraries import failed: {e}")
             self.GPIO = MockGPIO
             self.spi = MockSpiDev()
             self.hardware_available = False
-            logger.warning("Hardware SPI and GPIO not available, using mock implementations")
-        
+            logger.warning("Using mock implementations for GPIO and SPI")
+            
+        # Display dimensions
         self.width = self.WIDTH
         self.height = self.HEIGHT
 
-        # Define GPIO pin connections
-        self.reset_pin = 17
-        self.dc_pin = 25
-        self.busy_pin = 24
-        self.cs_pin = 8
-
-        # Init SPI
-        if hasattr(self.spi, 'max_speed_hz'):
-            self.spi.max_speed_hz = 2000000  # 2MHz
-    
+        # Define GPIO pin connections for Waveshare 2.13inch E-Paper HAT 
+        # These pins are standard for the HAT
+        self.reset_pin = 17  # Physical pin 11
+        self.dc_pin = 25     # Physical pin 22
+        self.busy_pin = 24   # Physical pin 18
+        self.cs_pin = 8      # Physical pin 24
+        
     def init(self):
+        """Initialize the display"""
         logger.info("Initializing Waveshare 2.13in e-Paper HAT.")
         
-        # Initialize GPIO
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.reset_pin, GPIO.OUT)
-        GPIO.setup(self.dc_pin, GPIO.OUT)
-        GPIO.setup(self.busy_pin, GPIO.IN)
-        GPIO.setup(self.cs_pin, GPIO.OUT)
-        
-        # Reset the display
-        self.reset()
-        
-        # Send initialization commands
-        self.send_command(self.DRIVER_OUTPUT_CONTROL)
-        self.send_data(0xF9)  # (HEIGHT-1) & 0xFF
-        self.send_data(0x00)  # ((HEIGHT-1) >> 8) & 0xFF
-        self.send_data(0x00)  # GD = 0, SM = 0, TB = 0
-        
-        self.send_command(self.BOOSTER_SOFT_START_CONTROL)
-        self.send_data(0xD7)
-        self.send_data(0xD6)
-        self.send_data(0x9D)
-        
-        self.send_command(self.WRITE_VCOM_REGISTER)
-        self.send_data(0xA8)  # VCOM 7C
-        
-        self.send_command(self.SET_DUMMY_LINE_PERIOD)
-        self.send_data(0x1A)  # 4 dummy lines per gate
-        
-        self.send_command(self.SET_GATE_TIME)
-        self.send_data(0x08)  # 2us per line
-        
-        self.send_command(self.DATA_ENTRY_MODE_SETTING)
-        self.send_data(0x03)  # X increment; Y increment
-        
-        # Set the look-up table for full refresh
-        self._set_lut()
-        
-        self.initialized = True
-        logger.info("Initialization complete.")
+        try:
+            # Initialize GPIO
+            self.GPIO.setmode(self.GPIO.BCM)
+            self.GPIO.setup(self.reset_pin, self.GPIO.OUT)
+            self.GPIO.setup(self.dc_pin, self.GPIO.OUT)
+            self.GPIO.setup(self.busy_pin, self.GPIO.IN)
+            
+            # Initialize SPI if hardware is available
+            if self.hardware_available:
+                try:
+                    # Initialize SPI
+                    self.spi = spidev.SpiDev()
+                    self.spi.open(0, 0)  # Bus 0, Device 0
+                    self.spi.max_speed_hz = 2000000  # 2MHz
+                    self.spi.mode = 0b00  # Mode 0
+                    logger.info("SPI interface initialized")
+                except Exception as e:
+                    logger.error(f"Failed to initialize SPI: {e}")
+                    self.hardware_available = False
+                    self.spi = MockSpiDev()
+                    logger.warning("Falling back to mock SPI implementation")
+            
+            # Reset the display
+            self.reset()
+            
+            # Send initialization commands
+            self.send_command(self.DRIVER_OUTPUT_CONTROL)
+            self.send_data(0xF9)  # (HEIGHT-1) & 0xFF
+            self.send_data(0x00)  # ((HEIGHT-1) >> 8) & 0xFF
+            self.send_data(0x00)  # GD = 0, SM = 0, TB = 0
+            
+            self.send_command(self.BOOSTER_SOFT_START_CONTROL)
+            self.send_data(0xD7)
+            self.send_data(0xD6)
+            self.send_data(0x9D)
+            
+            self.send_command(self.WRITE_VCOM_REGISTER)
+            self.send_data(0xA8)  # VCOM 7C
+            
+            self.send_command(self.SET_DUMMY_LINE_PERIOD)
+            self.send_data(0x1A)  # 4 dummy lines per gate
+            
+            self.send_command(self.SET_GATE_TIME)
+            self.send_data(0x08)  # 2us per line
+            
+            self.send_command(self.DATA_ENTRY_MODE_SETTING)
+            self.send_data(0x03)  # X increment; Y increment
+            
+            # Set the look-up table for full refresh
+            self._set_lut()
+            
+            self.initialized = True
+            logger.info("Initialization complete.")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize display: {e}")
+            logger.error(traceback.format_exc())
+            self.hardware_available = False
+            self.initialized = False
+            raise
 
     def _set_lut(self):
         """Set the look-up table for display refresh"""
@@ -250,30 +272,32 @@ class Driver(EInkDeviceInterface):
 
     def reset(self):
         logger.debug("Resetting e-Paper display.")
-        GPIO.output(self.reset_pin, GPIO.HIGH)
+        self.GPIO.output(self.reset_pin, self.GPIO.HIGH)
         time.sleep(0.2)
-        GPIO.output(self.reset_pin, GPIO.LOW)
+        self.GPIO.output(self.reset_pin, self.GPIO.LOW)
         time.sleep(0.2)
-        GPIO.output(self.reset_pin, GPIO.HIGH)
+        self.GPIO.output(self.reset_pin, self.GPIO.HIGH)
         time.sleep(0.2)
 
     def send_command(self, command):
-        GPIO.output(self.dc_pin, GPIO.LOW)
-        GPIO.output(self.cs_pin, GPIO.LOW)
-        self.spi.writebytes([command])
-        GPIO.output(self.cs_pin, GPIO.HIGH)
+        self.GPIO.output(self.dc_pin, self.GPIO.LOW)
+        if hasattr(self.spi, 'writebytes'):
+            self.spi.writebytes([command])
+        else:
+            self.spi.xfer2([command])
 
     def send_data(self, data):
-        GPIO.output(self.dc_pin, GPIO.HIGH)
-        GPIO.output(self.cs_pin, GPIO.LOW)
+        self.GPIO.output(self.dc_pin, self.GPIO.HIGH)
         if isinstance(data, int):
             data = [data]
-        self.spi.writebytes(data)
-        GPIO.output(self.cs_pin, GPIO.HIGH)
+        if hasattr(self.spi, 'writebytes'):
+            self.spi.writebytes(data)
+        else:
+            self.spi.xfer2(data)
 
     def wait_until_idle(self):
         logger.debug("Waiting for e-Paper display to become idle.")
-        while GPIO.input(self.busy_pin) == 0:  # 0: busy, 1: idle
+        while self.GPIO.input(self.busy_pin) == 0:  # 0: busy, 1: idle
             time.sleep(0.1)
         logger.debug("Display is now idle.")
 
@@ -389,8 +413,23 @@ class Driver(EInkDeviceInterface):
         
     def __del__(self):
         try:
-            if hasattr(self, 'spi') and hasattr(self.spi, 'close'):
-                self.spi.close()
+            # Close SPI connection if it exists
+            if hasattr(self, 'spi') and self.spi is not None:
+                if hasattr(self.spi, 'close'):
+                    self.spi.close()
+            
+            # Clean up GPIO
+            if hasattr(self, 'GPIO') and hasattr(self.GPIO, 'cleanup'):
+                # Only clean up our pins to avoid interfering with other parts of the system
+                try:
+                    pins = [self.reset_pin, self.dc_pin, self.busy_pin, self.cs_pin]
+                    for pin in pins:
+                        self.GPIO.cleanup(pin)
+                except:
+                    # If pin-specific cleanup fails, fall back to general cleanup
+                    self.GPIO.cleanup()
+            
             logger.info("Cleaned up SPI and GPIO.")
         except Exception as e:
-            logger.error(f"Error during cleanup: {e}") 
+            logger.error(f"Error during cleanup: {e}")
+            logger.error(traceback.format_exc()) 
