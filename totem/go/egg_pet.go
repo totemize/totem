@@ -1,8 +1,8 @@
-// egg_pet.go
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -14,53 +14,91 @@ type EggPet struct {
 	*BasePet
 	ownerPubKey string
 	createdAt   time.Time
+	totem       *Totem
 }
 
 // NewEggPet creates a new pet in egg state
-func NewEggPet(ownerPubKey string) *EggPet {
-	return &EggPet{
+func NewEggPet(ownerPubKey string, totem *Totem) *EggPet {
+	eggPet := &EggPet{
 		BasePet:     NewBasePet("Egg"),
 		ownerPubKey: ownerPubKey,
 		createdAt:   time.Now(),
+		totem:       totem,
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		eggPet.publishMetadataEvent(ctx)
+	}()
+
+	return eggPet
+}
+
+func (p *EggPet) publishMetadataEvent(ctx context.Context) {
+	metadata := map[string]string{
+		"name":  p.state.Name,
+		"about": "I'm still an egg waiting to be named!",
+	}
+
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		fmt.Printf("Error creating metadata JSON: %v\n", err)
+		return
+	}
+
+	ev := nostr.Event{
+		PubKey:    p.publicKey,
+		CreatedAt: nostr.Now(),
+		Kind:      nostr.KindProfileMetadata,
+		Tags:      nostr.Tags{{"p", p.ownerPubKey}},
+		Content:   string(metadataJSON),
+	}
+
+	ev.Sign(p.privateKey)
+
+	fmt.Printf("Publishing metadata event for egg: %s\n", ev.ID)
+	err = p.totem.PublishEvent(ctx, &ev)
+	if err != nil {
+		fmt.Printf("Error publishing metadata: %v\n", err)
+	} else {
+		fmt.Printf("Published metadata for egg with ID: %s\n", ev.ID)
 	}
 }
 
-// GetStateEmoji returns the emoji representing the current state
 func (p *EggPet) GetStateEmoji() string {
 	return "🥚"
 }
 
-// HandleNaming processes a naming event and transforms the egg into a proper pet
 func (p *EggPet) HandleNaming(ctx context.Context, name string) Pet {
 	fmt.Printf("Egg hatching into pet named: %s\n", name)
 
-	// Create a proper pet with the given name
-	pet := NewDefaultPet(name)
+	pet := &DefaultPet{
+		BasePet: &BasePet{
+			state: State{
+				Name:      name,
+				Happiness: p.state.Happiness,
+				Energy:    p.state.Energy,
+				LastFed:   p.state.LastFed,
+			},
+			privateKey: p.privateKey,
+			publicKey:  p.publicKey,
+		},
+		totem: p.totem,
+	}
 
-	// Copy any accumulated state from the egg
-	pet.mutex.Lock()
-	pet.state.Energy = p.state.Energy
-	pet.state.Happiness = p.state.Happiness
-	pet.mutex.Unlock()
+	bgCtx := context.Background()
+	go func() {
+		ctx, cancel := context.WithTimeout(bgCtx, 10*time.Second)
+		defer cancel()
+		pet.publishMetadataEvent(ctx)
+	}()
 
 	return pet
 }
 
-// Override BasePet methods for egg-specific behavior
 func (p *EggPet) handleStoreEvent(ctx context.Context, evt *nostr.Event) {
-	p.mutex.RLock()
-	currentState := p.state
-	p.mutex.RUnlock()
-
 	fmt.Printf("Egg notified of event: %s\n", evt.ID)
-
-	// Only respond to egg events with minor state changes
-	// Full interaction will happen after naming
-	p.mutex.Lock()
-	p.state.Energy = min(100, p.state.Energy+0.5)
-	p.mutex.Unlock()
-
-	fmt.Print("Egg's state updated after event\n", currentState.Name)
 }
 
 // The egg responds minimally to other events

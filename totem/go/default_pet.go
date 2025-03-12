@@ -1,8 +1,8 @@
-// default_pet.go
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -11,11 +11,13 @@ import (
 
 type DefaultPet struct {
 	*BasePet
+	totem *Totem
 }
 
-func NewDefaultPet(name string) *DefaultPet {
+func NewDefaultPet(name string, totem *Totem) *DefaultPet {
 	return &DefaultPet{
 		BasePet: NewBasePet(name),
+		totem:   totem,
 	}
 }
 
@@ -26,19 +28,47 @@ func (p *DefaultPet) handleStoreEvent(ctx context.Context, evt *nostr.Event) {
 
 	fmt.Printf("Pet %s notified of event: %s\n", currentState.Name, evt.ID)
 
-	// Update pet state based on the event
 	p.mutex.Lock()
-	// Being fed (receiving events) costs energy
-	p.state.Energy = max(0, p.state.Energy-1)
-	// Happiness boost for short messages
-	if len(evt.Content) < 100 {
-		p.state.Happiness = min(100, p.state.Happiness+1)
-	}
-	// Update last fed time
+	p.state.Energy = max(0, p.state.Energy+5)
+
 	p.state.LastFed = time.Now()
 	p.mutex.Unlock()
 
 	fmt.Printf("Pet %s's state updated after event\n", currentState.Name)
+}
+
+func (p *DefaultPet) publishMetadataEvent(ctx context.Context) {
+	// Create metadata content
+	metadata := map[string]string{
+		"name":  p.state.Name,
+		"about": fmt.Sprintf("I'm %s, a virtual pet living in this relay!", p.state.Name),
+	}
+
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		fmt.Printf("Error creating metadata JSON: %v\n", err)
+		return
+	}
+
+	// Create the event
+	ev := nostr.Event{
+		PubKey:    p.publicKey,
+		CreatedAt: nostr.Now(),
+		Kind:      nostr.KindProfileMetadata,
+		Content:   string(metadataJSON),
+	}
+
+	// Sign the event with the pet's private key
+	ev.Sign(p.privateKey)
+
+	// Publish through Totem
+	fmt.Printf("Publishing metadata event for pet %s\n", p.state.Name)
+	err = p.totem.PublishEvent(ctx, &ev)
+	if err != nil {
+		fmt.Printf("Error publishing metadata: %v\n", err)
+	} else {
+		fmt.Printf("Published metadata for pet %s with ID: %s\n", p.state.Name, ev.ID)
+	}
 }
 
 func (p *DefaultPet) handleDeleteEvent(ctx context.Context, evt *nostr.Event) {
@@ -48,10 +78,8 @@ func (p *DefaultPet) handleDeleteEvent(ctx context.Context, evt *nostr.Event) {
 
 	fmt.Printf("Pet %s notified of delete event: %s\n", currentState.Name, evt.ID)
 
-	// Update pet state based on the delete operation
 	if currentState.Energy < 50 {
 		p.mutex.Lock()
-		// Energy boost from cleaning up
 		p.state.Energy = min(100, p.state.Energy+2)
 		p.mutex.Unlock()
 	}

@@ -1,4 +1,3 @@
-// pet.go
 package main
 
 import (
@@ -23,6 +22,7 @@ type Pet interface {
 	GetState() State
 	Update()
 	GetStateEmoji() string
+	GetPubKey() string
 
 	// Event notifications
 	handleStoreEvent(ctx context.Context, evt *nostr.Event)
@@ -35,11 +35,21 @@ type Pet interface {
 
 // BasePet provides common pet functionality
 type BasePet struct {
-	state State
-	mutex sync.RWMutex
+	state      State
+	mutex      sync.RWMutex
+	privateKey string
+	publicKey  string
+}
+
+func (p *BasePet) GetPubKey() string {
+	return p.publicKey
 }
 
 func NewBasePet(name string) *BasePet {
+	// Generate a new private key for the pet
+	privateKey := nostr.GeneratePrivateKey()
+	publicKey, _ := nostr.GetPublicKey(privateKey)
+
 	return &BasePet{
 		state: State{
 			Name:      name,
@@ -47,6 +57,8 @@ func NewBasePet(name string) *BasePet {
 			Energy:    100,
 			LastFed:   time.Now(),
 		},
+		privateKey: privateKey,
+		publicKey:  publicKey,
 	}
 }
 

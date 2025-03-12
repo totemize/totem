@@ -24,44 +24,43 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
-	// Get the current state of all pets
 	pets := s.relay.GetTotem().GetPets()
 
-	// Execute just the pets part of the template
 	tmplPets := template.Must(template.New("pets").Parse(`
-        {{if .}}
-            <div class="pets-container">
-                {{range .}}
-                <div class="pet-container {{if eq .GetStateEmoji "🥚"}}egg-container{{end}}">
-                    <div class="pet-emoji">{{.GetStateEmoji}}</div>
-                    <div class="stats">
-                        <h3>{{.GetState.Name}}</h3>
-                        
-                        <p><strong>Energy:</strong> {{printf "%.1f" .GetState.Energy}}%</p>
-                        <div class="progress-bar">
-                            <div class="progress-fill energy-fill" style="width: {{.GetState.Energy}}%;"></div>
-                        </div>
-                        
-                        <p><strong>Happiness:</strong> {{printf "%.1f" .GetState.Happiness}}%</p>
-                        <div class="progress-bar">
-                            <div class="progress-fill happiness-fill" style="width: {{.GetState.Happiness}}%;"></div>
-                        </div>
-                        
-                        <p><strong>Last Fed:</strong> {{.GetState.LastFed.Format "15:04:05"}}</p>
-                        
-                        {{if eq .GetStateEmoji "🥚"}}
-                        <p><em>This pet is still an egg! Send a naming event to hatch it.</em></p>
-                        {{end}}
+    {{if .}}
+        <div class="pets-container">
+            {{range .}}
+            <div class="pet-container {{if eq .GetStateEmoji "🥚"}}egg-container{{end}}">
+                <div class="pet-emoji">{{.GetStateEmoji}}</div>
+                <div class="stats">
+                    <h3>{{.GetState.Name}}</h3>
+                    <p><strong>Nostr ID:</strong> <code>{{.GetPubKey}}</code></p>
+                    
+                    <p><strong>Energy:</strong> {{printf "%.1f" .GetState.Energy}}%</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill energy-fill" style="width: {{.GetState.Energy}}%;"></div>
                     </div>
+                    
+                    <p><strong>Happiness:</strong> {{printf "%.1f" .GetState.Happiness}}%</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill happiness-fill" style="width: {{.GetState.Happiness}}%;"></div>
+                    </div>
+                    
+                    <p><strong>Last Fed:</strong> {{.GetState.LastFed.Format "15:04:05"}}</p>
+                    
+                    {{if eq .GetStateEmoji "🥚"}}
+                    <p><em>This pet is still an egg! Send a naming event to hatch it.</em></p>
+                    {{end}}
                 </div>
-                {{end}}
             </div>
-        {{else}}
-            <div class="no-pets">
-                <h2>No Pets Yet!</h2>
-                <p>Create your first pet by sending a pet creation event to this relay.</p>
-            </div>
-        {{end}}
+            {{end}}
+        </div>
+    {{else}}
+        <div class="no-pets">
+            <h2>No Pets Yet!</h2>
+            <p>Create your first pet by sending a pet creation event to this relay.</p>
+        </div>
+    {{end}}
     `))
 
 	tmplPets.Execute(w, pets)
@@ -191,7 +190,7 @@ const htmlTemplate = `
                     <div class="pet-emoji">{{.GetStateEmoji}}</div>
                     <div class="stats">
                         <h3>{{.GetState.Name}}</h3>
-                        
+                        <p><strong>Nostr ID:</strong> <code>{{.GetPubKey}}</code></p>
                         <p><strong>Energy:</strong> {{printf "%.1f" .GetState.Energy}}%</p>
                         <div class="progress-bar">
                             <div class="progress-fill energy-fill" style="width: {{.GetState.Energy}}%;"></div>

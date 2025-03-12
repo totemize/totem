@@ -11,11 +11,11 @@ import (
 	"github.com/nbd-wtf/go-nostr"
 )
 
-// Totem is the central manager that coordinates between relay and pets
 type Totem struct {
-	pubKey string
-	pets   map[string]Pet
-	mutex  sync.RWMutex
+	pubKey           string
+	pets             map[string]Pet
+	mutex            sync.RWMutex
+	publishEventHook func(context.Context, *nostr.Event) error
 }
 
 type PetCreator interface {
@@ -23,32 +23,30 @@ type PetCreator interface {
 	GetOwnerPubKey() string
 	GetCreationTime() time.Time
 	HandleNaming(ctx context.Context, name string) Pet
+	publishMetadataEvent(ctx context.Context)
 }
 
-func (t *Totem) NamePet(ctx context.Context, eggID string, name string) (Pet, error) {
+func (t *Totem) NamePet(ctx context.Context, pubKey string, name string) (Pet, error) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
-	// Find the egg
-	egg, exists := t.pets[eggID]
+	egg, exists := t.pets[pubKey]
 	if !exists {
-		return nil, fmt.Errorf("egg with ID %s not found", eggID)
+		return nil, fmt.Errorf("egg with pubkey %s not found", pubKey)
 	}
 
-	// Ensure it's an egg pet
 	eggPet, ok := egg.(PetCreator)
 	if !ok {
-		return nil, fmt.Errorf("pet with ID %s is not in egg state", eggID)
+		return nil, fmt.Errorf("pet with pubkey %s is not in egg state", pubKey)
 	}
 
-	// Hatch the egg into a named pet
 	namedPet := eggPet.HandleNaming(ctx, name)
 
-	// Replace the egg with the named pet
-	delete(t.pets, eggID)
-	t.pets[name] = namedPet
+	t.pets[pubKey] = namedPet
 
-	log.Printf("Egg %s hatched into pet named: %s", eggID, name)
+	log.Printf("Egg with pubkey %s hatched into pet named: %s",
+		pubKey, name)
+
 	return namedPet, nil
 }
 
@@ -56,13 +54,9 @@ func (t *Totem) CreatePet(ctx context.Context, ownerPubKey string) PetCreator {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
 
-	// Create a new egg
-	eggID := fmt.Sprintf("egg-%s-%d", ownerPubKey[:8], time.Now().Unix())
-	egg := NewEggPet(ownerPubKey)
-
-	// Register the egg with Totem
-	t.pets[eggID] = egg
-	log.Printf("Egg created for owner: %s with ID: %s", ownerPubKey, eggID)
+	egg := NewEggPet(ownerPubKey, t)
+	t.pets[egg.GetPubKey()] = egg
+	log.Printf("Egg created for owner: %s with pubkey: %s", ownerPubKey, egg.GetPubKey())
 
 	return egg
 }
@@ -79,7 +73,6 @@ func (t *Totem) FindEggsByOwner(ownerPubKey string) []PetCreator {
 			}
 		}
 	}
-
 	return eggs
 }
 
@@ -124,23 +117,22 @@ func (t *Totem) processPetCreationEvent(ctx context.Context, evt *nostr.Event) b
 
 	// If no name is provided, create an egg
 	if request.Parameters.Name == "" {
-		t.CreatePet(ctx, evt.PubKey)
-		fmt.Printf("Created new egg for user %s\n", evt.PubKey)
+		egg := t.CreatePet(ctx, evt.PubKey)
+		fmt.Printf("Created new egg for user %s with pubkey %s\n",
+			evt.PubKey, egg.GetPubKey())
 		return true
 	}
 
 	// If a name is provided, check if the user has an egg
 	eggs := t.FindEggsByOwner(evt.PubKey)
 	if len(eggs) == 0 {
-		// No eggs found - user must create an egg first
 		fmt.Printf("User %s tried to name a pet without an egg\n", evt.PubKey)
-		return true // We still processed the event, but didn't create a pet
+		return true
 	}
 
 	// User has an egg, so name it
 	egg := eggs[0]
-	eggID := fmt.Sprintf("egg-%s-%d", evt.PubKey[:8], egg.GetCreationTime().Unix())
-	_, err := t.NamePet(ctx, eggID, request.Parameters.Name)
+	_, err := t.NamePet(ctx, egg.GetPubKey(), request.Parameters.Name)
 	if err != nil {
 		fmt.Printf("Error naming egg: %v\n", err)
 	} else {
@@ -150,7 +142,20 @@ func (t *Totem) processPetCreationEvent(ctx context.Context, evt *nostr.Event) b
 	return true
 }
 
-// NewTotem creates a new Totem instance
+func (t *Totem) PublishEvent(ctx context.Context, evt *nostr.Event) error {
+	fmt.Printf("Totem publishing event from %s: %s\n", evt.PubKey, evt.ID)
+
+	if t.publishEventHook != nil {
+		return t.publishEventHook(ctx, evt)
+	}
+
+	return fmt.Errorf("publish event hook not set")
+}
+
+func (t *Totem) SetPublishEventHook(hook func(context.Context, *nostr.Event) error) {
+	t.publishEventHook = hook
+}
+
 func NewTotem(pubKey string) *Totem {
 	return &Totem{
 		pubKey: pubKey,
@@ -158,7 +163,6 @@ func NewTotem(pubKey string) *Totem {
 	}
 }
 
-// RegisterPet adds a pet to the Totem's management
 func (t *Totem) RegisterPet(p Pet) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
@@ -167,7 +171,6 @@ func (t *Totem) RegisterPet(p Pet) {
 	log.Printf("Pet registered: %s", state.Name)
 }
 
-// GetPubKey returns Totem's public key
 func (t *Totem) GetPubKey() string {
 	return t.pubKey
 }
@@ -175,13 +178,11 @@ func (t *Totem) GetPubKey() string {
 func (t *Totem) handleStoreEvent(ctx context.Context, evt *nostr.Event) {
 	fmt.Printf("Totem notified of event: %s\n", evt.ID)
 
-	// First, check if this is a pet creation event
 	if t.processPetCreationEvent(ctx, evt) {
 		fmt.Printf("Successfully processed pet creation event: %s\n", evt.ID)
 		return
 	}
 
-	// If not a creation event, continue with standard event handling
 	targetPet := t.findTargetPet(evt)
 	if targetPet != nil {
 		fmt.Printf("Notifying pet %s about event\n", targetPet.GetState().Name)
@@ -191,7 +192,6 @@ func (t *Totem) handleStoreEvent(ctx context.Context, evt *nostr.Event) {
 	fmt.Printf("Event content: %s\n", evt.Content)
 }
 
-// handleDeleteEvent notifies Totem and relevant pets about a deletion
 func (t *Totem) handleDeleteEvent(ctx context.Context, evt *nostr.Event) {
 	fmt.Printf("Totem notified of deletion: %s\n", evt.ID)
 
@@ -202,36 +202,31 @@ func (t *Totem) handleDeleteEvent(ctx context.Context, evt *nostr.Event) {
 	}
 }
 
-// handleQueryEvents allows Totem to suggest modifications to query filters
 func (t *Totem) handleQueryEvents(ctx context.Context, filter nostr.Filter) (nostr.Filter, error) {
 	modifiedFilter := filter
 
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
 
-	// Let pets suggest filter modifications
 	for _, pet := range t.pets {
 		var err error
 		modifiedFilter, err = pet.handleQueryEvents(ctx, modifiedFilter)
 		if err != nil {
-			return filter, nil // Ignore errors, use original filter
+			return filter, nil
 		}
 	}
 
 	return modifiedFilter, nil
 }
 
-// handleRejectEvent determines if an event should be rejected
 func (t *Totem) handleRejectEvent(ctx context.Context, evt *nostr.Event) (bool, string) {
 	fmt.Printf("Totem checking if event should be rejected: %s\n", evt.ID)
 
-	// Check if any pet wants to reject this event
 	targetPet := t.findTargetPet(evt)
 	if targetPet != nil {
 		return targetPet.handleRejectEvent(ctx, evt)
 	}
 
-	// No rejection by default
 	return false, ""
 }
 
@@ -241,7 +236,7 @@ func (t *Totem) findTargetPet(evt *nostr.Event) Pet {
 	defer t.mutex.RUnlock()
 
 	// For this simple implementation, just return the first pet
-	// In a real implementation, you'd have logic to determine the target
+	// In a real implementation, we will have logic to determine the target
 	// based on tags, content, etc.
 	if len(t.pets) > 0 {
 		for _, pet := range t.pets {
@@ -252,7 +247,6 @@ func (t *Totem) findTargetPet(evt *nostr.Event) Pet {
 	return nil
 }
 
-// GetPets returns all registered pets
 func (t *Totem) GetPets() []Pet {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()

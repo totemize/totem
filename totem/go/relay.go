@@ -53,20 +53,24 @@ func NewTotemRelay(info RelayInfo, totem *Totem, db Database) *TotemRelay {
 		return relay.handleRejectEvent(ctx, event)
 	})
 
+	// This is a direct connection to the handleStoreEvent method
+	totem.SetPublishEventHook(func(ctx context.Context, evt *nostr.Event) error {
+		return relay.handleStoreEvent(ctx, evt)
+	})
+
 	fmt.Println("TotemRelay initialized with hooks set up")
 	return relay
 }
 
 func (r *TotemRelay) handleStoreEvent(ctx context.Context, evt *nostr.Event) error {
-	fmt.Printf("Relay storing event: %s\n", evt.ID)
-
 	err := r.database.SaveEvent(ctx, evt)
 	if err != nil {
 		fmt.Printf("Error storing event: %v\n", err)
 		return err
 	}
 
-	// Notify Totem about the event (doesn't affect storage)
+	fmt.Printf("Relay storing event: %s\n", evt.ID)
+
 	go r.totem.handleStoreEvent(ctx, evt)
 
 	return nil
@@ -75,14 +79,12 @@ func (r *TotemRelay) handleStoreEvent(ctx context.Context, evt *nostr.Event) err
 func (r *TotemRelay) handleDeleteEvent(ctx context.Context, evt *nostr.Event) error {
 	fmt.Printf("Relay deleting event: %s\n", evt.ID)
 
-	// First delete from database
 	err := r.database.DeleteEvent(ctx, evt)
 	if err != nil {
 		fmt.Printf("Error deleting event: %v\n", err)
 		return err
 	}
 
-	// Then notify Totem about the deletion
 	go r.totem.handleDeleteEvent(ctx, evt)
 
 	return nil
@@ -91,7 +93,6 @@ func (r *TotemRelay) handleDeleteEvent(ctx context.Context, evt *nostr.Event) er
 func (r *TotemRelay) handleQueryEvents(ctx context.Context, filter nostr.Filter) (chan *nostr.Event, error) {
 	fmt.Printf("Relay querying events with filter: %+v\n", filter)
 
-	// Let Totem suggest filter modifications (doesn't block if no changes)
 	modifiedFilter, _ := r.totem.handleQueryEvents(ctx, filter)
 
 	return r.database.QueryEvents(ctx, modifiedFilter)
@@ -100,7 +101,6 @@ func (r *TotemRelay) handleQueryEvents(ctx context.Context, filter nostr.Filter)
 func (r *TotemRelay) handleCountEvents(ctx context.Context, filter nostr.Filter) (int64, error) {
 	fmt.Printf("Relay counting events with filter: %+v\n", filter)
 
-	// Let Totem suggest filter modifications (doesn't block if no changes)
 	modifiedFilter, _ := r.totem.handleQueryEvents(ctx, filter)
 
 	return r.database.CountEvents(ctx, modifiedFilter)
@@ -109,7 +109,6 @@ func (r *TotemRelay) handleCountEvents(ctx context.Context, filter nostr.Filter)
 func (r *TotemRelay) handleRejectEvent(ctx context.Context, evt *nostr.Event) (bool, string) {
 	fmt.Printf("Relay checking if event should be rejected: %s\n", evt.ID)
 
-	// Let Totem decide if the event should be rejected
 	return r.totem.handleRejectEvent(ctx, evt)
 }
 
