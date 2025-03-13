@@ -378,8 +378,12 @@ class WaveshareEPD3in7:
             else:
                 raise GPIOError(error_msg)
     
-    def init(self):
-        """Initialize the e-Paper display"""
+    def init(self, mode=0):
+        """
+        Initialize the e-Paper display
+        Args:
+            mode: 0 = 4Gray mode, 1 = 1Gray mode
+        """
         if self.initialized:
             return
             
@@ -786,10 +790,15 @@ class WaveshareEPD3in7:
             else:
                 raise RuntimeError(error_msg)
     
-    def Clear(self):
-        """Clear the display"""
+    def Clear(self, clear_color=0xFF, mode=0):
+        """
+        Clear the display
+        Args:
+            clear_color: Color to clear with (0xFF = white)
+            mode: 0 = 4Gray mode, 1 = 1Gray mode
+        """
         if not self.initialized:
-            self.init()
+            self.init(mode)
             
         if self.mock_mode:
             print("Mock clear display")
@@ -798,11 +807,11 @@ class WaveshareEPD3in7:
         try:
             self.send_command(DATA_START_TRANSMISSION_1)
             for i in range(0, int(self.width * self.height / 8)):
-                self.send_data(0xFF)
+                self.send_data(clear_color)
             
             self.send_command(DATA_START_TRANSMISSION_2)
             for i in range(0, int(self.width * self.height / 8)):
-                self.send_data(0xFF)
+                self.send_data(clear_color)
                 
             self.send_command(DISPLAY_REFRESH)
             self.wait_until_idle()
@@ -996,3 +1005,126 @@ class WaveshareEPD3in7:
         except Exception as e:
             print(f"Error closing display: {e}")
             # Don't raise an exception here, as this is cleanup code 
+
+    # Add 4Gray support
+    # Define grayscale constants
+    GRAY1 = 0x03  # Darkest
+    GRAY2 = 0x02
+    GRAY3 = 0x01
+    GRAY4 = 0x00  # Lightest (white)
+
+    def getbuffer(self, image):
+        """Convert image to display buffer for 1-bit mode"""
+        if image is None:
+            return None
+            
+        img = image.convert('L')
+        imwidth, imheight = img.size
+        
+        buf = bytearray(int(imwidth * imheight / 8))
+        pixels = img.load()
+        
+        for y in range(imheight):
+            for x in range(imwidth):
+                # Set the bits for black pixels
+                if pixels[x, y] < 128:  # Black
+                    buf[int((x + y * imwidth) / 8)] &= ~(0x80 >> (x % 8))
+                else:  # White
+                    buf[int((x + y * imwidth) / 8)] |= 0x80 >> (x % 8)
+        
+        return buf
+
+    def getbuffer_4Gray(self, image):
+        """Convert image to display buffer for 4-gray mode"""
+        if image is None:
+            return None
+            
+        img = image.convert('L')
+        imwidth, imheight = img.size
+        
+        buf = bytearray(int(imwidth * imheight / 4))
+        pixels = img.load()
+        
+        i = 0
+        for y in range(imheight):
+            for x in range(imwidth):
+                # Set 2 bits per pixel for 4 gray levels
+                if x % 4 == 0 and x != 0:
+                    i += 1
+                
+                # Map pixel value to 2-bit grayscale (4 levels)
+                gray = 0
+                if pixels[x, y] >= 192:
+                    gray = 0x00  # White (GRAY4)
+                elif pixels[x, y] >= 128:
+                    gray = 0x01  # Light gray (GRAY3)
+                elif pixels[x, y] >= 64:
+                    gray = 0x02  # Dark gray (GRAY2)
+                else:
+                    gray = 0x03  # Black (GRAY1)
+                
+                # Set the bits in the buffer
+                value = (gray << ((3 - (x % 4)) * 2))
+                buf[i] |= value
+        
+        return buf
+
+    def display_1Gray(self, buf):
+        """Display buffer in 1-bit mode"""
+        if not self.initialized:
+            self.init(1)  # 1-bit mode
+            
+        if self.mock_mode:
+            print("Mock display 1Gray")
+            return
+            
+        try:
+            self.send_command(DATA_START_TRANSMISSION_1)
+            for i in range(0, int(self.width * self.height / 8)):
+                self.send_data(buf[i])
+                
+            self.send_command(DISPLAY_REFRESH)
+            self.wait_until_idle()
+        except Exception as e:
+            error_msg = f"Error displaying 1Gray: {str(e)}"
+            print(error_msg)
+            
+            if self.handle_errors:
+                print("Falling back to mock mode after display error")
+                self.mock_mode = True
+            else:
+                raise RuntimeError(error_msg)
+
+    def display_4Gray(self, buf):
+        """Display buffer in 4-gray mode"""
+        if not self.initialized:
+            self.init(0)  # 4-gray mode
+            
+        if self.mock_mode:
+            print("Mock display 4Gray")
+            return
+            
+        try:
+            self.send_command(DATA_START_TRANSMISSION_1)
+            for i in range(0, int(self.width * self.height / 8)):
+                temp1 = buf[i]
+                temp2 = buf[i + int(self.width * self.height / 8)]
+                temp3 = buf[i + int(self.width * self.height / 8 * 2)]
+                temp4 = buf[i + int(self.width * self.height / 8 * 3)]
+                buf2 = ((temp1 & 0xC0) >> 6) | ((temp2 & 0xC0) >> 4) | ((temp3 & 0xC0) >> 2) | (temp4 & 0xC0)
+                buf1 = ((temp1 & 0x30) >> 4) | ((temp2 & 0x30) >> 2) | (temp3 & 0x30) | ((temp4 & 0x30) << 2)
+                self.send_data(buf1)
+                self.send_data(buf2)
+                
+            self.send_command(DISPLAY_REFRESH)
+            self.wait_until_idle()
+        except Exception as e:
+            error_msg = f"Error displaying 4Gray: {str(e)}"
+            print(error_msg)
+            traceback.print_exc()
+            
+            if self.handle_errors:
+                print("Falling back to mock mode after display error")
+                self.mock_mode = True
+            else:
+                raise RuntimeError(error_msg) 

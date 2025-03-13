@@ -4,6 +4,7 @@ EInk Message Display Script
 
 A simple script to display messages on the EInk display.
 Works in both NVME-compatible mode and regular mode.
+Uses the manufacturer's approach with 4Gray mode.
 
 Usage:
   python3 eink_message.py "Your message here"
@@ -17,7 +18,12 @@ import os
 import sys
 import time
 import argparse
+import logging
 from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 # Add the parent directory to the path
 script_dir = Path(__file__).resolve().parent
@@ -25,7 +31,7 @@ project_dir = script_dir.parent.parent
 sys.path.insert(0, str(project_dir))
 
 def display_message(message, nvme_compatible=False, mock_mode=False, font_size=36, busy_timeout=10):
-    """Display a message on the EInk display"""
+    """Display a message on the EInk display using manufacturer's approach"""
     # Set environment variables
     if nvme_compatible:
         os.environ['NVME_COMPATIBLE'] = '1'
@@ -58,29 +64,62 @@ def display_message(message, nvme_compatible=False, mock_mode=False, font_size=3
             print(f"  MOSI_PIN: {MOSI_PIN}")
             print(f"  SCK_PIN: {SCK_PIN}")
         
-        # Initialize the display
-        epd.init()
+        # Initialize the display in 4Gray mode (like manufacturer example)
+        epd.init(0)  # 0 = 4Gray mode
         print("Display initialized")
         
         # Clear the display
         print("Clearing display...")
-        epd.Clear()
+        epd.Clear(0xFF, 0)  # Clear with white (0xFF) in 4Gray mode
         print("Display cleared")
-        
-        # Display the message (handle multiline messages)
-        print("Displaying message:")
-        print(message)
         
         # Replace escaped newlines with actual newlines
         if '\\n' in message:
             message = message.replace('\\n', '\n')
         
+        # Create a new image with the display dimensions (rotated like manufacturer example)
+        print("Creating image...")
+        image = Image.new('L', (epd.height, epd.width), 255)  # 'L' = 8-bit grayscale, 255 = white
+        draw = ImageDraw.Draw(image)
+        
+        # Try to load a font
+        font = None
+        try:
+            # Try common system font paths
+            font_paths = [
+                '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+                '/usr/share/fonts/TTF/DejaVuSans.ttf',
+                '/usr/share/fonts/dejavu/DejaVuSans.ttf',
+                '/System/Library/Fonts/Helvetica.ttc',
+                'C:\\Windows\\Fonts\\Arial.ttf'
+            ]
+            
+            for path in font_paths:
+                if os.path.exists(path):
+                    font = ImageFont.truetype(path, font_size)
+                    print(f"Using font: {path}")
+                    break
+                    
+            if font is None:
+                print("No TrueType fonts found, using default")
+                font = ImageFont.load_default()
+        except Exception as e:
+            print(f"Error loading font: {e}")
+            font = ImageFont.load_default()
+        
+        # Draw the message
+        print("Drawing message:")
+        print(message)
         lines = message.split('\n')
         y_position = 10
         for line in lines:
-            print(f"Displaying line at y={y_position}: {line}")
-            epd.display_text(line, 10, y_position, font_size)
+            print(f"Drawing line at y={y_position}: {line}")
+            draw.text((10, y_position), line, font=font, fill=0)  # 0 = black
             y_position += int(font_size * 1.5)  # Space lines based on font size
+        
+        # Display the image using 4Gray mode (like manufacturer example)
+        print("Displaying image...")
+        epd.display_4Gray(epd.getbuffer_4Gray(image))
         
         # Sleep the display to save power
         print("Putting display to sleep...")
