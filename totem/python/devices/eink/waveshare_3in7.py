@@ -344,7 +344,7 @@ class WaveshareEPD3in7:
                         import spidev
                         self.spi = spidev.SpiDev()
                         self.spi.open(0, 0)
-                        self.spi.max_speed_hz = 10000000  # 10MHz
+                        self.spi.max_speed_hz = 4000000  # 4MHz to match manufacturer's setting
                         self.spi.mode = 0
                         print("Hardware SPI initialized with spidev")
                     except Exception as e:
@@ -480,26 +480,48 @@ class WaveshareEPD3in7:
                 raise RuntimeError(error_msg)
     
     def _digital_write(self, pin, value):
-        """Write to a GPIO pin"""
+        """Write a value to a GPIO pin"""
         if self.mock_mode:
-            print(f"Mock digital write: pin={pin}, value={value}")
             return
-            
+        
+        if pin == RST_PIN:
+            pin_name = "RST"
+        elif pin == DC_PIN:
+            pin_name = "DC"
+        elif pin == CS_PIN:
+            pin_name = "CS"
+        elif pin == BUSY_PIN:
+            pin_name = "BUSY"
+        elif pin == MOSI_PIN:
+            pin_name = "MOSI"
+        elif pin == SCK_PIN:
+            pin_name = "SCK"
+        else:
+            pin_name = str(pin)
+        
+        logging.debug(f"Setting {pin_name}_PIN ({pin}) to {'HIGH' if value else 'LOW'}")
+        
         try:
-            if self.using_rpi_gpio:
-                GPIO.output(pin, value)
+            if LGPIO_AVAILABLE and self.gpio_handle is not None:
+                if pin in self.pin_handles:
+                    lgpio.gpio_write(self.gpio_handle, pin, value)
+                else:
+                    logging.warning(f"Pin {pin} not claimed")
+            elif GPIO_AVAILABLE:
+                # For CS pin with hardware SPI, let spidev handle it 
+                # If we're using hardware SPI and it's the CS pin, skip
+                if pin == CS_PIN and not self.using_sw_spi and hasattr(self, 'spi'):
+                    # Let spidev handle CS in hardware mode
+                    pass
+                else:
+                    GPIO.output(pin, value)
             else:
-                lgpio.gpio_write(self.gpio_handle, pin, value)
+                logging.warning("No GPIO library available")
         except Exception as e:
-            error_msg = f"Error writing to GPIO pin {pin}: {str(e)}"
-            print(error_msg)
-            
             if self.handle_errors:
-                # Fall back to mock mode
-                print("Falling back to mock mode after GPIO error")
-                self.mock_mode = True
+                logging.error(f"Error setting pin {pin}: {e}")
             else:
-                raise GPIOError(error_msg)
+                raise GPIOError(f"Could not set GPIO pin {pin}: {e}")
     
     def _digital_read(self, pin):
         """Read from a GPIO pin"""
@@ -644,9 +666,9 @@ class WaveshareEPD3in7:
             return
             
         try:
-            # Wait for busy pin to be high (not busy)
+            # Wait for busy pin to be low (not busy)
             print("Waiting for display to be ready...")
-            logging.log(debug_level, f"Waiting for BUSY_PIN ({BUSY_PIN}) to go high...")
+            logging.log(debug_level, f"Waiting for BUSY_PIN ({BUSY_PIN}) to go low...")
             
             # First, verify we can read the busy pin
             try:
@@ -661,12 +683,12 @@ class WaveshareEPD3in7:
                 else:
                     raise
             
-            # Now wait for it to change
+            # Now wait for it to change - NOTE: Manufacturer's code indicates 1 is busy, 0 is idle
             start_time = time.time()
             poll_count = 0
             timeout_occurred = False
             
-            while self._digital_read(BUSY_PIN) == 0:
+            while self._digital_read(BUSY_PIN) == 1:  # 1 means busy, 0 means idle
                 time.sleep(0.1)
                 poll_count += 1
                 
