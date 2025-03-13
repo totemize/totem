@@ -5,12 +5,13 @@ import path from 'path';
 // Create a variable to store the interval ID for cleanup
 let intervalId: NodeJS.Timeout;
 
+const browser = await chromium.launch();
+console.log('Browser launched');
+
 const main = async () => {
     console.log('Starting screenshot capture...');
     try {
-        const browser = await chromium.launch();
-        console.log('Browser launched');
-        
+        const startTime = Date.now();
         const context = await browser.newContext();
         const page = await context.newPage();
         console.log('Page created');
@@ -26,8 +27,8 @@ const main = async () => {
         const screenshotBuffer = await page.screenshot({ type: 'png' });
         console.log('Screenshot captured');
         
-        await browser.close();
-        console.log('Browser closed');
+        const endTime = Date.now();
+        console.log(`Time taken: ${endTime - startTime}ms`);
         
         // Use a relative path instead of __dirname to avoid linter errors
         const outputPath = '/tmp/totem.png';
