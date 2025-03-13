@@ -550,6 +550,11 @@ class Driver(EInkDeviceInterface):
         # Clear with white color (0xFF) in 4Gray mode (0)
         self.epd.Clear(0xFF, 0)  # Clear with white color in 4Gray mode
     
+    def Clear(self, clear_color=0xFF, mode=0):
+        """Alias for clear() method to maintain compatibility with WaveshareEPD3in7."""
+        print(f"Driver.Clear({clear_color}, {mode}) called")
+        self.epd.Clear(clear_color, mode)
+    
     def display_image(self, image):
         """Display an image on the e-ink screen."""
         print("Driver.display_image() called")
@@ -578,4 +583,9 @@ class Driver(EInkDeviceInterface):
     def close(self):
         """Clean up resources."""
         print("Driver.close() called")
-        self.epd.close() 
+        self.epd.close()
+        
+    def display_text(self, text, x=10, y=10, font_size=24, text_color="black", background_color="white"):
+        """Display text on the e-ink screen."""
+        print(f"Driver.display_text() called with: '{text}', pos=({x},{y}), font={font_size}, colors=({text_color}, {background_color})")
+        self.epd.display_text(text, x, y, font_size, text_color, background_color) 
