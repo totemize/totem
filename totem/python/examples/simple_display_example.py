@@ -23,7 +23,7 @@ from managers.display_manager import DisplayManager
 def main():
     """Main function to demonstrate simple e-ink display usage"""
     parser = argparse.ArgumentParser(description='Simple E-Ink Display Example')
-    parser.add_argument('text', nargs='?', default="Hello from Totem!", help='Text to display')
+    parser.add_argument('text', nargs='?', default="totem", help='Text to display')
     parser.add_argument('--image', type=str, help='Path to an image file to display')
     parser.add_argument('--mock', action='store_true', help='Run in mock mode')
     parser.add_argument('--service', action='store_true', help='Use the eink service instead of direct hardware access')

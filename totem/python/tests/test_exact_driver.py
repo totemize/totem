@@ -35,7 +35,7 @@ def main():
         os.environ['NVME_COMPATIBLE'] = '1'
     
     try:
-        logging.info("E-ink Display Test (Manufacturer's Approach)")
+        logging.info("E-ink Display Test")
         
         # Initialize the display
         epd = WaveshareEPD3in7()
