@@ -117,6 +117,7 @@ class EInkService:
         logger.info("Initializing EInk Service")
         self.stop_event = threading.Event()
         self.display = None
+        self.eink = None  # Add this for backward compatibility with old code
         self.socket_server = None
         self.clients = []
         self.command_queue = []
@@ -278,6 +279,20 @@ class EInkService:
                     logger.error("Failed to initialize display even in mock mode")
                     return False
             
+            # Backward compatibility: If there's a reference to self.eink, set it up
+            if hasattr(self, 'eink') and self.eink is None and self.display is not None:
+                logger.info("Setting up backward compatibility for eink attribute")
+                class EinkWrapper:
+                    def __init__(self, display):
+                        self.driver = display
+                    
+                    def initialize(self):
+                        if hasattr(self.driver, 'init'):
+                            return self.driver.init()
+                        return None
+                        
+                self.eink = EinkWrapper(self.display)
+            
             # Mark as initialized
             self.initialized = True
             logger.info("Display initialized successfully")
@@ -323,20 +338,43 @@ class EInkService:
         if hasattr(self, 'server_thread') and self.server_thread.is_alive():
             self.server_thread.join(timeout=5.0)
             
-        # Clean up resources
-        if self.display:
+        # Clean up display resources - try both self.display and self.eink for compatibility
+        # First try with self.display
+        if hasattr(self, 'display') and self.display is not None:
             try:
                 # Put display to sleep
                 logger.info("Putting display to sleep before shutdown")
-                if hasattr(self.display.driver, 'sleep'):
-                    self.display.driver.sleep()
+                if hasattr(self.display, 'sleep'):
+                    self.display.sleep()
                 
                 # Perform cleanup
-                logger.info("Cleaning up hardware resources")
-                self.display.cleanup()
+                logger.info("Cleaning up hardware resources (display)")
+                if hasattr(self.display, 'cleanup'):
+                    self.display.cleanup()
+                elif hasattr(self.display, 'close'):
+                    self.display.close()
             except Exception as e:
-                logger.error(f"Error during cleanup: {e}")
+                logger.error(f"Error during display cleanup: {e}")
             self.display = None
+        
+        # Then try with self.eink for backward compatibility
+        if hasattr(self, 'eink') and self.eink is not None:
+            try:
+                logger.info("Cleaning up hardware resources (eink)")
+                if hasattr(self.eink, 'driver'):
+                    driver = self.eink.driver
+                    if hasattr(driver, 'sleep'):
+                        logger.info("Putting eink driver to sleep")
+                        driver.sleep()
+                    if hasattr(driver, 'cleanup'):
+                        logger.info("Cleaning up eink driver")
+                        driver.cleanup()
+                    elif hasattr(driver, 'close'):
+                        logger.info("Closing eink driver")
+                        driver.close()
+            except Exception as e:
+                logger.error(f"Error during eink driver cleanup: {e}")
+            self.eink = None
             
         # Remove socket file if using Unix sockets
         if not self.use_tcp and hasattr(self, 'socket_path') and os.path.exists(self.socket_path):
@@ -755,13 +793,35 @@ class EInkService:
         """Clean up resources"""
         logger.info("Cleaning up resources")
         
-        # Close the display
-        if hasattr(self, 'display') and self.display is not None:
-            try:
-                logger.info("Closing display")
-                self.display.close()
-            except Exception as e:
-                logger.error(f"Error closing display: {e}")
+        # Clean up display - try both self.display and self.eink for compatibility
+        try:
+            # First try using display directly
+            if hasattr(self, 'display') and self.display is not None:
+                try:
+                    logger.info("Closing display")
+                    if hasattr(self.display, 'close'):
+                        self.display.close()
+                    elif hasattr(self.display, 'cleanup'):
+                        self.display.cleanup()
+                except Exception as e:
+                    logger.error(f"Error closing display: {e}")
+                self.display = None
+            
+            # Also try eink for backward compatibility
+            if hasattr(self, 'eink') and self.eink is not None:
+                try:
+                    logger.info("Cleaning up eink driver")
+                    if hasattr(self.eink, 'driver') and self.eink.driver is not None:
+                        if hasattr(self.eink.driver, 'close'):
+                            self.eink.driver.close()
+                        elif hasattr(self.eink.driver, 'cleanup'):
+                            self.eink.driver.cleanup()
+                except Exception as e:
+                    logger.error(f"Error cleaning up eink driver: {e}")
+                self.eink = None
+                
+        except Exception as e:
+            logger.error(f"Error during display cleanup: {e}")
         
         # Close the socket server
         if hasattr(self, 'socket_server') and self.socket_server is not None:
@@ -796,6 +856,19 @@ class EInkService:
             try:
                 self.display = MockEPD()
                 self.display.init()
+                
+                # Set up backward compatibility wrapper
+                class EinkWrapper:
+                    def __init__(self, display):
+                        self.driver = display
+                    
+                    def initialize(self):
+                        if hasattr(self.driver, 'init'):
+                            return self.driver.init()
+                        return None
+                
+                self.eink = EinkWrapper(self.display)
+                
                 self.initialized = True
                 logger.info("Mock display initialized successfully")
                 return True
@@ -861,6 +934,18 @@ class EInkService:
                 # Test display to confirm it works
                 self.display.init()
                 self.display.Clear()
+                
+                # Set up backward compatibility wrapper
+                class EinkWrapper:
+                    def __init__(self, display):
+                        self.driver = display
+                    
+                    def initialize(self):
+                        if hasattr(self.driver, 'init'):
+                            return self.driver.init()
+                        return None
+                
+                self.eink = EinkWrapper(self.display)
                 
                 logger.info("Display initialized successfully")
                 self.initialized = True
