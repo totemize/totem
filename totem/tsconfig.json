@@ -11,7 +11,7 @@
   },
   "include": [
     "*.ts"
-, "bitmap-pipe/src/utils.ts", "bitmap-pipe/src/index.ts"  ],
+, "screen-pipe/src/utils.ts", "screen-pipe/src/index.ts"  ],
   "exclude": [
     "node_modules",
     "dist"

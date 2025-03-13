@@ -1,11 +1,21 @@
 import { bitmapToBase64, bitmapToBase64Sync } from './utils';
 import * as net from 'net';
+import sharp from 'sharp';
 
 // Example path to a bitmap file
-const image_path = '/tmp/totem.png';
+const png_path = '/tmp/totem.png';
+const bmp_path = '/tmp/totem.bmp';
+
+//convert the png image to a bmp image to the bmp path 
+const convertPngToBmp = async () => {
+  const pngImage = sharp(png_path);
+  await pngImage.toFile(bmp_path);
+}
+
+convertPngToBmp();
+
 const action = 'display_image';
-const image_format = 'png';
-const request = { action, image_format, image_path };
+const request = { action,  bmp_path };
 
 const main = async () => {
   try {
