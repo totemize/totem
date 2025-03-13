@@ -28,11 +28,14 @@ args = parser.parse_args()
 def import_test_module(module_name):
     """Import a test module dynamically"""
     try:
-        # Check if the module exists
-        module_path = os.path.join(script_dir, f"{module_name}.py")
+        # Check if the module exists in the eink subdirectory first
+        module_path = os.path.join(script_dir, "eink", f"{module_name}.py")
         if not os.path.exists(module_path):
-            logger.error(f"Test module '{module_name}.py' not found")
-            return None
+            # If not found in eink subdirectory, check in the main directory
+            module_path = os.path.join(script_dir, f"{module_name}.py")
+            if not os.path.exists(module_path):
+                logger.error(f"Test module '{module_name}.py' not found in tests or tests/eink directory")
+                return None
             
         # Import the module
         spec = importlib.util.spec_from_file_location(module_name, module_path)
