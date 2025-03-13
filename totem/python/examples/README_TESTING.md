@@ -24,4 +24,11 @@ We've created several tools to help test the e-ink display:
      - `--no-resize`: Keep the original image size
      - `--mock`: Run in mock mode (no hardware required)
 
+5. **Service Image Display Script**: `python/examples/service_display_image.py`
+   - This script demonstrates how to display an image file using the e-ink service.
+   - Run with: `python3 ./service_display_image.py [/path/to/image.png]`
+   - If no image path is provided, it will use the default bitmap sample from the assets folder.
+   - Requires the e-ink service to be running (`sudo poetry run eink-service`)
+   - Uses the EInkClient to communicate with the service
+
 These tools should help with testing and debugging the e-ink display.
