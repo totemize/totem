@@ -1342,6 +1342,30 @@ def run_service(debug_timeout=None):
                     logger.warning("Socket file exists but verification failed, service may not be fully operational")
             else:
                 logger.error(f"Socket file not found at {socket_path}, service is not operational")
+        
+        # Main service loop - wait for timeout or termination
+        if debug_timeout:
+            logger.info(f"Entering main loop, will exit after {debug_timeout} seconds")
+            try:
+                # Wait until the end time or until service is no longer initialized
+                while time.time() < end_time and 'service' in locals() and service.initialized:
+                    # Sleep for a short time to prevent CPU hogging
+                    time.sleep(0.1)
+                
+                # Log the reason for exiting the loop
+                if time.time() >= end_time:
+                    logger.info(f"Debug timeout of {debug_timeout} seconds reached, exiting")
+                elif not service.initialized:
+                    logger.info("Service is no longer initialized, exiting")
+                else:
+                    logger.info("Exiting main loop for unknown reason")
+            except KeyboardInterrupt:
+                logger.info("Keyboard interrupt received in main loop, shutting down")
+        else:
+            logger.info("No timeout set, service will run until manually terminated")
+            # In non-debug mode, we would normally block here indefinitely
+            # But since we're using a separate thread for command processing,
+            # we can just return and let the process continue running
     
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received, shutting down")
