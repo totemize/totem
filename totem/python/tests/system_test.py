@@ -111,10 +111,17 @@ def run_diagnostics():
     """Run E-ink diagnostics"""
     logger.info("Running E-ink diagnostics")
     try:
+        # Import the module without running main()
         module = import_test_module("test_eink_diagnostics")
         if module:
-            module.main()
-            return True
+            # Only run the GPIO pins test which is non-invasive
+            if hasattr(module, 'test_gpio_pins'):
+                logger.info("Running GPIO pin diagnostics")
+                success = module.test_gpio_pins()
+                return success
+            else:
+                logger.warning("test_eink_diagnostics.py doesn't have test_gpio_pins function")
+                return False
         return False
     except Exception as e:
         logger.error(f"Error running diagnostics: {e}")
