@@ -13,7 +13,8 @@ from pathlib import Path
 # Add the parent directory to path to import from the project
 script_dir = os.path.dirname(os.path.abspath(__file__))
 python_dir = os.path.dirname(script_dir)
-sys.path.insert(0, os.path.dirname(python_dir))
+totem_dir = os.path.dirname(python_dir)
+sys.path.insert(0, totem_dir)
 
 # Configure logging
 logging.basicConfig(
@@ -29,19 +30,20 @@ os.environ['EINK_CS_PIN'] = '7'  # Use pin 7 instead of pin 8 for CS
 def test_eink_hardware():
     """Test the EInk display with hardware access"""
     try:
-        # First try direct import
         try:
             from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
             logger.info("Imported from python.devices.eink.waveshare_3in7")
-        except ImportError:
-            # Try relative import
+        except ImportError as e:
+            logger.warning(f"First import attempt failed: {e}")
             try:
-                from ..devices.eink.waveshare_3in7 import WaveshareEPD3in7
-                logger.info("Imported from ..devices.eink.waveshare_3in7")
-            except ImportError:
-                # Try absolute import from project root
                 from totem.python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
                 logger.info("Imported from totem.python.devices.eink.waveshare_3in7")
+            except ImportError as e:
+                logger.warning(f"Second import attempt failed: {e}")
+                logger.info("Trying direct import...")
+                sys.path.append('/home/totem/totem')
+                from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
+                logger.info("Imported with explicit path")
         
         logger.info("Initializing EInk display with alternative pins")
         logger.info(f"Using CS_PIN = {os.environ.get('EINK_CS_PIN', '7')}")
@@ -82,6 +84,7 @@ def test_eink_hardware():
 
 if __name__ == "__main__":
     logger.info("Starting EInk test with alternative pins")
+    logger.info(f"Python path: {sys.path}")
     success = test_eink_hardware()
     if success:
         logger.info("Test completed successfully")
