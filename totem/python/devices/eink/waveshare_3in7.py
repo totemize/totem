@@ -67,10 +67,19 @@ POWER_SAVING = 0xE3
 # These pins can be overridden by environment variables:
 # - USE_ALT_EINK_PINS=1 to enable using alternative pins
 # - EINK_RST_PIN, EINK_DC_PIN, EINK_CS_PIN, EINK_BUSY_PIN to set specific pins
+# - USE_SW_SPI=1 to use software SPI instead of hardware SPI
+# - EINK_MOSI_PIN, EINK_SCK_PIN for software SPI pins
 RST_PIN = int(os.environ.get('EINK_RST_PIN', 17)) if os.environ.get('USE_ALT_EINK_PINS') else 17
 DC_PIN = int(os.environ.get('EINK_DC_PIN', 25)) if os.environ.get('USE_ALT_EINK_PINS') else 25
 CS_PIN = int(os.environ.get('EINK_CS_PIN', 7)) if os.environ.get('USE_ALT_EINK_PINS') else 8  # Default to 8, override to 7
 BUSY_PIN = int(os.environ.get('EINK_BUSY_PIN', 24)) if os.environ.get('USE_ALT_EINK_PINS') else 24
+
+# Software SPI pins (only used if USE_SW_SPI=1)
+MOSI_PIN = int(os.environ.get('EINK_MOSI_PIN', 10))  # GPIO 10 = MOSI
+SCK_PIN = int(os.environ.get('EINK_SCK_PIN', 11))    # GPIO 11 = SCK
+
+# Flag to use software SPI
+USE_SW_SPI = os.environ.get('USE_SW_SPI', '0') == '1'
 
 # Display resolution
 EPD_WIDTH = 280
@@ -101,6 +110,7 @@ class WaveshareEPD3in7:
         self.initialized = False
         self.mock_mode = False
         self.using_rpi_gpio = False
+        self.using_sw_spi = USE_SW_SPI
         self.hardware_type = self._detect_hardware()
         self.handle_errors = os.environ.get('EINK_HANDLE_ERRORS', '1') == '1'
         
@@ -178,15 +188,18 @@ class WaveshareEPD3in7:
         if not os.path.exists('/dev/gpiochip0'):
             raise GPIOError("GPIO device not available: /dev/gpiochip0")
             
-        if not os.path.exists('/dev/spidev0.0'):
-            raise GPIOError("SPI device not available: /dev/spidev0.0")
-            
-        # Check permissions
+        # Only check SPI device if not using software SPI
+        if not self.using_sw_spi:
+            if not os.path.exists('/dev/spidev0.0'):
+                raise GPIOError("SPI device not available: /dev/spidev0.0")
+                
+            # Check permissions
+            if not os.access('/dev/spidev0.0', os.R_OK | os.W_OK):
+                raise GPIOError("No permission to access /dev/spidev0.0")
+        
+        # Check permissions for GPIO
         if not os.access('/dev/gpiochip0', os.R_OK | os.W_OK):
             raise GPIOError("No permission to access /dev/gpiochip0")
-            
-        if not os.access('/dev/spidev0.0', os.R_OK | os.W_OK):
-            raise GPIOError("No permission to access /dev/spidev0.0")
         
         try:
             # Check if GPIO pins are already in use
@@ -209,9 +222,17 @@ class WaveshareEPD3in7:
                 handle = lgpio.gpio_claim_input(self.gpio_handle, BUSY_PIN)
                 self.pin_handles[BUSY_PIN] = handle
                 
-                # Open SPI device
-                self.spi = lgpio.spi_open(0, 0, 10000000, 0)  # 10MHz, mode 0
-                print("SPI and GPIO initialized with lgpio")
+                # If using software SPI, set up MOSI and SCK pins
+                if self.using_sw_spi:
+                    print("Using software SPI implementation")
+                    for pin in [MOSI_PIN, SCK_PIN]:
+                        handle = lgpio.gpio_claim_output(self.gpio_handle, pin, 0)
+                        self.pin_handles[pin] = handle
+                    self.spi = None  # No hardware SPI
+                else:
+                    # Open SPI device
+                    self.spi = lgpio.spi_open(0, 0, 10000000, 0)  # 10MHz, mode 0
+                    print("SPI and GPIO initialized with lgpio")
                 
             # For other Raspberry Pi, use RPi.GPIO
             elif GPIO_AVAILABLE:
@@ -222,14 +243,22 @@ class WaveshareEPD3in7:
                 GPIO.setup(CS_PIN, GPIO.OUT)
                 GPIO.setup(BUSY_PIN, GPIO.IN)
                 
-                # Initialize SPI using spidev
-                import spidev
-                self.spi = spidev.SpiDev()
-                self.spi.open(0, 0)
-                self.spi.max_speed_hz = 10000000  # 10MHz
-                self.spi.mode = 0
+                # If using software SPI, set up MOSI and SCK pins
+                if self.using_sw_spi:
+                    print("Using software SPI implementation with RPi.GPIO")
+                    GPIO.setup(MOSI_PIN, GPIO.OUT)
+                    GPIO.setup(SCK_PIN, GPIO.OUT)
+                    self.spi = None  # No hardware SPI
+                else:
+                    # Initialize SPI using spidev
+                    import spidev
+                    self.spi = spidev.SpiDev()
+                    self.spi.open(0, 0)
+                    self.spi.max_speed_hz = 10000000  # 10MHz
+                    self.spi.mode = 0
+                
                 self.using_rpi_gpio = True
-                print("SPI and GPIO initialized with RPi.GPIO")
+                print("GPIO initialized with RPi.GPIO")
                 
             else:
                 raise GPIOError("No suitable GPIO/SPI library available")
@@ -386,59 +415,114 @@ class WaveshareEPD3in7:
             else:
                 raise GPIOError(error_msg)
     
+    def _spi_transfer(self, data):
+        """Transfer data over SPI (hardware or software)"""
+        if self.mock_mode:
+            return [0] * len(data) if isinstance(data, list) else 0
+            
+        if self.using_sw_spi:
+            return self._sw_spi_transfer(data)
+        else:
+            # Hardware SPI
+            if self.using_rpi_gpio:
+                return self.spi.xfer2(data if isinstance(data, list) else [data])
+            else:
+                # lgpio SPI
+                return lgpio.spi_xfer(self.spi, data if isinstance(data, list) else [data])[1]
+    
+    def _sw_spi_transfer(self, data):
+        """Software SPI implementation"""
+        if not isinstance(data, list):
+            data = [data]
+            
+        result = []
+        
+        for byte in data:
+            result_byte = 0
+            
+            # Transfer one byte, MSB first
+            for i in range(8):
+                bit = (byte >> (7-i)) & 0x01
+                
+                # Set MOSI pin
+                if self.using_rpi_gpio:
+                    GPIO.output(MOSI_PIN, bit)
+                else:
+                    lgpio.gpio_write(self.gpio_handle, MOSI_PIN, bit)
+                
+                # Pulse clock
+                if self.using_rpi_gpio:
+                    GPIO.output(SCK_PIN, 1)
+                    time.sleep(0.00001)  # 10µs delay
+                    GPIO.output(SCK_PIN, 0)
+                else:
+                    lgpio.gpio_write(self.gpio_handle, SCK_PIN, 1)
+                    time.sleep(0.00001)  # 10µs delay
+                    lgpio.gpio_write(self.gpio_handle, SCK_PIN, 0)
+                
+                # We're not reading data back in this implementation
+                
+            result.append(0)  # We're not reading data back
+            
+        return result
+    
     def send_command(self, command):
-        """Send a command to the display"""
+        """Send command to the display"""
         if self.mock_mode:
             print(f"Mock send command: {command:#x}")
             return
             
         try:
+            # Set DC pin to command mode (low)
             self._digital_write(DC_PIN, 0)
+            
+            # Set CS pin low to select the display
             self._digital_write(CS_PIN, 0)
             
-            if self.using_rpi_gpio:
-                self.spi.writebytes([command])
-            else:
-                lgpio.spi_write(self.spi, [command])
-                
+            # Send the command byte
+            self._spi_transfer(command)
+            
+            # Set CS pin high to deselect the display
             self._digital_write(CS_PIN, 1)
         except Exception as e:
-            error_msg = f"Error sending command {command:#x}: {str(e)}"
-            print(error_msg)
-            
+            print(f"Error sending command: {e}")
             if self.handle_errors:
-                # Fall back to mock mode
-                print("Falling back to mock mode after SPI error")
                 self.mock_mode = True
+                print(f"Mock send command: {command:#x}")
             else:
-                raise RuntimeError(error_msg)
+                raise
     
     def send_data(self, data):
         """Send data to the display"""
         if self.mock_mode:
-            print(f"Mock send data: {data:#x}")
+            if isinstance(data, list) and len(data) > 10:
+                print(f"Mock send data: {len(data)} bytes")
+            else:
+                print(f"Mock send data: {data}")
             return
             
         try:
+            # Set DC pin to data mode (high)
             self._digital_write(DC_PIN, 1)
+            
+            # Set CS pin low to select the display
             self._digital_write(CS_PIN, 0)
             
-            if self.using_rpi_gpio:
-                self.spi.writebytes([data])
-            else:
-                lgpio.spi_write(self.spi, [data])
-                
+            # Send the data
+            self._spi_transfer(data)
+            
+            # Set CS pin high to deselect the display
             self._digital_write(CS_PIN, 1)
         except Exception as e:
-            error_msg = f"Error sending data {data:#x}: {str(e)}"
-            print(error_msg)
-            
+            print(f"Error sending data: {e}")
             if self.handle_errors:
-                # Fall back to mock mode
-                print("Falling back to mock mode after SPI error")
                 self.mock_mode = True
+                if isinstance(data, list) and len(data) > 10:
+                    print(f"Mock send data: {len(data)} bytes")
+                else:
+                    print(f"Mock send data: {data}")
             else:
-                raise RuntimeError(error_msg)
+                raise
     
     def wait_until_idle(self):
         """Wait until the display is idle (not busy)"""
