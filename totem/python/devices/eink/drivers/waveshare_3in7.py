@@ -508,6 +508,56 @@ class WaveshareEPD3in7:
             if not self.handle_errors:
                 raise RuntimeError(error_msg)
 
+    def display_file(self, file_path, resize=True):
+        """
+        Display an image from a file path
+        Args:
+            file_path: Absolute path to the image file
+            resize: Whether to resize the image to fit the display (default: True)
+        """
+        print(f"WaveshareEPD3in7: display_file called with: '{file_path}', resize={resize}")
+        
+        if not self.initialized:
+            self.init(0)  # 4-Gray mode
+            
+        try:
+            from PIL import Image
+            
+            # Check if file exists
+            if not os.path.exists(file_path):
+                error_msg = f"File not found: {file_path}"
+                print(error_msg)
+                if not self.handle_errors:
+                    raise FileNotFoundError(error_msg)
+                return
+            
+            # Open the image file
+            print(f"Opening image file: {file_path}")
+            image = Image.open(file_path)
+            
+            # Convert to grayscale if needed
+            if image.mode != 'L':
+                print(f"Converting image from {image.mode} to grayscale")
+                image = image.convert('L')
+            
+            # Resize if needed
+            if resize and (image.width != self.width or image.height != self.height):
+                print(f"Resizing image from {image.width}x{image.height} to {self.width}x{self.height}")
+                image = image.resize((self.width, self.height), Image.LANCZOS)
+            
+            # Display the image
+            print("Sending image to display")
+            self.display(image)
+            print("Image sent to display successfully")
+            
+        except Exception as e:
+            error_msg = f"Error displaying image file: {e}"
+            print(error_msg)
+            traceback.print_exc()
+            
+            if not self.handle_errors:
+                raise RuntimeError(error_msg)
+
 class Driver(EInkDeviceInterface):
     """
     Driver implementation for Waveshare 3.7inch e-Paper HAT
@@ -588,4 +638,14 @@ class Driver(EInkDeviceInterface):
     def display_text(self, text, x=10, y=10, font_size=24, text_color="black", background_color="white"):
         """Display text on the e-ink screen."""
         print(f"Driver.display_text() called with: '{text}', pos=({x},{y}), font={font_size}, colors=({text_color}, {background_color})")
-        self.epd.display_text(text, x, y, font_size, text_color, background_color) 
+        self.epd.display_text(text, x, y, font_size, text_color, background_color)
+
+    def display_file(self, file_path, resize=True):
+        """Display an image from a file path on the e-ink screen.
+        
+        Args:
+            file_path: Absolute path to the image file
+            resize: Whether to resize the image to fit the display (default: True)
+        """
+        print(f"Driver.display_file() called with: '{file_path}', resize={resize}")
+        self.epd.display_file(file_path, resize) 
