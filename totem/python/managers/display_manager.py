@@ -63,7 +63,7 @@ class DisplayManager:
             
             if self.use_service:
                 # Use the EInk service
-                response = self.eink_client.clear_display()
+                response = self.eink_client.clear_screen()
                 if response.get('status') != 'queued':
                     logger.error(f"Failed to clear screen via service: {response.get('message', 'Unknown error')}")
                     raise Exception(f"Service error: {response.get('message', 'Unknown error')}")
