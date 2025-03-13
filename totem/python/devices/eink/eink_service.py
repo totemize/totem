@@ -664,31 +664,42 @@ class EInkService:
         if self.socket_server is None:
             logger.error("Socket server is not initialized, command processing loop cannot start")
             return
+        
+        # Start a dedicated thread for the command processing loop so we can
+        # return control to the main thread for timeout handling
+        def command_processor():
+            logger.info("Command processor thread started")
+            # Safety timeout to prevent indefinite hanging
+            last_activity_time = time.time()
+            safety_timeout = int(os.environ.get('EINK_SAFETY_TIMEOUT', str(INACTIVITY_TIMEOUT)))
             
-        # Safety timeout to prevent indefinite hanging
-        last_activity_time = time.time()
-        safety_timeout = int(os.environ.get('EINK_SAFETY_TIMEOUT', str(INACTIVITY_TIMEOUT)))
+            try:
+                while not self.stop_event.is_set() and self.initialized:
+                    # Process any queued commands
+                    self._process_queued_commands()
+                    
+                    # Inactivity check
+                    if time.time() - last_activity_time > safety_timeout:
+                        logger.warning(f"No activity for {safety_timeout} seconds, checking system health")
+                        # Just log for now, don't exit
+                        last_activity_time = time.time()  # Reset timer
+                    
+                    # Give the system a short break to prevent CPU hogging
+                    time.sleep(0.01)
+            
+            except Exception as e:
+                logger.error(f"Error in command processing loop: {e}")
+                logger.error(traceback.format_exc())
+                # Mark service as not initialized on error
+                self.initialized = False
+            finally:
+                # Log that we're exiting
+                logger.info("Command processor thread exiting")
         
-        try:
-            while not self.stop_event.is_set() and self.initialized:
-                # Process any queued commands
-                self._process_queued_commands()
-                
-                # Inactivity check
-                if time.time() - last_activity_time > safety_timeout:
-                    logger.warning(f"No activity for {safety_timeout} seconds, checking system health")
-                    # Just log for now, don't exit
-                    last_activity_time = time.time()  # Reset timer
-                
-                # Give the system a short break to prevent CPU hogging
-                time.sleep(0.01)
-        
-        except Exception as e:
-            logger.error(f"Error in command processing loop: {e}")
-            logger.error(traceback.format_exc())
-        finally:
-            # Clean up when the loop exits
-            self.cleanup()
+        # Start command processor in a separate thread
+        cmd_thread = threading.Thread(target=command_processor, daemon=True)
+        cmd_thread.start()
+        logger.info("Command processor thread launched, returning to main loop")
 
     def _handle_command(self, client_socket, data):
         """Handle a command received from a client"""
