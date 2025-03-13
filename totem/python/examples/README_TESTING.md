@@ -14,4 +14,13 @@ We've created several tools to help test the e-ink display:
    - This script installs the Waveshare e-Paper driver on the Raspberry Pi.
    - Run with: `sudo python3 install_waveshare_driver.py`
 
+4. **Image File Display Script**: `python/examples/display_image_file.py`
+   - This script demonstrates how to display an image file on the e-ink display.
+   - Run with: `sudo ./display_image_file.py /path/to/image.png`
+   - Supports various image formats (PNG, JPG, BMP, etc.)
+   - Automatically converts to grayscale and resizes to fit the display
+   - Options:
+     - `--no-resize`: Keep the original image size
+     - `--mock`: Run in mock mode (no hardware required)
+
 These tools should help with testing and debugging the e-ink display.
