@@ -64,6 +64,7 @@ eink-nvme-conflict-test = "tests.eink_nvme_conflict_test:main"
 eink-2in13-test = "tests.eink.test_2in13_eink:main"
 eink-spi-test = "tests.eink.eink_spi_test:main"
 eink-spi-alt-test = "tests.eink.eink_spi_alt_test:main"
+test-exact-driver = "tests.test_exact_driver:main"
 nfc-pn532-test = "tests.test_nfc_PNC532:main"
 
 # Storage tests

@@ -54,6 +54,7 @@ poetry run eink-pattern
 poetry run eink-quick-test
 poetry run eink-diag
 poetry run pi5-eink-test
+poetry run test-exact-driver  # Tests the consolidated Waveshare driver
 
 # Storage tests
 poetry run nvme-test
@@ -61,6 +62,26 @@ poetry run storage-test
 
 # GPIO test
 poetry run gpio-test
+```
+
+### Testing on Raspberry Pi
+
+When testing on a Raspberry Pi, you can use Poetry just as you would on a development machine:
+
+```bash
+# On the Raspberry Pi
+cd ~/totem/totem/python
+poetry install
+poetry run test-exact-driver  # Test the e-ink driver with manufacturer's code
+
+# Run with sudo if needed for hardware access
+sudo poetry run test-exact-driver
+```
+
+If you need to test from a remote machine, you can SSH into the Pi and run:
+
+```bash
+ssh totem@<pi-ip-address> "cd ~/totem/totem/python && poetry run test-exact-driver"
 ```
 
 ### Test Options
