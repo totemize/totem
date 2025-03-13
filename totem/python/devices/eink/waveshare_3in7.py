@@ -1042,30 +1042,39 @@ class WaveshareEPD3in7:
         img = image.convert('L')
         imwidth, imheight = img.size
         
-        buf = bytearray(int(imwidth * imheight / 4))
+        # Calculate buffer size correctly for 4Gray mode
+        # Each pixel needs 2 bits, so we need width*height*2/8 bytes
+        buf_size = int(imwidth * imheight * 2 / 8)
+        buf = bytearray(buf_size)
         pixels = img.load()
         
-        i = 0
+        # Process pixels and set buffer values
         for y in range(imheight):
             for x in range(imwidth):
-                # Set 2 bits per pixel for 4 gray levels
-                if x % 4 == 0 and x != 0:
-                    i += 1
+                # Get pixel value (0-255)
+                pixel = pixels[x, y]
                 
-                # Map pixel value to 2-bit grayscale (4 levels)
-                gray = 0
-                if pixels[x, y] >= 192:
-                    gray = 0x00  # White (GRAY4)
-                elif pixels[x, y] >= 128:
-                    gray = 0x01  # Light gray (GRAY3)
-                elif pixels[x, y] >= 64:
-                    gray = 0x02  # Dark gray (GRAY2)
+                # Convert to 2-bit grayscale (0-3)
+                gray_value = 0
+                if pixel >= 192:
+                    gray_value = 0  # White (GRAY4)
+                elif pixel >= 128:
+                    gray_value = 1  # Light gray (GRAY3)
+                elif pixel >= 64:
+                    gray_value = 2  # Dark gray (GRAY2)
                 else:
-                    gray = 0x03  # Black (GRAY1)
+                    gray_value = 3  # Black (GRAY1)
                 
-                # Set the bits in the buffer
-                value = (gray << ((3 - (x % 4)) * 2))
-                buf[i] |= value
+                # Calculate position in buffer
+                # Each byte holds 4 pixels (2 bits per pixel)
+                byte_index = int((y * imwidth + x) / 4)
+                bit_offset = (x % 4) * 2
+                
+                # Set the 2 bits for this pixel
+                # Clear the bits first
+                buf[byte_index] &= ~(0x03 << (6 - bit_offset))
+                # Set the new value
+                buf[byte_index] |= (gray_value << (6 - bit_offset))
         
         return buf
 
@@ -1106,15 +1115,23 @@ class WaveshareEPD3in7:
             
         try:
             self.send_command(DATA_START_TRANSMISSION_1)
-            for i in range(0, int(self.width * self.height / 8)):
-                temp1 = buf[i]
-                temp2 = buf[i + int(self.width * self.height / 8)]
-                temp3 = buf[i + int(self.width * self.height / 8 * 2)]
-                temp4 = buf[i + int(self.width * self.height / 8 * 3)]
-                buf2 = ((temp1 & 0xC0) >> 6) | ((temp2 & 0xC0) >> 4) | ((temp3 & 0xC0) >> 2) | (temp4 & 0xC0)
-                buf1 = ((temp1 & 0x30) >> 4) | ((temp2 & 0x30) >> 2) | (temp3 & 0x30) | ((temp4 & 0x30) << 2)
-                self.send_data(buf1)
-                self.send_data(buf2)
+            
+            # Calculate buffer size
+            buf_size = int(self.width * self.height * 2 / 8)
+            
+            # Process buffer in chunks of 2 bytes
+            for i in range(0, buf_size, 2):
+                if i + 1 < buf_size:
+                    temp1 = buf[i]
+                    temp2 = buf[i + 1]
+                    self.send_data((temp1 >> 4) & 0xFF)
+                    self.send_data(((temp1 & 0x0F) << 4) | ((temp2 >> 4) & 0x0F))
+                    self.send_data((temp2 & 0x0F) << 4)
+                else:
+                    # Handle the case where buffer size is odd
+                    temp1 = buf[i]
+                    self.send_data((temp1 >> 4) & 0xFF)
+                    self.send_data((temp1 & 0x0F) << 4)
                 
             self.send_command(DISPLAY_REFRESH)
             self.wait_until_idle()
