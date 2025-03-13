@@ -70,9 +70,10 @@ POWER_SAVING = 0xE3
 # - EINK_RST_PIN, EINK_DC_PIN, EINK_CS_PIN, EINK_BUSY_PIN to set specific pins
 # - USE_SW_SPI=1 to use software SPI instead of hardware SPI
 # - EINK_MOSI_PIN, EINK_SCK_PIN for software SPI pins
+# - NVME_COMPATIBLE=1 to use pins that don't conflict with NVME hat
 RST_PIN = int(os.environ.get('EINK_RST_PIN', 17)) if os.environ.get('USE_ALT_EINK_PINS') else 17
 DC_PIN = int(os.environ.get('EINK_DC_PIN', 25)) if os.environ.get('USE_ALT_EINK_PINS') else 25
-CS_PIN = int(os.environ.get('EINK_CS_PIN', 7)) if os.environ.get('USE_ALT_EINK_PINS') else 8  # Default to 8, override to 7
+CS_PIN = int(os.environ.get('EINK_CS_PIN', 9)) if os.environ.get('USE_ALT_EINK_PINS') else 8
 BUSY_PIN = int(os.environ.get('EINK_BUSY_PIN', 24)) if os.environ.get('USE_ALT_EINK_PINS') else 24
 
 # Software SPI pins (only used if USE_SW_SPI=1)
@@ -80,7 +81,21 @@ MOSI_PIN = int(os.environ.get('EINK_MOSI_PIN', 10))  # GPIO 10 = MOSI
 SCK_PIN = int(os.environ.get('EINK_SCK_PIN', 11))    # GPIO 11 = SCK
 
 # Flag to use software SPI
-USE_SW_SPI = os.environ.get('USE_SW_SPI', '0') == '1'
+USE_SW_SPI = os.environ.get('USE_SW_SPI', '0') == '1' or os.environ.get('NVME_COMPATIBLE', '0') == '1'
+
+# Flag for NVME compatibility (uses alternative pins and software SPI)
+NVME_COMPATIBLE = os.environ.get('NVME_COMPATIBLE', '0') == '1'
+
+# If NVME_COMPATIBLE is set, override pins to avoid SPI conflicts
+if NVME_COMPATIBLE:
+    # Use pins that don't conflict with SPI0 or SPI1
+    RST_PIN = int(os.environ.get('EINK_RST_PIN', 17))
+    DC_PIN = int(os.environ.get('EINK_DC_PIN', 25))
+    CS_PIN = int(os.environ.get('EINK_CS_PIN', 9))
+    BUSY_PIN = int(os.environ.get('EINK_BUSY_PIN', 24))
+    MOSI_PIN = int(os.environ.get('EINK_MOSI_PIN', 22))  # Use non-SPI pin
+    SCK_PIN = int(os.environ.get('EINK_SCK_PIN', 23))    # Use non-SPI pin
+    USE_SW_SPI = True
 
 # Display resolution
 EPD_WIDTH = 280
@@ -109,12 +124,18 @@ class WaveshareEPD3in7:
         self.lut_wb = None     # Will be set during init
         self.lut_bb = None     # Will be set during init
         self.initialized = False
-        self.mock_mode = False
+        self.mock_mode = os.environ.get('EINK_MOCK_MODE', '0') == '1'
         self.using_rpi_gpio = False
         self.using_sw_spi = USE_SW_SPI
+        self.nvme_compatible = NVME_COMPATIBLE
         self.hardware_type = self._detect_hardware()
         self.handle_errors = os.environ.get('EINK_HANDLE_ERRORS', '1') == '1'
         self.busy_timeout = int(os.environ.get('EINK_BUSY_TIMEOUT', 10))  # Timeout in seconds for busy pin
+        
+        if self.nvme_compatible:
+            print("Running in NVME-compatible mode with software SPI")
+            print(f"Using pins: RST={RST_PIN}, DC={DC_PIN}, CS={CS_PIN}, BUSY={BUSY_PIN}")
+            print(f"Software SPI pins: MOSI={MOSI_PIN}, SCK={SCK_PIN}")
         
     def _detect_hardware(self):
         """
@@ -193,11 +214,19 @@ class WaveshareEPD3in7:
         # Only check SPI device if not using software SPI
         if not self.using_sw_spi:
             if not os.path.exists('/dev/spidev0.0'):
-                raise GPIOError("SPI device not available: /dev/spidev0.0")
+                if self.handle_errors:
+                    print("SPI device not available, falling back to software SPI")
+                    self.using_sw_spi = True
+                else:
+                    raise GPIOError("SPI device not available: /dev/spidev0.0")
                 
             # Check permissions
-            if not os.access('/dev/spidev0.0', os.R_OK | os.W_OK):
-                raise GPIOError("No permission to access /dev/spidev0.0")
+            elif not os.access('/dev/spidev0.0', os.R_OK | os.W_OK):
+                if self.handle_errors:
+                    print("No permission to access SPI device, falling back to software SPI")
+                    self.using_sw_spi = True
+                else:
+                    raise GPIOError("No permission to access /dev/spidev0.0")
         
         # Check permissions for GPIO
         if not os.access('/dev/gpiochip0', os.R_OK | os.W_OK):
@@ -208,59 +237,129 @@ class WaveshareEPD3in7:
             busy_pins, processes = self._check_conflicting_gpio_usage()
             if busy_pins and processes:
                 print(f"Warning: GPIO pins {busy_pins} may be in use by processes: {', '.join(processes)}")
-                # Continue anyway, but this might fail
+                
+                # If NVME_COMPATIBLE mode is enabled, we try to use pins that don't conflict
+                if self.nvme_compatible:
+                    print("NVME compatibility mode enabled, using alternative pins")
+                    # Pins have already been set at module level
+                else:
+                    print("Consider setting NVME_COMPATIBLE=1 to use non-conflicting pins")
             
             # For Raspberry Pi 5, we use lgpio
-            if self.hardware_type == 'pi5' and LGPIO_AVAILABLE:
-                print("Using Pi 5 compatible GPIO (gpiod) and SPI")
+            if self.hardware_type in ['pi5', 'pi4'] and LGPIO_AVAILABLE:
+                print(f"Using Pi {self.hardware_type} compatible GPIO (gpiod)")
                 self.gpio_handle = lgpio.gpiochip_open(0)
                 
-                # Configure pins
-                for pin in [RST_PIN, DC_PIN, CS_PIN]:
-                    handle = lgpio.gpio_claim_output(self.gpio_handle, pin, 0)
-                    self.pin_handles[pin] = handle
+                # Try to claim GPIO pins, with better error handling
+                pins_to_configure = [RST_PIN, DC_PIN, CS_PIN]
+                if self.using_sw_spi:
+                    pins_to_configure.extend([MOSI_PIN, SCK_PIN])
+                
+                for pin in pins_to_configure:
+                    try:
+                        handle = lgpio.gpio_claim_output(self.gpio_handle, pin, 0)
+                        self.pin_handles[pin] = handle
+                    except Exception as e:
+                        if self.handle_errors:
+                            print(f"Error claiming pin {pin}: {e}")
+                            print(f"Try setting NVME_COMPATIBLE=1 or manually specify an alternative pin")
+                            self.mock_mode = True
+                            return
+                        else:
+                            raise GPIOError(f"Could not claim GPIO pin {pin}: {e}")
                 
                 # Configure BUSY pin as input
-                handle = lgpio.gpio_claim_input(self.gpio_handle, BUSY_PIN)
-                self.pin_handles[BUSY_PIN] = handle
+                try:
+                    handle = lgpio.gpio_claim_input(self.gpio_handle, BUSY_PIN)
+                    self.pin_handles[BUSY_PIN] = handle
+                except Exception as e:
+                    if self.handle_errors:
+                        print(f"Error claiming BUSY pin {BUSY_PIN}: {e}")
+                        self.mock_mode = True
+                        return
+                    else:
+                        raise GPIOError(f"Could not claim BUSY pin {BUSY_PIN}: {e}")
                 
                 # If using software SPI, set up MOSI and SCK pins
                 if self.using_sw_spi:
-                    print("Using software SPI implementation")
-                    for pin in [MOSI_PIN, SCK_PIN]:
-                        handle = lgpio.gpio_claim_output(self.gpio_handle, pin, 0)
-                        self.pin_handles[pin] = handle
+                    print(f"Using software SPI with MOSI={MOSI_PIN}, SCK={SCK_PIN}")
                     self.spi = None  # No hardware SPI
                 else:
                     # Open SPI device
-                    self.spi = lgpio.spi_open(0, 0, 10000000, 0)  # 10MHz, mode 0
-                    print("SPI and GPIO initialized with lgpio")
+                    try:
+                        self.spi = lgpio.spi_open(0, 0, 10000000, 0)  # 10MHz, mode 0
+                        print("Hardware SPI initialized with lgpio")
+                    except Exception as e:
+                        print(f"Error opening SPI device: {e}")
+                        if self.handle_errors:
+                            print("Falling back to software SPI")
+                            self.using_sw_spi = True
+                            self.spi = None
+                            # Need to claim MOSI and SCK pins for software SPI
+                            for pin in [MOSI_PIN, SCK_PIN]:
+                                try:
+                                    handle = lgpio.gpio_claim_output(self.gpio_handle, pin, 0)
+                                    self.pin_handles[pin] = handle
+                                except:
+                                    print(f"Could not claim pin {pin} for software SPI")
+                                    self.mock_mode = True
+                                    return
+                        else:
+                            raise GPIOError(f"Could not open SPI device: {e}")
                 
             # For other Raspberry Pi, use RPi.GPIO
             elif GPIO_AVAILABLE:
-                print("Using RPi.GPIO for older Raspberry Pi")
+                print("Using RPi.GPIO for GPIO access")
                 # Set up GPIO pins
-                GPIO.setup(RST_PIN, GPIO.OUT)
-                GPIO.setup(DC_PIN, GPIO.OUT)
-                GPIO.setup(CS_PIN, GPIO.OUT)
-                GPIO.setup(BUSY_PIN, GPIO.IN)
+                GPIO.setwarnings(False)  # Disable warnings about pins already in use
                 
-                # If using software SPI, set up MOSI and SCK pins
+                # Set up GPIO pins with better error handling
+                pins_to_configure = {
+                    RST_PIN: GPIO.OUT,
+                    DC_PIN: GPIO.OUT,
+                    CS_PIN: GPIO.OUT,
+                    BUSY_PIN: GPIO.IN
+                }
+                
+                # Add SPI pins if using software SPI
                 if self.using_sw_spi:
-                    print("Using software SPI implementation with RPi.GPIO")
-                    GPIO.setup(MOSI_PIN, GPIO.OUT)
-                    GPIO.setup(SCK_PIN, GPIO.OUT)
-                    self.spi = None  # No hardware SPI
+                    pins_to_configure[MOSI_PIN] = GPIO.OUT
+                    pins_to_configure[SCK_PIN] = GPIO.OUT
+                
+                for pin, direction in pins_to_configure.items():
+                    try:
+                        GPIO.setup(pin, direction)
+                    except Exception as e:
+                        if self.handle_errors:
+                            print(f"Error setting up pin {pin}: {e}")
+                            self.mock_mode = True
+                            return
+                        else:
+                            raise GPIOError(f"Could not set up GPIO pin {pin}: {e}")
+                
+                # Set up hardware SPI if not using software SPI
+                if not self.using_sw_spi:
+                    try:
+                        # Initialize SPI using spidev
+                        import spidev
+                        self.spi = spidev.SpiDev()
+                        self.spi.open(0, 0)
+                        self.spi.max_speed_hz = 10000000  # 10MHz
+                        self.spi.mode = 0
+                        print("Hardware SPI initialized with spidev")
+                    except Exception as e:
+                        print(f"Error initializing hardware SPI: {e}")
+                        if self.handle_errors:
+                            print("Falling back to software SPI")
+                            self.using_sw_spi = True
+                            self.spi = None
+                        else:
+                            raise GPIOError(f"Could not initialize SPI: {e}")
                 else:
-                    # Initialize SPI using spidev
-                    import spidev
-                    self.spi = spidev.SpiDev()
-                    self.spi.open(0, 0)
-                    self.spi.max_speed_hz = 10000000  # 10MHz
-                    self.spi.mode = 0
+                    print(f"Using software SPI with MOSI={MOSI_PIN}, SCK={SCK_PIN}")
+                    self.spi = None
                 
                 self.using_rpi_gpio = True
-                print("GPIO initialized with RPi.GPIO")
                 
             else:
                 raise GPIOError("No suitable GPIO/SPI library available")
@@ -273,7 +372,11 @@ class WaveshareEPD3in7:
             # Clean up any partially initialized resources
             self.close()
             
-            raise GPIOError(error_msg)
+            if self.handle_errors:
+                print("Falling back to mock mode")
+                self.mock_mode = True
+            else:
+                raise GPIOError(error_msg)
     
     def init(self):
         """Initialize the e-Paper display"""
