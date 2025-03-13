@@ -51,6 +51,11 @@ build-backend = "poetry.core.masonry.api"
 system-test = "tests.system_test:main"
 serve = "service.main:start_server"
 
+# E-ink service
+eink-service = "scripts.start_eink_service:main"
+eink-service-stop = "scripts.stop_eink_service:main"
+eink-service-status = "scripts.eink_service_status:main"
+
 # E-ink display tests
 eink-debug = "tests.test_eink_debug:main"
 eink-pattern = "tests.test_eink_pattern:main"
