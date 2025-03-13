@@ -227,7 +227,7 @@ def wait_for_service_start(max_wait=10):
     logger.error(f"Service didn't start properly within {max_wait} seconds")
     return False
 
-def start_service(driver_name=None, use_tcp=False, verbose=False, force_cleanup=False, mock_mode=False):
+def start_service(driver_name=None, use_tcp=False, verbose=False, force_cleanup=False, mock_mode=False, debug_mode=False, debug_timeout=60):
     """Start the EInk service as a daemon process"""
     # Check if already running
     running, pid = is_service_running()
@@ -275,43 +275,68 @@ def start_service(driver_name=None, use_tcp=False, verbose=False, force_cleanup=
     if 'PYTHONPATH' not in env:
         env['PYTHONPATH'] = python_dir
     
-    # Start the service as a background process
+    # Build command
+    cmd = [sys.executable, service_script]
+    
+    # Add debug timeout if in debug mode
+    if debug_mode:
+        cmd.append(f'--timeout={debug_timeout}')
+        logger.info(f"Starting service in debug mode with {debug_timeout}s timeout")
+    
+    # Start the service as a background process or in the foreground for debug mode
     try:
         log_file = '/tmp/eink_service.log'
-        with open(log_file, 'w') as f:
-            process = subprocess.Popen(
-                [sys.executable, service_script],
-                stdout=f,
-                stderr=subprocess.STDOUT,
+        
+        if debug_mode:
+            # Run in foreground with live output for debugging
+            logger.info(f"Starting EInk service in foreground (debug mode)")
+            process = subprocess.run(
+                cmd,
                 env=env,
-                start_new_session=True  # Detach from parent process
+                check=False  # Don't raise an exception on non-zero exit
             )
-        
-        logger.info(f"Started EInk service process (PID: {process.pid})")
-        
-        # Wait for the service to start
-        if wait_for_service_start():
-            logger.info("EInk service started successfully")
-            return True
+            success = process.returncode == 0
+            if success:
+                logger.info("EInk service completed successfully in debug mode")
+            else:
+                logger.error(f"EInk service exited with error code {process.returncode} in debug mode")
+            return success
         else:
-            # Service didn't start properly, check the log
-            try:
-                with open(log_file, 'r') as f:
-                    log_content = f.read()
-                    logger.error(f"Service startup log:\n{log_content}")
-            except:
-                pass
-                
-            logger.error("EInk service failed to start properly")
+            # Normal background daemon mode
+            with open(log_file, 'w') as f:
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=f,
+                    stderr=subprocess.STDOUT,
+                    env=env,
+                    start_new_session=True  # Detach from parent process
+                )
             
-            # Try to kill the process
-            try:
-                os.kill(process.pid, signal.SIGTERM)
-                logger.info(f"Terminated process {process.pid}")
-            except:
-                pass
+            logger.info(f"Started EInk service process (PID: {process.pid})")
+            
+            # Wait for the service to start
+            if wait_for_service_start():
+                logger.info("EInk service started successfully")
+                return True
+            else:
+                # Service didn't start properly, check the log
+                try:
+                    with open(log_file, 'r') as f:
+                        log_content = f.read()
+                        logger.error(f"Service startup log:\n{log_content}")
+                except:
+                    pass
+                    
+                logger.error("EInk service failed to start properly")
                 
-            return False
+                # Try to kill the process
+                try:
+                    os.kill(process.pid, signal.SIGTERM)
+                    logger.info(f"Terminated process {process.pid}")
+                except:
+                    pass
+                    
+                return False
     except Exception as e:
         logger.error(f"Error starting EInk service: {e}")
         return False
@@ -386,32 +411,25 @@ def stop_service(force=False):
 
 def main():
     """Main function that parses command line arguments and runs the service"""
-    parser = argparse.ArgumentParser(description="Start or stop the EInk service")
-    
-    # Action
-    parser.add_argument("action", choices=["start", "stop", "restart", "status", "cleanup"], 
+    parser = argparse.ArgumentParser(description="Manage the EInk service")
+    parser.add_argument("action", choices=["start", "stop", "restart", "status", "cleanup"],
                         help="Action to perform")
+    parser.add_argument("--driver", help="Specify the display driver to use")
+    parser.add_argument("--tcp", action="store_true", help="Use TCP socket instead of Unix socket")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
+    parser.add_argument("--force", action="store_true", help="Force operations (stop/cleanup)")
+    parser.add_argument("--mock", action="store_true", help="Use mock display mode (no hardware)")
+    parser.add_argument("--debug", action="store_true", help="Run in debug mode with output to console and auto-exit")
+    parser.add_argument("--timeout", type=int, default=60, help="Timeout in seconds for debug mode (default: 60)")
     
-    # Driver option                        
-    parser.add_argument("--driver", help="E-ink display driver to use")
-    
-    # Connection options
-    parser.add_argument("--tcp", action="store_true", 
-                        help="Use TCP instead of Unix socket for service communication")
-    
-    # Logging options
-    parser.add_argument("--verbose", action="store_true", 
-                        help="Enable verbose logging")
-                        
-    # Force options
-    parser.add_argument("--force", action="store_true",
-                        help="Force operations like killing processes")
-                        
-    # Mock mode
-    parser.add_argument("--mock", action="store_true",
-                        help="Run in mock mode (no hardware access)")
-    
+    # Parse the arguments
     args = parser.parse_args()
+    
+    # Set up logging level
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
     
     if args.action == "status":
         # Check if the service is running
@@ -440,7 +458,8 @@ def main():
         stop_service(force=args.force)
         time.sleep(1)  # Give it a moment to shut down completely
         if start_service(driver_name=args.driver, use_tcp=args.tcp, verbose=args.verbose, 
-                        force_cleanup=args.force, mock_mode=args.mock):
+                        force_cleanup=args.force, mock_mode=args.mock, 
+                        debug_mode=args.debug, debug_timeout=args.timeout):
             print("EInk service restarted successfully")
             return 0
         else:
@@ -450,7 +469,8 @@ def main():
     elif args.action == "start":
         # Start the service
         if start_service(driver_name=args.driver, use_tcp=args.tcp, verbose=args.verbose, 
-                        force_cleanup=args.force, mock_mode=args.mock):
+                        force_cleanup=args.force, mock_mode=args.mock, 
+                        debug_mode=args.debug, debug_timeout=args.timeout):
             print("EInk service started successfully")
             return 0
         else:

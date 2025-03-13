@@ -23,6 +23,7 @@ import select
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from typing import Dict, Any, Optional, List, Tuple, Union
+import errno
 
 # Add the parent directory to path to import from the project
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -533,45 +534,74 @@ class EInkService:
         inputs = [self.socket_server]
         outputs = []
         
+        # Add a safety timeout to prevent indefinite hanging
+        last_activity_time = time.time()
+        safety_timeout = int(os.environ.get('EINK_SAFETY_TIMEOUT', str(INACTIVITY_TIMEOUT)))
+        
         try:
             while not self.stop_event.is_set():
                 # Use select with a timeout to allow checking the stop event
-                readable, writable, exceptional = select.select(
-                    inputs, outputs, inputs, 1.0)
-                
-                for s in readable:
-                    if s is self.socket_server:
-                        # New connection
-                        client_socket, address = self.socket_server.accept()
-                        client_socket.setblocking(0)
-                        inputs.append(client_socket)
-                        logger.info(f"New connection from {address}")
+                try:
+                    readable, writable, exceptional = select.select(
+                        inputs, outputs, inputs, 1.0)
+                    
+                    # Inactivity check - if no activity for a while, log and maybe exit
+                    if not readable and not writable and not exceptional:
+                        if time.time() - last_activity_time > safety_timeout:
+                            logger.warning(f"No activity for {safety_timeout} seconds, checking system health")
+                            # Just log for now, don't exit
+                            last_activity_time = time.time()  # Reset timer
                     else:
-                        # Existing client sending data
-                        try:
-                            data = s.recv(MAX_MSG_SIZE)
-                            if data:
-                                # Process the received command
-                                self._handle_command(s, data)
-                            else:
-                                # Connection closed by client
-                                logger.info("Client closed connection")
-                                inputs.remove(s)
+                        # Activity detected, reset the timer
+                        last_activity_time = time.time()
+                        
+                    for s in readable:
+                        if s is self.socket_server:
+                            # New connection
+                            client_socket, address = self.socket_server.accept()
+                            client_socket.setblocking(0)
+                            inputs.append(client_socket)
+                            logger.info(f"New connection from {address}")
+                        else:
+                            # Existing client sending data
+                            try:
+                                data = s.recv(MAX_MSG_SIZE)
+                                if data:
+                                    # Process the received command
+                                    self._handle_command(s, data)
+                                else:
+                                    # Connection closed by client
+                                    logger.info("Client closed connection")
+                                    inputs.remove(s)
+                                    s.close()
+                            except Exception as e:
+                                logger.error(f"Error handling client data: {e}")
+                                if s in inputs:
+                                    inputs.remove(s)
                                 s.close()
-                        except Exception as e:
-                            logger.error(f"Error handling client data: {e}")
-                            if s in inputs:
-                                inputs.remove(s)
-                            s.close()
+                    
+                    # Check for exceptional conditions
+                    for s in exceptional:
+                        logger.warning(f"Exceptional condition on socket")
+                        inputs.remove(s)
+                        s.close()
                 
-                # Check for exceptional conditions
-                for s in exceptional:
-                    logger.warning(f"Exceptional condition on socket")
-                    inputs.remove(s)
-                    s.close()
+                except select.error as e:
+                    # Handle select errors
+                    logger.error(f"Select error: {e}")
+                    # If the error is related to signal interrupts, just continue
+                    if e.args[0] == errno.EINTR:
+                        continue
+                    else:
+                        # For other errors, break the loop
+                        logger.error("Exiting command loop due to select error")
+                        break
                 
                 # Process any queued commands
                 self._process_queued_commands()
+                
+                # Give the system a short break to prevent CPU hogging
+                time.sleep(0.01)
         
         except Exception as e:
             logger.error(f"Error in command processing loop: {e}")
@@ -870,27 +900,100 @@ class EInkService:
         return False
 
 
-def run_service():
-    """Run the EInk service as a standalone process"""
+def run_service(debug_timeout=None):
+    """
+    Run the EInk service as a standalone process
+    
+    Args:
+        debug_timeout (int, optional): If provided, will exit the service after this many seconds.
+                                      Useful for testing and debugging.
+    """
+    start_time = time.time()
+    
     # Create and start service
     try:
-        service = EInkService()
-        service.start()
+        # Set up signal handlers to capture termination signals
+        def handle_termination(signum, frame):
+            logger.info(f"Received signal {signum}, shutting down EInk service")
+            # If service exists, stop it gracefully
+            if 'service' in locals() and hasattr(service, 'stop'):
+                service.stop()
+            # Exit the process
+            sys.exit(0)
+            
+        # Register signal handlers
+        signal.signal(signal.SIGINT, handle_termination)
+        signal.signal(signal.SIGTERM, handle_termination)
         
-        # Keep the main thread running
+        # Create and start the service
+        service = EInkService()
+        logger.info("Starting EInk service...")
+        if not service.start():
+            logger.error("Failed to start EInk service properly")
+            sys.exit(1)
+        
+        # If debug_timeout is set, print a message about it
+        if debug_timeout:
+            logger.info(f"Debug mode: Service will automatically exit after {debug_timeout} seconds")
+        
+        # Keep the main thread running with a timeout
+        max_runtime = int(os.environ.get('EINK_MAX_RUNTIME', 24 * 60 * 60))  # Default 24 hours
+        
+        # Use the shorter of debug_timeout or max_runtime if debug_timeout is set
+        if debug_timeout:
+            max_runtime = min(debug_timeout, max_runtime)
+        
         while service.initialized:
+            # Check if we've been running too long
+            elapsed = time.time() - start_time
+            if elapsed > max_runtime:
+                if debug_timeout:
+                    logger.info(f"Debug timeout of {debug_timeout}s reached, shutting down service")
+                else:
+                    logger.warning(f"Service has been running for over {max_runtime} seconds, shutting down")
+                break
+                
+            # Print periodic status updates in debug timeout mode
+            if debug_timeout and int(elapsed) % 5 == 0 and int(elapsed) > 0:
+                remaining = max_runtime - elapsed
+                logger.info(f"Service running for {int(elapsed)}s, {int(remaining)}s until auto-shutdown")
+                
             time.sleep(1)
+            
     except KeyboardInterrupt:
-        pass
+        logger.info("Keyboard interrupt received, shutting down")
     except Exception as e:
         logger.error(f"Error running EInk service: {e}")
         logger.error(traceback.format_exc())
-        # Always clean up hardware resources on error
-        logger.info("Cleaned up SPI and GPIO.")
     finally:
+        # Always clean up hardware resources on exit
         if 'service' in locals() and service.initialized:
+            logger.info("Shutting down EInk service")
             service.stop()
+        
+        # Log the total runtime
+        runtime = time.time() - start_time
+        logger.info(f"EInk service has been terminated after running for {int(runtime)}s")
+        
+        # Make sure we exit the process
+        sys.exit(0)
 
 
 if __name__ == "__main__":
-    run_service() 
+    # Check for command line arguments for debug mode
+    debug_timeout = None
+    if len(sys.argv) > 1:
+        for arg in sys.argv[1:]:
+            if arg.startswith('--timeout='):
+                try:
+                    debug_timeout = int(arg.split('=')[1])
+                    print(f"Debug mode: Service will exit after {debug_timeout} seconds")
+                except (IndexError, ValueError):
+                    pass
+            elif arg == '--debug':
+                # Default debug timeout of 30 seconds
+                debug_timeout = 30
+                print(f"Debug mode: Service will exit after {debug_timeout} seconds")
+    
+    # Run with the timeout if specified
+    run_service(debug_timeout) 
