@@ -109,12 +109,25 @@ The system supports various hardware devices, with modular drivers for each comp
 
 Each driver is designed to automatically detect available hardware and fall back to mock implementations for testing.
 
+### E-Ink Display Driver
+
+We've integrated the Waveshare e-Paper display driver as a Poetry package to avoid hardcoded dependencies. This approach offers:
+
+- **Proper Package Management**: The driver is managed through Poetry
+- **Fallback Mechanism**: The system first tries to use a system-installed driver, then falls back to our local package
+- **Portability**: The package works on all platforms including Raspberry Pi 5
+- **Easy Updates**: To update the driver, simply replace the files in `devices/eink/waveshare_epd/` with newer versions
+
+See `devices/eink/README_DRIVER.md` for detailed information on the driver integration.
+
 ## Project Structure
 
 ```
 python/
 ├── devices/             # Hardware device drivers
 │   ├── eink/           # E-Ink display
+│   │   ├── drivers/    # Driver implementations
+│   │   └── waveshare_epd/ # Waveshare driver package
 │   ├── nfc/            # NFC reader
 │   ├── nvme/           # NVMe storage
 │   └── wifi/           # WiFi controller
