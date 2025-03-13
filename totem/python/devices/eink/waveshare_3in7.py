@@ -114,6 +114,7 @@ class WaveshareEPD3in7:
         self.using_sw_spi = USE_SW_SPI
         self.hardware_type = self._detect_hardware()
         self.handle_errors = os.environ.get('EINK_HANDLE_ERRORS', '1') == '1'
+        self.busy_timeout = int(os.environ.get('EINK_BUSY_TIMEOUT', 10))  # Timeout in seconds for busy pin
         
     def _detect_hardware(self):
         """
@@ -525,8 +526,11 @@ class WaveshareEPD3in7:
             else:
                 raise
     
-    def wait_until_idle(self, timeout=10, debug_level=logging.INFO):
+    def wait_until_idle(self, timeout=None, debug_level=logging.INFO):
         """Wait until the display is idle (not busy)"""
+        if timeout is None:
+            timeout = self.busy_timeout
+            
         if self.mock_mode:
             print("Mock wait until idle")
             time.sleep(0.1)  # Simulate a short delay
