@@ -44,20 +44,54 @@ except ImportError:
     )
     logger = logging.getLogger("eink_service")
 
-# Import the display driver types
-from devices.eink.waveshare_3in7 import WaveshareEPD3in7
-from devices.eink.mock_epd import MockEPD
-
-# Fix imports for backward compatibility
+# Try to import the proper EInk driver classes
 try:
-    # Try to import the eink module using the project import path
-    from devices.eink.eink import EInk
-    logger.info("Successfully imported EInk module")
+    # First try to import from direct module path
+    from devices.eink.waveshare_3in7 import WaveshareEPD3in7
+    from devices.eink.mock_epd import MockEPD
+    logger.info("Successfully imported direct device drivers")
 except ImportError:
-    # Fall back to using the newly implemented direct drivers
-    logger.warning("Could not import legacy EInk module, using direct driver access")
-    from waveshare_3in7 import WaveshareEPD3in7
-    from mock_epd import MockEPD
+    try:
+        # Try to import from drivers subdirectory
+        from devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7
+        from devices.eink.drivers.mock_epd import MockEPD
+        logger.info("Successfully imported device drivers from drivers subdirectory")
+    except ImportError:
+        # As a last resort, try importing from current directory
+        try:
+            from waveshare_3in7 import WaveshareEPD3in7
+            from mock_epd import MockEPD
+            logger.info("Successfully imported device drivers from current directory")
+        except ImportError:
+            logger.error("Failed to import device drivers")
+            # Create placeholder classes to avoid errors
+            class MockEPD:
+                def __init__(self):
+                    pass
+                def init(self):
+                    pass
+                def Clear(self):
+                    pass
+                def close(self):
+                    pass
+                def cleanup(self):
+                    pass
+                def sleep(self):
+                    pass
+                def display_text(self, text, x=10, y=10, font_size=24):
+                    pass
+            
+            class WaveshareEPD3in7(MockEPD):
+                pass
+
+# Try to import EInk class for higher-level abstraction
+try:
+    from devices.eink.eink import EInk
+    logger.info("Successfully imported EInk class")
+    HAS_EINK_CLASS = True
+except ImportError:
+    logger.warning("Could not import EInk class, using direct driver access")
+    HAS_EINK_CLASS = False
 
 # Constants
 DEFAULT_SOCKET_PATH = "/tmp/eink_service.sock"
@@ -239,7 +273,9 @@ class EInkService:
             if not self._initialize_display():
                 logger.error("Failed to initialize display after retries, using mock mode")
                 self.mock_mode = True
-                self._initialize_display()  # Try once more with mock mode
+                if not self._initialize_display():  # Try once more with mock mode
+                    logger.error("Failed to initialize display even in mock mode")
+                    return False
             
             # Mark as initialized
             self.initialized = True
@@ -737,12 +773,55 @@ class EInkService:
                 logger.error(f"Failed to initialize mock display: {e}")
                 return False
         
+        # Check GPIO permissions before attempting to initialize
+        gpio_available, message = self._check_gpio_availability()
+        logger.info(f"GPIO availability check: {message}")
+        
+        if not gpio_available:
+            # Try to free GPIO resources if needed
+            if self.force_kill_gpio:
+                kill_success, kill_message = self._kill_gpio_processes()
+                logger.info(f"Attempted to free GPIO resources: {kill_message}")
+                
+                # Check again after cleanup
+                gpio_available, message = self._check_gpio_availability()
+                logger.info(f"GPIO availability after cleanup: {message}")
+                
+                if not gpio_available and not self.mock_mode:
+                    logger.warning("GPIO resources still unavailable, switching to mock mode")
+                    self.mock_mode = True
+                    return self._initialize_display()  # Retry with mock mode
+        
+        # Try to set GPIO permissions if running as root
+        try:
+            if os.geteuid() == 0:  # Running as root
+                logger.info("Running as root, ensuring GPIO permissions are set")
+                subprocess.run(['chmod', 'a+rw', '/dev/gpiomem'], 
+                             stdout=subprocess.PIPE, 
+                             stderr=subprocess.PIPE)
+                subprocess.run(['chmod', 'a+rw', '/dev/gpiochip0'], 
+                             stdout=subprocess.PIPE, 
+                             stderr=subprocess.PIPE)
+        except Exception as e:
+            logger.warning(f"Failed to set GPIO permissions: {e}")
+        
         # Retry logic for hardware display
         for attempt in range(self.max_init_retries):
             try:
                 logger.info(f"Initializing display (attempt {attempt+1}/{self.max_init_retries})...")
                 
                 if display_type in ['waveshare_3in7', 'waveshare', '3in7']:
+                    # Attempt to use legacy GPIO access by importing RPi.GPIO first
+                    try:
+                        import RPi.GPIO as GPIO
+                        GPIO.setmode(GPIO.BCM)
+                        GPIO.setwarnings(False)
+                        logger.info("Successfully imported and configured RPi.GPIO")
+                    except ImportError:
+                        logger.warning("Could not import RPi.GPIO, will rely on driver's GPIO handling")
+                    except Exception as e:
+                        logger.warning(f"Error configuring GPIO: {e}")
+                    
                     # Directly use the WaveshareEPD3in7 class
                     self.display = WaveshareEPD3in7()
                 else:
@@ -781,6 +860,13 @@ class EInkService:
                     time.sleep(RETRY_DELAY)
 
         logger.error(f"Failed to initialize display after {self.max_init_retries} attempts")
+        
+        # Fall back to mock mode if hardware initialization failed
+        if not self.mock_mode:
+            logger.info("Falling back to mock display mode after hardware initialization failure")
+            self.mock_mode = True
+            return self._initialize_display()
+            
         return False
 
 
