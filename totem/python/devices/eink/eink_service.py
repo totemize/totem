@@ -1075,7 +1075,8 @@ def run_service(debug_timeout=None):
     # If debug_timeout is set, create a timeout watchdog thread
     if debug_timeout:
         def timeout_watchdog():
-            watchdog_sleep = debug_timeout + 5  # Give a 5-second grace period
+            # Give plenty of time for the main loop to handle the timeout
+            watchdog_sleep = debug_timeout + 10  # Give a 10-second grace period
             logger.info(f"Timeout watchdog started: will force exit after {watchdog_sleep} seconds")
             time.sleep(watchdog_sleep)
             logger.critical("WATCHDOG TIMEOUT: Forcing process termination!")
@@ -1123,27 +1124,41 @@ def run_service(debug_timeout=None):
         if debug_timeout:
             logger.info(f"Starting main loop with {debug_timeout}s timeout")
             
+            # Use a ticker to report status at regular intervals
+            last_status_time = start_time
+            status_interval = 5  # Report status every 5 seconds
+            
             # Main service loop with timeout check
             while service.initialized:
-                # Check if we've been running too long
+                # Get current time for this iteration
                 current_time = time.time()
                 elapsed = current_time - start_time
                 remaining = max(0, end_time - current_time)
+                
+                # Check for ticker status update
+                if current_time - last_status_time >= status_interval:
+                    logger.info(f"Service running for {int(elapsed)}s, {int(remaining)}s until auto-shutdown")
+                    last_status_time = current_time
                 
                 # Exit if timeout reached
                 if current_time >= end_time:
                     logger.info(f"Debug timeout of {debug_timeout}s reached, shutting down service")
                     break
                     
-                # Print periodic status updates in debug mode
-                if int(elapsed) % 5 == 0 and int(elapsed) > 0:
-                    logger.info(f"Service running for {int(elapsed)}s, {int(remaining)}s until auto-shutdown")
-                    
                 # Short sleep to prevent CPU hogging, but allow quicker timeout response
                 time.sleep(0.1)
-            
+                
             # We've exited the loop, perform cleanup
             logger.info("Exiting debug mode main loop, cleaning up")
+            
+            # Explicitly stop the service for clean shutdown
+            try:
+                logger.info("Explicitly stopping service due to timeout")
+                service.stop()
+                logger.info("Service stopped successfully after timeout")
+            except Exception as e:
+                logger.error(f"Error stopping service after timeout: {e}")
+                
         else:
             # For non-debug mode, just wait indefinitely for signals
             logger.info("Service running in normal mode (no debug timeout)")
