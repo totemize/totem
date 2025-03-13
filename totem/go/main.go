@@ -6,116 +6,14 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/fiatjaf/eventstore/sqlite3"
-	"github.com/fiatjaf/khatru"
-	"github.com/nbd-wtf/go-nostr"
 )
 
-// Pet represents the virtual pet's state
-type Pet struct {
-	Name      string
-	Happiness float64
-	Energy    float64
-	LastFed   time.Time
-	mutex     sync.RWMutex
-}
-
-// Update pet's stats based on time passed
-func (p *Pet) Update() {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
-	timeSinceLastFed := time.Since(p.LastFed)
-	// Decrease energy over time
-	p.Energy = max(0, p.Energy-0.001*timeSinceLastFed.Seconds())
-	// Decrease happiness if energy is low
-	if p.Energy < 30 {
-		p.Happiness = max(0, p.Happiness-0.002*timeSinceLastFed.Seconds())
-	}
-}
-
-// Feed the pet with a nostr note
-func (p *Pet) Feed(note *nostr.Event) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
-	// Calculate nutrition value based on note properties
-	nutrition := calculateNutrition(note)
-
-	p.Energy = min(100, p.Energy+nutrition)
-	p.Happiness = min(100, p.Happiness+nutrition*0.5)
-	p.LastFed = time.Now()
-}
-
-// GetStateEmoji returns an emoji representing the current state
-func (p *Pet) GetStateEmoji() string {
-	p.mutex.RLock()
-	defer p.mutex.RUnlock()
-
-	switch {
-	case p.Energy < 30:
-		return "😫" // Very hungry
-	case p.Energy < 50:
-		return "😕" // Hungry
-	case p.Happiness < 30:
-		return "😢" // Sad
-	case p.Happiness < 50:
-		return "😐" // Neutral
-	case p.Happiness >= 80 && p.Energy >= 80:
-		return "🤗" // Very happy
-	default:
-		return "😊" // Happy
-	}
-}
-
-const htmlTemplate = `
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Nostr Pet</title>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-    <style>
-        body { font-family: system-ui; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
-        .pet-container { border: 2px solid #ccc; border-radius: 8px; padding: 2rem; text-align: center; }
-        .pet-emoji { font-size: 5rem; margin: 1rem; }
-        .stats { text-align: left; }
-    </style>
-</head>
-<body>
-    <div class="pet-container" hx-get="/state" hx-trigger="every 1s">
-        <div class="pet-emoji">{{.GetStateEmoji}}</div>
-        <div class="stats">
-            <p><strong>Name:</strong> {{.Name}}</p>
-            <p><strong>Energy:</strong> {{printf "%.1f" .Energy}}%</p>
-            <p><strong>Happiness:</strong> {{printf "%.1f" .Happiness}}%</p>
-            <p><strong>Last Fed:</strong> {{.LastFed.Format "15:04:05"}}</p>
-        </div>
-    </div>
-    <div style="margin-top: 2rem; text-align: center;">
-        <p>Connect to this relay at ws://localhost:3334/nostr and send notes to feed the pet!</p>
-    </div>
-</body>
-</html>
-`
-
-const stateTemplate = `
-<div class="pet-emoji">{{.GetStateEmoji}}</div>
-<div class="stats">
-    <p><strong>Name:</strong> {{.Name}}</p>
-    <p><strong>Energy:</strong> {{printf "%.1f" .Energy}}%</p>
-    <p><strong>Happiness:</strong> {{printf "%.1f" .Happiness}}%</p>
-    <p><strong>Last Fed:</strong> {{.LastFed.Format "15:04:05"}}</p>
-</div>
-`
-
 type Server struct {
-	pet       *Pet
-	relay     *khatru.Relay
-	tmpl      *template.Template
-	stateTmpl *template.Template
+	relay *TotemRelay
+	tmpl  *template.Template
 }
 
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
@@ -123,96 +21,261 @@ func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	s.tmpl.Execute(w, s.pet)
+	s.tmpl.Execute(w, s.relay.GetTotem().GetPets())
 }
 
 func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
-	s.stateTmpl.Execute(w, s.pet)
+	pets := s.relay.GetTotem().GetPets()
+
+	tmplPets := template.Must(template.New("pets").Parse(`
+    {{if .}}
+        <div class="pets-container">
+            {{range .}}
+            <div class="pet-container {{if eq .GetStateEmoji "🥚"}}egg-container{{end}}">
+                <div class="pet-emoji">{{.GetStateEmoji}}</div>
+                <div class="stats">
+                    <h3>{{.GetState.Name}}</h3>
+                    <p><strong>Nostr ID:</strong> <code>{{.GetPubKey}}</code></p>
+                    
+                    <p><strong>Energy:</strong> {{printf "%.1f" .GetState.Energy}}%</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill energy-fill" style="width: {{.GetState.Energy}}%;"></div>
+                    </div>
+                    
+                    <p><strong>Happiness:</strong> {{printf "%.1f" .GetState.Happiness}}%</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill happiness-fill" style="width: {{.GetState.Happiness}}%;"></div>
+                    </div>
+                    
+                    <p><strong>Last Fed:</strong> {{.GetState.LastFed.Format "15:04:05"}}</p>
+                    
+                    {{if eq .GetStateEmoji "🥚"}}
+                    <p><em>This pet is still an egg! Send a naming event to hatch it.</em></p>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+    {{else}}
+        <div class="no-pets">
+            <h2>No Pets Yet!</h2>
+            <p>Create your first pet by sending a pet creation event to this relay.</p>
+        </div>
+    {{end}}
+    `))
+
+	tmplPets.Execute(w, pets)
 }
 
-func calculateNutrition(note *nostr.Event) float64 {
-	nutrition := 10.0 // Base value
-	nutrition += float64(len(note.Content)) * 0.1
-	nutrition += float64(len(note.Tags)) * 2
-	return min(20, nutrition)
-}
-
-func setupRelay(pet *Pet) *khatru.Relay {
-	relay := khatru.NewRelay()
-
+func main() {
+	// Initialize database
 	db := sqlite3.SQLite3Backend{DatabaseURL: "./nostrpet.db"}
 	if err := db.Init(); err != nil {
 		log.Fatal("Failed to initialize database:", err)
 	}
 
-	relay.StoreEvent = append(relay.StoreEvent, db.SaveEvent)
-	relay.QueryEvents = append(relay.QueryEvents, db.QueryEvents)
-	relay.CountEvents = append(relay.CountEvents, db.CountEvents)
-	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
+	// Create Totem
+	totem := NewTotem("totem-pubkey-123")
 
-	relay.Info.Name = "NostrPet Relay"
-	relay.Info.Description = "A relay that feeds a virtual pet"
-	relay.Info.PubKey = "replace-with-your-pubkey"
-	relay.Info.Software = "https://github.com/yourusername/nostrpet"
-	relay.Info.Version = "v0.1.0"
+	bgCtx := context.Background()
+	totem.StartPetStatusUpdates(bgCtx)
 
-	relay.OnEventSaved = append(relay.OnEventSaved, func(ctx context.Context, evt *nostr.Event) {
-		log.Printf("Received note from %s: %s\n", evt.PubKey, evt.Content)
-		pet.Feed(evt)
-	})
-
-	return relay
-}
-
-func main() {
-	// Initialize pet
-	pet := &Pet{
-		Name:      "Nostr Pet",
-		Happiness: 100,
-		Energy:    100,
-		LastFed:   time.Now(),
-	}
+	// Initialize relay with Totem and Database
+	totemRelay := NewTotemRelay(RelayInfo{
+		Name:        "Totem Relay",
+		Description: "A relay with Totem managing its pets",
+		PubKey:      totem.GetPubKey(),
+		Software:    "https://github.com/yourusername/totem",
+		Version:     "v0.1.0",
+	}, totem, &db)
 
 	// Initialize server
 	server := &Server{
-		pet: pet,
+		relay: totemRelay,
+		tmpl:  template.Must(template.New("home").Parse(htmlTemplate)),
 	}
-
-	// Parse templates
-	server.tmpl = template.Must(template.New("home").Parse(htmlTemplate))
-	server.stateTmpl = template.Must(template.New("state").Parse(stateTemplate))
-
-	// Set up relay
-	relay := setupRelay(pet)
-	server.relay = relay
 
 	// Set up HTTP routes
 	mux := http.NewServeMux()
-
-	// UI routes
 	mux.HandleFunc("/", server.handleHome)
 	mux.HandleFunc("/state", server.handleState)
+	mux.Handle("/nostr", totemRelay)
 
-	// Relay route
-	mux.Handle("/nostr", relay)
-
-	// Start periodic updates
+	// Start periodic updates for all pets
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 
-		for {
-			select {
-			case <-ticker.C:
+		for range ticker.C {
+			for _, pet := range totem.GetPets() {
 				pet.Update()
 			}
 		}
 	}()
-	// FIXME: we cannot send notes to the relay since its not beign handled properly failed to dial: unexpected HTTP response status: 200
 
 	// Start server
 	fmt.Println("Starting server on :3334")
+	log.Println("Connect to this relay at ws://localhost:3334/nostr")
 	if err := http.ListenAndServe(":3334", mux); err != nil {
 		log.Fatal(err)
 	}
 }
+
+const htmlTemplate = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Totem Relay</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        body { font-family: system-ui; max-width: 800px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+        h1, h2 { text-align: center; margin-bottom: 1.5rem; }
+        .pets-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; }
+        .pet-container { 
+            border: 2px solid #ccc; 
+            border-radius: 12px; 
+            padding: 1.5rem; 
+            text-align: center; 
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .pet-container:hover { transform: translateY(-5px); box-shadow: 0 6px 8px rgba(0,0,0,0.15); }
+        .egg-container { background-color: #fff8e1; border-color: #ffecb3; }
+        .pet-emoji { font-size: 5rem; margin: 0.5rem; }
+        .stats { text-align: left; margin-top: 1rem; }
+        .stats p { margin: 0.5rem 0; }
+        .progress-bar {
+            height: 10px;
+            background-color: #eee;
+            border-radius: 5px;
+            margin: 5px 0;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.5s ease;
+        }
+        .energy-fill { background-color: #4caf50; }
+        .happiness-fill { background-color: #2196f3; }
+        .instructions {
+            background-color: #f5f5f5;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+        .code-block {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: monospace;
+            margin: 1rem 0;
+        }
+        .no-pets {
+            text-align: center;
+            padding: 3rem;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Totem Relay</h1>
+    
+    <!-- Use a div with id to update pets section -->
+    <div id="pets-display">
+        {{if .}}
+            <div class="pets-container">
+                {{range .}}
+                <div class="pet-container {{if eq .GetStateEmoji "🥚"}}egg-container{{end}}">
+                    <div class="pet-emoji">{{.GetStateEmoji}}</div>
+                    <div class="stats">
+                        <h3>{{.GetState.Name}}</h3>
+                        <p><strong>Nostr ID:</strong> <code>{{.GetPubKey}}</code></p>
+                        <p><strong>Energy:</strong> {{printf "%.1f" .GetState.Energy}}%</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill energy-fill" style="width: {{.GetState.Energy}}%;"></div>
+                        </div>
+                        
+                        <p><strong>Happiness:</strong> {{printf "%.1f" .GetState.Happiness}}%</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill happiness-fill" style="width: {{.GetState.Happiness}}%;"></div>
+                        </div>
+                        
+                        <p><strong>Last Fed:</strong> {{.GetState.LastFed.Format "15:04:05"}}</p>
+                        
+                        {{if eq .GetStateEmoji "🥚"}}
+                        <p><em>This pet is still an egg! Send a naming event to hatch it.</em></p>
+                        {{end}}
+                    </div>
+                </div>
+                {{end}}
+            </div>
+        {{else}}
+            <div class="no-pets">
+                <h2>No Pets Yet!</h2>
+                <p>Create your first pet by sending a pet creation event to this relay.</p>
+            </div>
+        {{end}}
+    </div>
+    
+    <div class="instructions">
+        <h2>How to Create a Pet</h2>
+        <p>Connect to this relay at <strong>ws://localhost:3334/nostr</strong> and send the following events:</p>
+        
+        <h3>1. Create an Egg</h3>
+        <div class="code-block">
+        {
+          "kind": 5910,
+          "content": {
+            "name": "create_pet",
+            "parameters": {}
+          },
+          "tags": [
+            ["c", "execute-tool"]
+          ]
+        }
+        </div>
+        <div class="code-block">
+            nak event -k 5910 -c '{"name":"create_egg","parameters":{}}' --tag 'c=execute-tool' ws://localhost:3334/nostr
+        </div>
+        
+        <h3>2. Name Your Pet to Hatch the Egg</h3>
+        <div class="code-block">
+        {
+        "kind": 5910,
+        "content": {
+            "name": "name_pet",
+            "parameters": {
+            "name": "Your Pet Name",
+            "pet_id": "optional-specific-egg-id"
+            }
+        },
+        "tags": [
+            ["c", "execute-tool"]
+        ]
+        }
+        </div>
+        <div class="code-block">
+            nak event -k 5910 -c '{"name":"name_pet","parameters":{"name":"Your Pet Name","pet_id":"<optional_pet_id>"}}' --tag 'c=execute-tool' ws://localhost:3334/nostr
+        </div>
+
+        <h3>3. Feed Your Pet</h3>
+        <p>Send regular notes (kind 1) to the relay to feed and interact with your pet!</p>
+    </div>
+
+    <!-- Add real-time updates via HTMX -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set up polling for pet updates
+            setInterval(function() {
+                htmx.ajax('GET', '/state', {target: '#pets-display', swap: 'innerHTML'});
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
+`

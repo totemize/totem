@@ -1,0 +1,4 @@
+*.db
+go.sum
+repomix*
+example*
