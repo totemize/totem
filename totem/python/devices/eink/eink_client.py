@@ -186,7 +186,7 @@ class EInkClient:
         command = {'action': 'clear'}
         return self._send_command(command)
     
-    def display_text(self, text: str, x: int = 10, y: int = 10, font_size: int = 24) -> Dict[str, Any]:
+    def display_text(self, text: str, x: int = 10, y: int = 10, font_size: int = 24, font: Optional[str] = None, text_color: str = "black", background_color: str = "white") -> Dict[str, Any]:
         """
         Display text on the e-ink display
         
@@ -195,6 +195,9 @@ class EInkClient:
             x: X coordinate
             y: Y coordinate
             font_size: Font size
+            font: Path to font file (optional)
+            text_color: Color of the text (default: "black")
+            background_color: Background color (default: "white")
             
         Returns:
             dict: Response from the service
@@ -204,8 +207,15 @@ class EInkClient:
             'text': text,
             'x': x,
             'y': y,
-            'font_size': font_size
+            'font_size': font_size,
+            'text_color': text_color,
+            'background_color': background_color
         }
+        
+        # Add font if provided
+        if font:
+            command['font'] = font
+            
         return self._send_command(command)
     
     def sleep(self) -> Dict[str, Any]:
