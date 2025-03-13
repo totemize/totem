@@ -19,6 +19,7 @@ import traceback
 from pathlib import Path
 import logging
 import subprocess
+import select
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from typing import Dict, Any, Optional, List, Tuple, Union
@@ -430,6 +431,30 @@ class EInkService:
         finally:
             client.close()
     
+    def _setup_socket_server(self):
+        """Set up the socket server (Unix domain socket or TCP)"""
+        logger.info("Setting up socket server")
+        
+        try:
+            # Create and start the server thread
+            if self.use_tcp:
+                logger.info(f"Using TCP socket server on {self.tcp_host}:{self.tcp_port}")
+                self.server_thread = threading.Thread(target=self.run_tcp_server)
+            else:
+                logger.info(f"Using Unix domain socket server at {self.socket_path}")
+                self.server_thread = threading.Thread(target=self.run_unix_socket_server)
+                
+            # Mark as daemon so it terminates when the main thread exits
+            self.server_thread.daemon = True
+            self.server_thread.start()
+            
+            logger.info("Socket server thread started")
+            return True
+        except Exception as e:
+            logger.error(f"Error setting up socket server: {e}")
+            logger.error(traceback.format_exc())
+            return False
+            
     def _process_commands(self):
         """Process commands from the socket server"""
         logger.info("Starting command processing loop")
