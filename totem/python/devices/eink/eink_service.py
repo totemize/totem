@@ -123,6 +123,7 @@ class EInkService:
         self.command_queue = []
         self.use_tcp = os.environ.get('EINK_USE_TCP', '0') == '1'
         self.socket_path = os.environ.get('EINK_SOCKET_PATH', DEFAULT_SOCKET_PATH)
+        self.pid_path = os.environ.get('EINK_PID_PATH', "/tmp/eink_service.pid")
         self.tcp_port = int(os.environ.get('EINK_TCP_PORT', DEFAULT_TCP_PORT))
         self.tcp_host = os.environ.get('EINK_TCP_HOST', 'localhost')
         self.lock = threading.RLock()
@@ -137,6 +138,14 @@ class EInkService:
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
+        
+        # Write PID file for external process management
+        try:
+            with open(self.pid_path, 'w') as pid_file:
+                pid_file.write(str(os.getpid()))
+            logger.debug(f"Wrote PID {os.getpid()} to {self.pid_path}")
+        except Exception as e:
+            logger.warning(f"Failed to write PID file: {e}")
         
         logger.info("EInk Service initialized successfully")
     
