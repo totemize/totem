@@ -10,11 +10,13 @@ import os
 import sys
 import json
 import socket
+import time
 import logging
 import base64
 from io import BytesIO
 from pathlib import Path
 from PIL import Image
+from typing import Dict, Any, Union, Optional
 
 # Add the parent directory to path to import from the project
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -37,183 +39,203 @@ DEFAULT_SOCKET_PATH = "/tmp/eink_service.sock"
 DEFAULT_TCP_HOST = "127.0.0.1"
 DEFAULT_TCP_PORT = 9500
 
+# Timeout values
+CONNECT_TIMEOUT = 5.0  # seconds
+SEND_TIMEOUT = 10.0    # seconds
+RECV_TIMEOUT = 10.0    # seconds
+
+# Max retries
+MAX_RETRIES = 3
+RETRY_DELAY = 1.0  # seconds
+
+class EInkClientError(Exception):
+    """Exception for EInk client errors"""
+    pass
 
 class EInkClient:
     """
     Client for communicating with the EInk service
     """
     
-    def __init__(self, use_unix_socket=True, socket_path=None, tcp_host=None, tcp_port=None):
+    def __init__(self, 
+                socket_path: Optional[str] = None, 
+                tcp_host: Optional[str] = None, 
+                tcp_port: Optional[int] = None,
+                use_tcp: Optional[bool] = None,
+                timeout: float = CONNECT_TIMEOUT):
         """
         Initialize the EInk client
         
         Args:
-            use_unix_socket: Whether to use Unix socket (True) or TCP (False)
-            socket_path: Path to Unix socket file (default: /tmp/eink_service.sock)
-            tcp_host: TCP host address (default: 127.0.0.1)
-            tcp_port: TCP port (default: 9500)
+            socket_path: Path to the Unix socket (for Unix socket mode)
+            tcp_host: Hostname for TCP connection (for TCP mode)
+            tcp_port: Port for TCP connection (for TCP mode)
+            use_tcp: Whether to use TCP instead of Unix socket
+            timeout: Connection timeout in seconds
         """
-        # Connection settings
-        self.use_unix_socket = use_unix_socket
-        self.socket_path = socket_path or DEFAULT_SOCKET_PATH
-        self.tcp_host = tcp_host or DEFAULT_TCP_HOST
-        self.tcp_port = tcp_port or DEFAULT_TCP_PORT
+        # Determine socket type
+        self.use_tcp = use_tcp if use_tcp is not None else (os.environ.get('EINK_USE_TCP', '0') == '1')
         
-        # Override connection settings from environment if available
-        if os.environ.get('EINK_USE_TCP', '0') == '1':
-            self.use_unix_socket = False
+        # Set socket path or TCP details
+        if self.use_tcp:
+            self.tcp_host = tcp_host or os.environ.get('EINK_TCP_HOST', DEFAULT_TCP_HOST)
+            self.tcp_port = tcp_port or int(os.environ.get('EINK_TCP_PORT', DEFAULT_TCP_PORT))
+        else:
+            self.socket_path = socket_path or os.environ.get('EINK_SOCKET_PATH', DEFAULT_SOCKET_PATH)
         
-        if os.environ.get('EINK_SOCKET_PATH'):
-            self.socket_path = os.environ.get('EINK_SOCKET_PATH')
-            
-        if os.environ.get('EINK_TCP_HOST'):
-            self.tcp_host = os.environ.get('EINK_TCP_HOST')
-            
-        if os.environ.get('EINK_TCP_PORT'):
-            try:
-                self.tcp_port = int(os.environ.get('EINK_TCP_PORT'))
-            except ValueError:
-                pass
+        self.timeout = timeout
     
-    def _send_command(self, command):
+    def _connect(self) -> socket.socket:
         """
-        Send a command to the EInk service
+        Connect to the EInk service
+        
+        Returns:
+            socket.socket: Connected socket
+            
+        Raises:
+            EInkClientError: If connection fails
+        """
+        for attempt in range(MAX_RETRIES):
+            try:
+                if self.use_tcp:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(self.timeout)
+                    sock.connect((self.tcp_host, self.tcp_port))
+                else:
+                    # Check if socket file exists
+                    if not os.path.exists(self.socket_path):
+                        raise EInkClientError(f"Socket file not found: {self.socket_path}")
+                    
+                    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                    sock.settimeout(self.timeout)
+                    sock.connect(self.socket_path)
+                
+                return sock
+                
+            except (socket.error, OSError) as e:
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(RETRY_DELAY)
+                    continue
+                raise EInkClientError(f"Failed to connect to EInk service: {e}")
+    
+    def _send_command(self, command: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Send a command to the EInk service and get the response
         
         Args:
             command: Command dictionary to send
             
         Returns:
-            Dictionary containing the response from the server
+            dict: Response from the service
+            
+        Raises:
+            EInkClientError: If communication fails
         """
-        # Create socket based on connection type
-        if self.use_unix_socket:
-            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        else:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        
+        sock = None
         try:
-            # Connect to the server
-            if self.use_unix_socket:
-                sock.connect(self.socket_path)
-            else:
-                sock.connect((self.tcp_host, self.tcp_port))
+            # Connect to the service
+            sock = self._connect()
             
-            # Send the command
-            command_json = json.dumps(command).encode('utf-8')
-            sock.sendall(command_json)
+            # Set timeout for sending/receiving
+            sock.settimeout(SEND_TIMEOUT)
             
-            # Read the response
-            response_data = b""
-            sock.settimeout(5.0)
+            # Serialize and send the command
+            message = json.dumps(command).encode('utf-8')
+            sock.sendall(message)
             
+            # Set timeout for receiving
+            sock.settimeout(RECV_TIMEOUT)
+            
+            # Receive response
+            response_data = b''
             while True:
                 chunk = sock.recv(4096)
                 if not chunk:
                     break
                 response_data += chunk
                 
-                # Check if we have a complete JSON object
+                # Check if response is complete (this is a simple approach)
                 try:
-                    _ = json.loads(response_data.decode('utf-8'))
-                    break  # We have a complete JSON object
-                except:
-                    pass  # Continue reading
-            
-            # Parse and return the response
-            if response_data:
-                try:
-                    return json.loads(response_data.decode('utf-8'))
+                    json.loads(response_data.decode('utf-8'))
+                    break  # If we can parse it, we have a complete response
                 except json.JSONDecodeError:
-                    logger.error(f"Invalid JSON response: {response_data.decode('utf-8')}")
-                    return {"status": "error", "message": "Invalid JSON response"}
-            else:
-                return {"status": "error", "message": "No response from server"}
-                
-        except ConnectionRefusedError:
-            logger.error("Connection refused. Is the EInk service running?")
-            return {"status": "error", "message": "Connection refused. Is the EInk service running?"}
-        except FileNotFoundError:
-            logger.error(f"Socket file not found: {self.socket_path}")
-            return {"status": "error", "message": f"Socket file not found: {self.socket_path}"}
-        except socket.timeout:
-            logger.error("Connection timed out")
-            return {"status": "error", "message": "Connection timed out"}
-        except Exception as e:
-            logger.error(f"Error sending command: {e}")
-            return {"status": "error", "message": str(e)}
+                    # Incomplete JSON, continue receiving
+                    continue
+            
+            # Parse response
+            response = json.loads(response_data.decode('utf-8'))
+            return response
+            
+        except (socket.error, OSError, json.JSONDecodeError) as e:
+            raise EInkClientError(f"Communication error: {e}")
         finally:
-            sock.close()
+            # Clean up
+            if sock:
+                try:
+                    sock.close()
+                except:
+                    pass
     
-    def clear_display(self):
-        """Clear the e-ink display"""
-        command = {"action": "clear"}
+    def clear_screen(self) -> Dict[str, Any]:
+        """
+        Clear the e-ink display
+        
+        Returns:
+            dict: Response from the service
+        """
+        command = {'action': 'clear'}
         return self._send_command(command)
     
-    def display_text(self, text, font_size=24, x=10, y=10, font=None):
+    def display_text(self, text: str, x: int = 10, y: int = 10, font_size: int = 24) -> Dict[str, Any]:
         """
         Display text on the e-ink display
         
         Args:
             text: Text to display
-            font_size: Font size in pixels
             x: X coordinate
             y: Y coordinate
-            font: Path to font file (optional)
+            font_size: Font size
+            
+        Returns:
+            dict: Response from the service
         """
         command = {
-            "action": "display_text",
-            "text": text,
-            "font_size": font_size,
-            "x": x,
-            "y": y
+            'action': 'display_text',
+            'text': text,
+            'x': x,
+            'y': y,
+            'font_size': font_size
         }
-        
-        if font:
-            command["font"] = font
-            
         return self._send_command(command)
     
-    def display_image(self, image_path=None, image=None):
+    def sleep(self) -> Dict[str, Any]:
         """
-        Display an image on the e-ink display
+        Put the display to sleep
         
-        Args:
-            image_path: Path to image file (optional)
-            image: PIL Image object (optional)
-            
-        Note: Either image_path or image must be provided
+        Returns:
+            dict: Response from the service
         """
-        if not image_path and not image:
-            logger.error("Either image_path or image must be provided")
-            return {"status": "error", "message": "Either image_path or image must be provided"}
+        command = {'action': 'sleep'}
+        return self._send_command(command)
+    
+    def wake(self) -> Dict[str, Any]:
+        """
+        Wake up the display
         
-        command = {"action": "display_image"}
+        Returns:
+            dict: Response from the service
+        """
+        command = {'action': 'wake'}
+        return self._send_command(command)
+    
+    def get_status(self) -> Dict[str, Any]:
+        """
+        Get the status of the service
         
-        if image_path:
-            # Use path-based image display
-            command["image_path"] = str(image_path)
-        elif image:
-            # Convert PIL image to base64
-            buffer = BytesIO()
-            image.save(buffer, format="PNG")
-            image_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
-            command["image_data"] = image_data
-            
-        return self._send_command(command)
-    
-    def sleep_display(self):
-        """Put the display to sleep"""
-        command = {"action": "sleep"}
-        return self._send_command(command)
-    
-    def wake_display(self):
-        """Wake up the display"""
-        command = {"action": "wake"}
-        return self._send_command(command)
-    
-    def get_status(self):
-        """Get the status of the EInk service"""
-        command = {"action": "status"}
+        Returns:
+            dict: Status information
+        """
+        command = {'action': 'status'}
         return self._send_command(command)
 
 
@@ -262,15 +284,15 @@ if __name__ == "__main__":
     
     # Create client
     client = EInkClient(
-        use_unix_socket=not args.tcp,
         socket_path=args.socket_path,
         tcp_host=args.host,
-        tcp_port=args.port
+        tcp_port=args.port,
+        use_tcp=args.tcp
     )
     
     # Execute command
     if args.command == "clear":
-        result = client.clear_display()
+        result = client.clear_screen()
     elif args.command == "text":
         result = client.display_text(
             args.text,
@@ -282,9 +304,9 @@ if __name__ == "__main__":
     elif args.command == "image":
         result = client.display_image(image_path=args.image_path)
     elif args.command == "sleep":
-        result = client.sleep_display()
+        result = client.sleep()
     elif args.command == "wake":
-        result = client.wake_display()
+        result = client.wake()
     elif args.command == "status":
         result = client.get_status()
     else:
