@@ -332,28 +332,66 @@ class EInkService:
             return
 
         logger.info("Stopping EInk service")
+        stop_start_time = time.time()
         
         # Set the stop event to signal threads to exit
         if hasattr(self, 'stop_event'):
             logger.info("Setting stop event")
             self.stop_event.set()
         
+        # Forcefully close the socket server first to unblock any accept() calls
+        if hasattr(self, 'socket_server') and self.socket_server:
+            logger.info("Closing socket server")
+            try:
+                # Try to shutdown the socket first to unblock any blocking calls
+                if hasattr(self.socket_server, 'shutdown'):
+                    try:
+                        self.socket_server.shutdown(socket.SHUT_RDWR)
+                        logger.info("Socket server shutdown called")
+                    except Exception as e:
+                        logger.warning(f"Socket server shutdown failed: {e}")
+                
+                # Close the socket
+                self.socket_server.close()
+                logger.info("Socket server closed")
+            except Exception as e:
+                logger.error(f"Error closing socket server: {e}")
+        
         # Wait for the server thread to finish if it's running
         if hasattr(self, 'server_thread') and self.server_thread and self.server_thread.is_alive():
             logger.info("Waiting for server thread to finish")
             try:
-                self.server_thread.join(timeout=5)  # Wait up to 5 seconds
+                self.server_thread.join(timeout=3)  # Wait up to 3 seconds
                 if self.server_thread.is_alive():
                     logger.warning("Server thread did not finish in time, proceeding with cleanup")
             except Exception as e:
                 logger.error(f"Error joining server thread: {e}")
+        
+        # Force close file descriptors if thread didn't exit
+        if hasattr(self, 'server_thread') and self.server_thread and self.server_thread.is_alive():
+            logger.warning("Server thread still alive after join timeout, forcing file descriptor closure")
+            
+            # Try to find and close any open file descriptors
+            try:
+                import resource
+                soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+                for fd in range(3, soft):  # Start at 3 to skip stdin/stdout/stderr
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass  # File descriptor wasn't open
+            except Exception as e:
+                logger.error(f"Error while force-closing file descriptors: {e}")
         
         # Perform resource cleanup
         self.cleanup()
         
         # Final check to ensure we're marked as not initialized
         self.initialized = False
-        logger.info("EInk service stopped")
+        
+        # Log total stop time
+        stop_duration = time.time() - stop_start_time
+        logger.info(f"EInk service stopped (took {stop_duration:.2f}s)")
     
     def signal_handler(self, sig, frame):
         """Handle termination signals for graceful shutdown"""
@@ -363,6 +401,10 @@ class EInkService:
     def run_unix_socket_server(self):
         """Run a Unix domain socket server for local communication"""
         logger.info(f"Starting Unix socket server at {self.socket_path}")
+        
+        # Check stop event frequently to enable responsive termination
+        check_interval = 0.1  # Check every 100ms
+        last_check_time = time.time()
         
         # Remove existing socket file if it exists
         if os.path.exists(self.socket_path):
@@ -378,7 +420,7 @@ class EInkService:
             self.socket_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self.socket_server.bind(self.socket_path)
             self.socket_server.listen(5)
-            self.socket_server.settimeout(1.0)  # Allow checking running flag
+            self.socket_server.settimeout(check_interval)  # Very short timeout to allow frequent checks
             
             # Ensure socket file has the right permissions
             try:
@@ -398,6 +440,15 @@ class EInkService:
             self.socket_server_ready.set()
             
             while self.initialized and not self.stop_event.is_set():
+                # Check for termination more frequently
+                current_time = time.time()
+                if current_time - last_check_time >= check_interval:
+                    # Check if we should terminate
+                    if self.stop_event.is_set() or not self.initialized:
+                        logger.info("Stop event detected in socket server loop, breaking out")
+                        break
+                    last_check_time = current_time
+                
                 try:
                     # Check if the socket is still valid
                     if self.socket_server.fileno() == -1:
@@ -407,7 +458,7 @@ class EInkService:
                         self.socket_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                         self.socket_server.bind(self.socket_path)
                         self.socket_server.listen(5)
-                        self.socket_server.settimeout(1.0)
+                        self.socket_server.settimeout(check_interval)
                         continue
 
                     client, _ = self.socket_server.accept()
@@ -427,7 +478,7 @@ class EInkService:
                                 self.socket_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                                 self.socket_server.bind(self.socket_path)
                                 self.socket_server.listen(5)
-                                self.socket_server.settimeout(1.0)
+                                self.socket_server.settimeout(check_interval)
                                 os.chmod(self.socket_path, 0o666)
                                 logger.info("Socket recreated successfully")
                             except Exception as recreate_error:
@@ -479,20 +530,33 @@ class EInkService:
         """Run a TCP server for network communication"""
         logger.info(f"Starting TCP server at {self.tcp_host}:{self.tcp_port}")
         
+        # Check stop event frequently to enable responsive termination
+        check_interval = 0.1  # Check every 100ms
+        last_check_time = time.time()
+        
         try:
             # Create socket server
             self.socket_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.socket_server.bind((self.tcp_host, self.tcp_port))
             self.socket_server.listen(5)
-            self.socket_server.settimeout(1.0)  # Allow checking running flag
+            self.socket_server.settimeout(check_interval)  # Very short timeout to allow frequent checks
             
             logger.info("TCP server ready")
             
             # Signal that the socket server is ready
             self.socket_server_ready.set()
             
-            while self.initialized:
+            while self.initialized and not self.stop_event.is_set():
+                # Check for termination more frequently
+                current_time = time.time()
+                if current_time - last_check_time >= check_interval:
+                    # Check if we should terminate
+                    if self.stop_event.is_set() or not self.initialized:
+                        logger.info("Stop event detected in socket server loop, breaking out")
+                        break
+                    last_check_time = current_time
+                
                 try:
                     client, addr = self.socket_server.accept()
                     logger.debug(f"Connection from {addr}")
@@ -1008,6 +1072,21 @@ def run_service(debug_timeout=None):
     """
     start_time = time.time()
     
+    # If debug_timeout is set, create a timeout watchdog thread
+    if debug_timeout:
+        def timeout_watchdog():
+            watchdog_sleep = debug_timeout + 5  # Give a 5-second grace period
+            logger.info(f"Timeout watchdog started: will force exit after {watchdog_sleep} seconds")
+            time.sleep(watchdog_sleep)
+            logger.critical("WATCHDOG TIMEOUT: Forcing process termination!")
+            # Force process to exit
+            os._exit(1)
+            
+        # Start watchdog in daemon thread
+        watchdog_thread = threading.Thread(target=timeout_watchdog, daemon=True)
+        watchdog_thread.start()
+        logger.info(f"Started timeout watchdog thread to enforce {debug_timeout}s timeout")
+    
     # Create and start service
     try:
         # Set up signal handlers to capture termination signals
@@ -1015,9 +1094,13 @@ def run_service(debug_timeout=None):
             logger.info(f"Received signal {signum}, shutting down EInk service")
             # If service exists, stop it gracefully
             if 'service' in locals() and hasattr(service, 'stop'):
-                service.stop()
+                try:
+                    service.stop()
+                except Exception as e:
+                    logger.error(f"Error stopping service: {e}")
             # Exit the process
-            sys.exit(0)
+            logger.info("Exiting process after signal")
+            os._exit(0)
             
         # Register signal handlers
         signal.signal(signal.SIGINT, handle_termination)
@@ -1033,33 +1116,49 @@ def run_service(debug_timeout=None):
         # If debug_timeout is set, print a message about it
         if debug_timeout:
             logger.info(f"Debug mode: Service will automatically exit after {debug_timeout} seconds")
+            # Set an absolute end time for more precise timing
+            end_time = start_time + debug_timeout
         
         # Keep the main thread running with a timeout
-        max_runtime = int(os.environ.get('EINK_MAX_RUNTIME', 24 * 60 * 60))  # Default 24 hours
-        
-        # Use the shorter of debug_timeout or max_runtime if debug_timeout is set
         if debug_timeout:
-            max_runtime = min(debug_timeout, max_runtime)
-            # Set an absolute end time
-            end_time = start_time + max_runtime
-        
-        # Main service loop with timeout check
-        while service.initialized:
-            # Check if we've been running too long
-            current_time = time.time()
-            elapsed = current_time - start_time
+            logger.info(f"Starting main loop with {debug_timeout}s timeout")
             
-            if debug_timeout and current_time >= end_time:
-                logger.info(f"Debug timeout of {debug_timeout}s reached, shutting down service")
-                break
-                
-            # Print periodic status updates in debug timeout mode
-            if debug_timeout and int(elapsed) % 5 == 0 and int(elapsed) > 0:
+            # Main service loop with timeout check
+            while service.initialized:
+                # Check if we've been running too long
+                current_time = time.time()
+                elapsed = current_time - start_time
                 remaining = max(0, end_time - current_time)
-                logger.info(f"Service running for {int(elapsed)}s, {int(remaining)}s until auto-shutdown")
                 
-            # Short sleep to prevent CPU hogging, but allow quicker timeout response
-            time.sleep(0.1)
+                # Exit if timeout reached
+                if current_time >= end_time:
+                    logger.info(f"Debug timeout of {debug_timeout}s reached, shutting down service")
+                    break
+                    
+                # Print periodic status updates in debug mode
+                if int(elapsed) % 5 == 0 and int(elapsed) > 0:
+                    logger.info(f"Service running for {int(elapsed)}s, {int(remaining)}s until auto-shutdown")
+                    
+                # Short sleep to prevent CPU hogging, but allow quicker timeout response
+                time.sleep(0.1)
+            
+            # We've exited the loop, perform cleanup
+            logger.info("Exiting debug mode main loop, cleaning up")
+        else:
+            # For non-debug mode, just wait indefinitely for signals
+            logger.info("Service running in normal mode (no debug timeout)")
+            max_runtime = int(os.environ.get('EINK_MAX_RUNTIME', 24 * 60 * 60))  # Default 24 hours
+            end_time = start_time + max_runtime
+            
+            while service.initialized:
+                current_time = time.time()
+                
+                # Check for max runtime exceeded
+                if current_time >= end_time:
+                    logger.warning(f"Maximum runtime of {max_runtime}s exceeded, shutting down")
+                    break
+                
+                time.sleep(1)
             
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received, shutting down")
@@ -1067,16 +1166,25 @@ def run_service(debug_timeout=None):
         logger.error(f"Error running EInk service: {e}")
         logger.error(traceback.format_exc())
     finally:
+        # Record exit time
+        exit_time = time.time()
+        runtime = exit_time - start_time
+        
         # Always clean up hardware resources on exit
         if 'service' in locals() and hasattr(service, 'initialized') and service.initialized:
             logger.info("Shutting down EInk service")
-            service.stop()
+            try:
+                service.stop()
+                logger.info("EInk service stopped successfully")
+            except Exception as e:
+                logger.error(f"Error stopping service during cleanup: {e}")
         
         # Log the total runtime
-        runtime = time.time() - start_time
         logger.info(f"EInk service has been terminated after running for {int(runtime)}s")
         
-        # Force exit to ensure process termination
+        # Force exit to ensure process termination - with a small delay to allow logging
+        logger.info("Forcing process exit now")
+        time.sleep(0.5)  # Short delay to flush logs
         os._exit(0)
 
 
