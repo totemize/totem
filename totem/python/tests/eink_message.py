@@ -9,6 +9,7 @@ Usage:
   python3 eink_message.py "Your message here"
   python3 eink_message.py --nvme "Message with NVME compatibility"
   python3 eink_message.py --mock "Test in mock mode"
+  python3 eink_message.py --timeout 20 "Increase busy timeout to 20 seconds"
   python3 eink_message.py --help
 """
 
@@ -23,13 +24,16 @@ script_dir = Path(__file__).resolve().parent
 project_dir = script_dir.parent.parent
 sys.path.insert(0, str(project_dir))
 
-def display_message(message, nvme_compatible=False, mock_mode=False, font_size=36):
+def display_message(message, nvme_compatible=False, mock_mode=False, font_size=36, busy_timeout=10):
     """Display a message on the EInk display"""
     # Set environment variables
     if nvme_compatible:
         os.environ['NVME_COMPATIBLE'] = '1'
     if mock_mode:
         os.environ['EINK_MOCK_MODE'] = '1'
+    
+    # Set busy timeout
+    os.environ['EINK_BUSY_TIMEOUT'] = str(busy_timeout)
     
     # Import the EInk driver
     from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7, RST_PIN, DC_PIN, CS_PIN, BUSY_PIN
@@ -44,6 +48,7 @@ def display_message(message, nvme_compatible=False, mock_mode=False, font_size=3
         print(f"  Mock mode: {epd.mock_mode}")
         print(f"  NVME compatible: {epd.nvme_compatible}")
         print(f"  Software SPI: {epd.using_sw_spi}")
+        print(f"  Busy timeout: {busy_timeout} seconds")
         print(f"  RST_PIN: {RST_PIN}")
         print(f"  DC_PIN: {DC_PIN}")
         print(f"  CS_PIN: {CS_PIN}")
@@ -65,6 +70,11 @@ def display_message(message, nvme_compatible=False, mock_mode=False, font_size=3
         # Display the message (handle multiline messages)
         print("Displaying message:")
         print(message)
+        
+        # Replace escaped newlines with actual newlines
+        if '\\n' in message:
+            message = message.replace('\\n', '\n')
+        
         lines = message.split('\n')
         y_position = 10
         for line in lines:
@@ -99,6 +109,8 @@ def main():
                         help='Run in mock mode without physical display')
     parser.add_argument('--font-size', type=int, default=36,
                         help='Font size for the message (default: 36)')
+    parser.add_argument('--timeout', type=int, default=10,
+                        help='Busy timeout in seconds (default: 10)')
     
     args = parser.parse_args()
     
@@ -109,9 +121,10 @@ def main():
     print(f"NVME compatibility: {'Enabled' if args.nvme else 'Disabled'}")
     print(f"Mock mode: {'Enabled' if args.mock else 'Disabled'}")
     print(f"Font size: {args.font_size}")
+    print(f"Busy timeout: {args.timeout} seconds")
     print(f"-------------------\n")
     
-    return display_message(args.message, args.nvme, args.mock, args.font_size)
+    return display_message(args.message, args.nvme, args.mock, args.font_size, args.timeout)
 
 if __name__ == "__main__":
     success = main()
