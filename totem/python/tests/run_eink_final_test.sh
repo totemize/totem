@@ -74,7 +74,7 @@ try:
     
     # Display text
     logger.info("Displaying text")
-    epd.display_text("E-Ink\nTest\nSuccess!", 50, 50, 48)
+    epd.display_text("totem.", 50, 50, 48)
     logger.info("Text displayed")
     
     # Sleep
