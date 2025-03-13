@@ -46,7 +46,8 @@ def main():
     
     # If no image path is provided, use the default bitmap sample
     if args.image_path is None:
-        default_image_path = os.path.join(project_root, "python", "assets", "bitmap-sample.bmp")
+        # default_image_path = os.path.join(project_root, "python", "assets", "bitmap-sample.bmp")
+        default_image_path = os.path.join(project_root, "python", "assets", "/tmp/totem.bmp")
         if os.path.exists(default_image_path):
             args.image_path = default_image_path
             logger.info(f"Using default bitmap sample: {default_image_path}")
