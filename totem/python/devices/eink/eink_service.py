@@ -901,9 +901,11 @@ class EInkService:
                 x = command.get('x', 10)
                 y = command.get('y', 10)
                 font_size = command.get('font_size', 24)
+                text_color = command.get('text_color', 'black')
+                background_color = command.get('background_color', 'white')
                 
                 if hasattr(self.display, 'display_text'):
-                    self.display.display_text(text, x, y, font_size)
+                    self.display.display_text(text, x, y, font_size, text_color, background_color)
                 else:
                     # Fallback for displays without display_text method
                     logger.warning("Display lacks display_text method, using mock implementation")

@@ -67,14 +67,16 @@ class UnixSocketDisplayClient:
             if 'sock' in locals():
                 sock.close()
     
-    def display_text(self, text, font_size=36, x=10, y=10):
+    def display_text(self, text, font_size=36, x=10, y=10, text_color="black", background_color="white"):
         """Display text on the e-ink display"""
         command = {
             "command": "display_text",
             "text": text,
             "font_size": font_size,
             "x": x,
-            "y": y
+            "y": y,
+            "text_color": text_color,
+            "background_color": background_color
         }
         return self._send_command(command)
     
@@ -137,6 +139,11 @@ def main():
     parser.add_argument('--image', type=str, help='Path to an image file to display')
     parser.add_argument('--socket-path', type=str, help='Path to Unix socket file (default: /tmp/eink_service.sock)')
     parser.add_argument('--debug', action='store_true', help='Get debug information')
+    parser.add_argument('--text-color', type=str, default="black", help='Text color (default: black)')
+    parser.add_argument('--background', type=str, default="white", help='Background color (default: white)')
+    parser.add_argument('--font-size', type=int, default=36, help='Font size (default: 36)')
+    parser.add_argument('--x', type=int, default=10, help='X position (default: 10)')
+    parser.add_argument('--y', type=int, default=10, help='Y position (default: 10)')
     args = parser.parse_args()
     
     try:
@@ -172,7 +179,14 @@ def main():
         else:
             # Otherwise, display the text
             print(f"Displaying text: {args.text}")
-            response = client.display_text(args.text)
+            response = client.display_text(
+                args.text, 
+                font_size=args.font_size, 
+                x=args.x, 
+                y=args.y,
+                text_color=args.text_color,
+                background_color=args.background
+            )
             print(f"Service response: {response}")
         
         print("Display operation completed successfully!")

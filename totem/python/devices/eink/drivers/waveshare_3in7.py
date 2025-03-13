@@ -399,7 +399,7 @@ class WaveshareEPD3in7:
             if not self.handle_errors:
                 raise RuntimeError(error_msg)
     
-    def display_text(self, text, x=10, y=10, font_size=24):
+    def display_text(self, text, x=10, y=10, font_size=24, text_color="black", background_color="white"):
         """
         Display text on the screen
         Args:
@@ -407,6 +407,8 @@ class WaveshareEPD3in7:
             x: X position
             y: Y position
             font_size: Font size
+            text_color: Color of the text (default: "black")
+            background_color: Background color (default: "white")
         """
         if not self.initialized:
             self.init(0)  # 4-Gray mode
@@ -414,8 +416,28 @@ class WaveshareEPD3in7:
         try:
             from PIL import Image, ImageDraw, ImageFont
             
-            # Create a blank image with white background
-            image = Image.new('L', (self.width, self.height), 255)
+            # Convert color strings to RGB tuples for PIL
+            def convert_color(color_name):
+                if self.mock_mode:
+                    color_map = {
+                        "black": 0,
+                        "white": 255,
+                        "gray": 128
+                    }
+                    return color_map.get(color_name.lower(), 0 if color_name.lower() == "black" else 255)
+                else:
+                    color_map = {
+                        "black": 0,
+                        "white": 255,
+                        "gray": 128
+                    }
+                    return color_map.get(color_name.lower(), 0 if color_name.lower() == "black" else 255)
+            
+            bg_color = convert_color(background_color)
+            text_fill = convert_color(text_color)
+            
+            # Create a blank image with the specified background color
+            image = Image.new('L', (self.width, self.height), bg_color)
             draw = ImageDraw.Draw(image)
             
             # Try to find a suitable font
@@ -440,8 +462,8 @@ class WaveshareEPD3in7:
                 print("No TrueType fonts found, using default")
                 font = ImageFont.load_default()
             
-            # Draw text
-            draw.text((x, y), text, font=font, fill=0)
+            # Draw text with the specified color
+            draw.text((x, y), text, font=font, fill=text_fill)
             
             # Display the image
             self.display(image)
