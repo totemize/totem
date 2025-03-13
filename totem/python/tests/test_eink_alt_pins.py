@@ -29,7 +29,19 @@ os.environ['EINK_CS_PIN'] = '7'  # Use pin 7 instead of pin 8 for CS
 def test_eink_hardware():
     """Test the EInk display with hardware access"""
     try:
-        from devices.eink.waveshare_3in7 import WaveshareEPD3in7
+        # First try direct import
+        try:
+            from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
+            logger.info("Imported from python.devices.eink.waveshare_3in7")
+        except ImportError:
+            # Try relative import
+            try:
+                from ..devices.eink.waveshare_3in7 import WaveshareEPD3in7
+                logger.info("Imported from ..devices.eink.waveshare_3in7")
+            except ImportError:
+                # Try absolute import from project root
+                from totem.python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
+                logger.info("Imported from totem.python.devices.eink.waveshare_3in7")
         
         logger.info("Initializing EInk display with alternative pins")
         logger.info(f"Using CS_PIN = {os.environ.get('EINK_CS_PIN', '7')}")
