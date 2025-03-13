@@ -8,7 +8,16 @@ if os.path.exists(libdir):
     sys.path.append(libdir)
 
 import logging
-from waveshare_epd import epd3in7
+
+# Try to import from different locations
+try:
+    from waveshare_epd import epd3in7
+except ImportError:
+    try:
+        from python.devices.eink.waveshare_epd import epd3in7
+    except ImportError:
+        from devices.eink.waveshare_epd import epd3in7
+
 import time
 from PIL import Image,ImageDraw,ImageFont
 import traceback
@@ -23,9 +32,36 @@ try:
     epd.init(0)
     epd.Clear(0xFF, 0)
     
-    font36 = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 36)
-    font24 = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 24)
-    font18 = ImageFont.truetype(os.path.join(picdir, 'Font.ttc'), 18)
+    # Try to find a suitable font
+    font_paths = [
+        os.path.join(picdir, 'Font.ttc'),
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        '/usr/share/fonts/TTF/DejaVuSans.ttf',
+        '/usr/share/fonts/dejavu/DejaVuSans.ttf',
+        '/System/Library/Fonts/Helvetica.ttc',
+        'C:\\Windows\\Fonts\\Arial.ttf'
+    ]
+    
+    font36 = None
+    font24 = None
+    font18 = None
+    
+    for path in font_paths:
+        if os.path.exists(path):
+            try:
+                font36 = ImageFont.truetype(path, 36)
+                font24 = ImageFont.truetype(path, 24)
+                font18 = ImageFont.truetype(path, 18)
+                logging.info(f"Using font: {path}")
+                break
+            except Exception:
+                pass
+    
+    if font36 is None:
+        logging.warning("No TrueType fonts found, using default")
+        font36 = ImageFont.load_default()
+        font24 = ImageFont.load_default()
+        font18 = ImageFont.load_default()
     
     # Drawing on the Horizontal image
     logging.info("1.Drawing on the Horizontal image...")
@@ -34,10 +70,10 @@ try:
     draw.text((10, 0), 'hello world', font = font24, fill = 0)
     draw.text((10, 20), '3.7inch e-Paper', font = font24, fill = 0)
     draw.rectangle((10, 110, 154, 146), 'black', 'black')
-    draw.text((10, 110), u'微雪电子', font = font36, fill = epd.GRAY1)
-    draw.text((10, 150), u'微雪电子', font = font36, fill = epd.GRAY2)
-    draw.text((10, 190), u'微雪电子', font = font36, fill = epd.GRAY3)
-    draw.text((10, 230), u'微雪电子', font = font36, fill = epd.GRAY4)
+    draw.text((10, 110), u'Waveshare', font = font36, fill = epd.GRAY1)
+    draw.text((10, 150), u'E-Paper', font = font36, fill = epd.GRAY2)
+    draw.text((10, 190), u'Demo', font = font36, fill = epd.GRAY3)
+    draw.text((10, 230), u'Test', font = font36, fill = epd.GRAY4)
     draw.line((20, 50, 70, 100), fill = 0)
     draw.line((70, 50, 20, 100), fill = 0)
     draw.rectangle((20, 50, 70, 100), outline = 0)
@@ -49,17 +85,24 @@ try:
     epd.display_4Gray(epd.getbuffer_4Gray(Himage))
     time.sleep(5)
     
-    logging.info("2.read 4 Gray bmp file")
-    Himage = Image.open(os.path.join(picdir, '3in7_4gray2.bmp'))
-    epd.display_4Gray(epd.getbuffer_4Gray(Himage))
-    time.sleep(5)
+    # Skip image loading tests if the image files don't exist
+    if os.path.exists(os.path.join(picdir, '3in7_4gray2.bmp')):
+        logging.info("2.read 4 Gray bmp file")
+        Himage = Image.open(os.path.join(picdir, '3in7_4gray2.bmp'))
+        epd.display_4Gray(epd.getbuffer_4Gray(Himage))
+        time.sleep(5)
+    else:
+        logging.warning("Skipping image test - image file not found")
     
-    logging.info("3.read bmp file on window")
-    Himage2 = Image.new('1', (epd.height, epd.width), 255)  # 255: clear the frame
-    bmp = Image.open(os.path.join(picdir, '100x100.bmp'))
-    Himage2.paste(bmp, (200,50))
-    epd.display_4Gray(epd.getbuffer_4Gray(Himage2))
-    time.sleep(5)
+    if os.path.exists(os.path.join(picdir, '100x100.bmp')):
+        logging.info("3.read bmp file on window")
+        Himage2 = Image.new('1', (epd.height, epd.width), 255)  # 255: clear the frame
+        bmp = Image.open(os.path.join(picdir, '100x100.bmp'))
+        Himage2.paste(bmp, (200,50))
+        epd.display_4Gray(epd.getbuffer_4Gray(Himage2))
+        time.sleep(5)
+    else:
+        logging.warning("Skipping image test - image file not found")
     
     # Drawing on the Vertical image
     logging.info("4.Drawing on the Vertical image...")
@@ -68,10 +111,10 @@ try:
     draw.text((2, 0), 'hello world', font = font18, fill = 0)
     draw.text((2, 20), '3.7inch epd', font = font18, fill = 0)
     draw.rectangle((130, 20, 274, 56), 'black', 'black')
-    draw.text((130, 20), u'微雪电子', font = font36, fill = epd.GRAY1)
-    draw.text((130, 60), u'微雪电子', font = font36, fill = epd.GRAY2)
-    draw.text((130, 100), u'微雪电子', font = font36, fill = epd.GRAY3)
-    draw.text((130, 140), u'微雪电子', font = font36, fill = epd.GRAY4)
+    draw.text((130, 20), u'Waveshare', font = font36, fill = epd.GRAY1)
+    draw.text((130, 60), u'E-Paper', font = font36, fill = epd.GRAY2)
+    draw.text((130, 100), u'Demo', font = font36, fill = epd.GRAY3)
+    draw.text((130, 140), u'Test', font = font36, fill = epd.GRAY4)
     draw.line((10, 90, 60, 140), fill = 0)
     draw.line((60, 90, 10, 140), fill = 0)
     draw.rectangle((10, 90, 60, 140), outline = 0)
