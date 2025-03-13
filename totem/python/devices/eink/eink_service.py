@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 EInk Service - Persistent process to manage e-ink display hardware
 
@@ -24,6 +23,7 @@ from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 from typing import Dict, Any, Optional, List, Tuple, Union
 import errno
+import stat
 
 # Add the parent directory to path to import from the project
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -421,6 +421,24 @@ class EInkService:
         check_interval = 0.1  # Check every 100ms
         last_check_time = time.time()
         
+        # Check if socket directory exists and is writable
+        socket_dir = os.path.dirname(self.socket_path)
+        if not os.path.exists(socket_dir):
+            try:
+                logger.info(f"Creating socket directory: {socket_dir}")
+                os.makedirs(socket_dir, exist_ok=True)
+            except Exception as e:
+                logger.error(f"Failed to create socket directory: {e}")
+                self.socket_server_ready.set()  # Set event to unblock main thread
+                self.initialized = False
+                return
+            
+        if not os.access(socket_dir, os.W_OK):
+            logger.error(f"No write permission to socket directory: {socket_dir}")
+            self.socket_server_ready.set()  # Set event to unblock main thread
+            self.initialized = False
+            return
+        
         # Remove existing socket file if it exists
         if os.path.exists(self.socket_path):
             try:
@@ -432,27 +450,116 @@ class EInkService:
         
         # Create socket server
         try:
+            # Create the socket with explicit settings
             self.socket_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            self.socket_server.bind(self.socket_path)
-            self.socket_server.listen(5)
+            
+            # Set socket options
+            try:
+                # Set SO_REUSEADDR to avoid "Address already in use" errors
+                self.socket_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                logger.debug("Set SO_REUSEADDR socket option")
+            except Exception as e:
+                logger.warning(f"Could not set socket options: {e}")
+            
+            # Try to bind to the socket path
+            try:
+                logger.debug(f"Binding to socket path: {self.socket_path}")
+                self.socket_server.bind(self.socket_path)
+                logger.debug("Socket bind successful")
+            except OSError as e:
+                # If binding fails because the socket file exists but can't be unlocked,
+                # try to forcefully remove it again and retry
+                if e.errno == errno.EADDRINUSE:
+                    logger.warning(f"Address in use error: {e}, trying forced cleanup and retry")
+                    try:
+                        # Force remove socket file
+                        os.unlink(self.socket_path)
+                        # Try binding again
+                        self.socket_server.bind(self.socket_path)
+                        logger.info("Socket bind successful after forced cleanup")
+                    except Exception as retry_error:
+                        logger.error(f"Failed to bind socket even after cleanup: {retry_error}")
+                        # Signal that the server isn't ready and exit the thread
+                        self.socket_server_ready.set()  # Set the event to unblock the main thread
+                        self.initialized = False
+                        return
+                else:
+                    # For other socket errors, log and exit the thread
+                    logger.error(f"Fatal socket error: {e}")
+                    self.socket_server_ready.set()  # Set the event to unblock the main thread
+                    self.initialized = False
+                    return
+            
+            # Make sure the socket server is set up correctly
+            try:
+                self.socket_server.listen(5)
+                logger.debug("Socket now listening")
+            except Exception as e:
+                logger.error(f"Socket listen failed: {e}")
+                self.socket_server_ready.set()
+                self.initialized = False
+                return
+            
             self.socket_server.settimeout(check_interval)  # Very short timeout to allow frequent checks
             
-            # Ensure socket file has the right permissions
+            # Ensure socket file has the right permissions and verify it exists
             try:
                 os.chmod(self.socket_path, 0o666)  # Allow anyone to read/write
                 logger.info(f"Set socket file permissions to 0o666")
-                # Add debug logging to verify socket file exists
+                
+                # Verify the socket file exists
                 if os.path.exists(self.socket_path):
                     logger.info(f"Socket file created successfully at {self.socket_path}")
+                    # Print stat information about the socket file for debugging
+                    try:
+                        statinfo = os.stat(self.socket_path)
+                        logger.debug(f"Socket file stats: mode={oct(statinfo.st_mode)}, uid={statinfo.st_uid}, gid={statinfo.st_gid}")
+                    except Exception as stat_error:
+                        logger.warning(f"Error getting file stats: {stat_error}")
                 else:
                     logger.error(f"Socket file not found at {self.socket_path} even though binding succeeded")
+                    # This indicates that binding succeeded but the file wasn't created, which would be unusual
+                    self.socket_server_ready.set()
+                    self.initialized = False
+                    return
+                
             except Exception as e:
                 logger.warning(f"Could not set socket file permissions: {e}")
+                # Continue anyway, since the socket might still be usable
+                
+            # Do a final check to make sure the socket file exists
+            if not os.path.exists(self.socket_path):
+                logger.error(f"Socket file still not found at {self.socket_path} after setup")
+                self.socket_server_ready.set()
+                self.initialized = False
+                return
             
             logger.info("Unix socket server ready")
             
             # Signal that the socket server is ready
             self.socket_server_ready.set()
+            
+            # After binding and listening, verify the socket exists and is working
+            try:
+                # Test if the socket is actually working by trying to connect to it
+                test_client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                test_client.settimeout(1)  # Short timeout
+                
+                try:
+                    logger.debug(f"Testing socket with self-connection to {self.socket_path}")
+                    test_client.connect(self.socket_path)
+                    logger.debug("Self-connection test successful")
+                    # Send a quick message to test it works
+                    test_client.sendall(b"test")
+                    logger.debug("Self-connection test message sent")
+                except Exception as e:
+                    logger.error(f"Self-connection test failed: {e}")
+                finally:
+                    test_client.close()
+                    
+            except Exception as e:
+                logger.warning(f"Error during socket self-test: {e}")
+                # Continue anyway, as this is just a diagnostic
             
             while self.initialized and not self.stop_event.is_set():
                 # Check for termination more frequently
@@ -652,6 +759,35 @@ class EInkService:
                 self.server_thread = threading.Thread(target=self.run_tcp_server)
             else:
                 logger.info(f"Using Unix domain socket server at {self.socket_path}")
+                
+                # Check if the directory for the socket exists
+                socket_dir = os.path.dirname(self.socket_path)
+                if not os.path.exists(socket_dir):
+                    logger.warning(f"Socket directory {socket_dir} does not exist, trying to create it")
+                    try:
+                        os.makedirs(socket_dir, exist_ok=True)
+                        logger.info(f"Created socket directory: {socket_dir}")
+                    except Exception as e:
+                        logger.error(f"Failed to create socket directory: {e}")
+                        return False
+                
+                # Check if we have write permission to the socket directory
+                if not os.access(socket_dir, os.W_OK):
+                    logger.error(f"No write permission to socket directory: {socket_dir}")
+                    return False
+                
+                # Check for existing socket file
+                if os.path.exists(self.socket_path):
+                    logger.warning(f"Socket file already exists at {self.socket_path}, will be removed by server thread")
+                    try:
+                        # Check if it's actually a socket
+                        mode = os.stat(self.socket_path).st_mode
+                        is_socket = stat.S_ISSOCK(mode)
+                        if not is_socket:
+                            logger.error(f"Existing file at {self.socket_path} is not a socket (mode={oct(mode)})")
+                    except Exception as e:
+                        logger.warning(f"Error checking existing socket file: {e}")
+                
                 self.server_thread = threading.Thread(target=self.run_unix_socket_server)
                 
             # Mark as daemon so it terminates when the main thread exits
@@ -857,26 +993,60 @@ class EInkService:
 
         # First, handle socket resources if they exist
         try:
-            if hasattr(self, 'server') and self.server:
+            # Handle socket server if it exists
+            if hasattr(self, 'socket_server') and self.socket_server:
                 logger.info("Closing socket server")
                 try:
                     # In case the socket is hanging
-                    if hasattr(self.server, 'socket') and self.server.socket:
+                    if hasattr(self.socket_server, 'socket') and self.socket_server.socket:
                         try:
-                            self.server.socket.shutdown(socket.SHUT_RDWR)
+                            self.socket_server.socket.shutdown(socket.SHUT_RDWR)
                         except Exception as e:
                             logger.warning(f"Error shutting down socket: {e}")
-                    self.server.server_close()
-                    logger.info("Socket server closed successfully")
+                    
+                    # Explicit close with additional handling
+                    try:
+                        fd = self.socket_server.fileno()
+                        logger.debug(f"Socket file descriptor: {fd}")
+                        self.socket_server.close()
+                        logger.info("Socket server closed successfully")
+                        try:
+                            # Try to close the file descriptor directly
+                            os.close(fd)
+                            logger.debug(f"Closed file descriptor {fd}")
+                        except OSError:
+                            pass  # Already closed
+                    except Exception as e:
+                        logger.error(f"Error closing socket server: {e}")
                 except Exception as e:
-                    logger.error(f"Error closing socket server: {e}")
-        
+                    logger.error(f"Error during socket server shutdown: {e}")
+            
             # Clean up socket file if it exists and we're using Unix sockets
-            if self.socket_path and os.path.exists(self.socket_path):
+            if hasattr(self, 'socket_path') and self.socket_path and os.path.exists(self.socket_path):
                 logger.info(f"Removing socket file: {self.socket_path}")
                 try:
+                    # Check if it's actually a socket
+                    try:
+                        mode = os.stat(self.socket_path).st_mode
+                        is_socket = stat.S_ISSOCK(mode)
+                        if not is_socket:
+                            logger.warning(f"File at {self.socket_path} is not a socket (mode={oct(mode)}), but removing anyway")
+                    except Exception as e:
+                        logger.warning(f"Error checking socket file type: {e}")
+                    
+                    # Force remove the file
                     os.unlink(self.socket_path)
                     logger.info("Socket file removed successfully")
+                    
+                    # Verify removal
+                    if os.path.exists(self.socket_path):
+                        logger.error(f"Socket file still exists at {self.socket_path} after removal attempt")
+                        # Try one more time with force
+                        try:
+                            os.remove(self.socket_path)
+                            logger.info("Socket file removed on second attempt")
+                        except Exception as e2:
+                            logger.error(f"Failed to remove socket file on second attempt: {e2}")
                 except Exception as e:
                     logger.error(f"Error removing socket file: {e}")
         except Exception as e:
@@ -1158,74 +1328,88 @@ def run_service(debug_timeout=None):
             end_time = start_time + debug_timeout
             logger.info(f"End time set to: {end_time} (current time: {start_time})")
         
-        # Keep the main thread running with a timeout
-        if debug_timeout:
-            logger.info(f"Starting main loop with {debug_timeout}s timeout")
+        # Add this new check to ensure the socket file is created
+        def check_socket_file():
+            socket_path = os.environ.get('EINK_SOCKET_PATH', DEFAULT_SOCKET_PATH)
+            start_check = time.time()
+            timeout = 10  # Wait up to 10 seconds for socket file
             
-            # Use a ticker to report status at regular intervals
-            last_status_time = start_time
-            status_interval = 1  # Report status every second for debugging
+            while time.time() - start_check < timeout:
+                if os.path.exists(socket_path):
+                    logger.info(f"Socket file verified at {socket_path}")
+                    # Check socket file permissions
+                    try:
+                        statinfo = os.stat(socket_path)
+                        logger.info(f"Socket file stats: mode={oct(statinfo.st_mode)}, uid={statinfo.st_uid}, gid={statinfo.st_gid}")
+                    except Exception as e:
+                        logger.warning(f"Could not check socket file stats: {e}")
+                    return True
+                time.sleep(0.5)
+                logger.debug(f"Waiting for socket file {socket_path} to appear ({time.time() - start_check:.1f}s elapsed)")
             
-            # Main service loop with timeout check
-            loop_count = 0
-            
-            # Create a bool flag to control our loop
-            running = True
-            
-            while running:
-                # Get current time for this iteration
-                current_time = time.time()
-                elapsed = current_time - start_time
-                remaining = max(0, end_time - current_time)
+            logger.error(f"Socket file not created at {socket_path} after {timeout}s wait")
+            return False
+        
+        # Add this helper function to test socket connectivity
+        def test_socket_connection(socket_path):
+            """Try to connect to the socket as a client to verify it's working"""
+            if not os.path.exists(socket_path):
+                logger.error(f"Cannot test connection - socket file {socket_path} does not exist")
+                return False
                 
-                # Log more frequently for debugging
-                if current_time - last_status_time >= status_interval:
-                    logger.info(f"Loop #{loop_count}: Running for {elapsed:.1f}s, {remaining:.1f}s remaining until timeout")
-                    last_status_time = current_time
-                
-                # Exit if timeout reached
-                if current_time >= end_time:
-                    logger.info(f"Debug timeout of {debug_timeout}s reached (current: {current_time:.1f}, end: {end_time:.1f})")
-                    break
-                
-                # Also check service initialization state
-                if hasattr(service, 'initialized') and not service.initialized:
-                    logger.info("Service is no longer initialized, exiting loop")
-                    break
-                    
-                # Increment loop counter
-                loop_count += 1
-                    
-                # Short sleep to prevent CPU hogging, but allow quicker timeout response
-                time.sleep(0.1)
-                
-            # We've exited the loop, perform cleanup
-            logger.info("Exited main loop, preparing for service shutdown")
-            
-            # Explicitly stop the service for clean shutdown
             try:
-                logger.info("Explicitly stopping service due to timeout")
-                service.stop()
-                logger.info("Service stopped successfully after timeout")
+                logger.info(f"Testing socket connection to {socket_path}")
+                # Create a client socket
+                client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                client.settimeout(5)  # 5 second timeout
+                
+                # Try to connect
+                client.connect(socket_path)
+                logger.info("Socket connection test successful")
+                
+                # Send a test command
+                try:
+                    test_cmd = json.dumps({"action": "status"}).encode('utf-8')
+                    client.sendall(test_cmd)
+                    logger.info("Sent test command")
+                    
+                    # Try to receive a response
+                    response = client.recv(1024).decode('utf-8')
+                    logger.info(f"Received response: {response}")
+                except Exception as e:
+                    logger.error(f"Error sending/receiving test command: {e}")
+                
+                # Close the connection
+                client.close()
+                return True
             except Exception as e:
-                logger.error(f"Error stopping service after timeout: {e}")
-                
-        else:
-            # For non-debug mode, just wait indefinitely for signals
-            logger.info("Service running in normal mode (no debug timeout)")
-            max_runtime = int(os.environ.get('EINK_MAX_RUNTIME', 24 * 60 * 60))  # Default 24 hours
-            end_time = start_time + max_runtime
-            
-            while service.initialized:
-                current_time = time.time()
-                
-                # Check for max runtime exceeded
-                if current_time >= end_time:
-                    logger.warning(f"Maximum runtime of {max_runtime}s exceeded, shutting down")
-                    break
-                
-                time.sleep(1)
-            
+                logger.error(f"Socket connection test failed: {e}")
+                return False
+        
+        # Check for socket file and test connection
+        if 'service' in locals() and hasattr(service, 'initialized') and service.initialized:
+            socket_ok = check_socket_file()
+            if socket_ok:
+                logger.info("Socket file exists, testing connection")
+                connection_ok = test_socket_connection(service.socket_path)
+                if not connection_ok:
+                    logger.error("Socket connection test failed, service may not be responding")
+            else:
+                logger.error("Socket file verification failed, service may not be fully operational")
+                # Try to debug why socket file wasn't created
+                try:
+                    logger.debug(f"Checking socket directory permissions for {os.path.dirname(service.socket_path)}")
+                    dirpath = os.path.dirname(service.socket_path)
+                    if os.path.exists(dirpath):
+                        logger.debug(f"Directory exists, checking permissions")
+                        statinfo = os.stat(dirpath)
+                        logger.debug(f"Directory stats: mode={oct(statinfo.st_mode)}, uid={statinfo.st_uid}, gid={statinfo.st_gid}")
+                        logger.debug(f"Process uid={os.getuid()}, gid={os.getgid()}")
+                    else:
+                        logger.debug(f"Socket directory {dirpath} does not exist")
+                except Exception as e:
+                    logger.error(f"Error checking socket directory: {e}")
+    
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received, shutting down")
     except Exception as e:
