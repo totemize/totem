@@ -39,7 +39,7 @@ except ImportError:
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),
-            logging.FileHandler('/tmp/eink_service.log')
+            logging.FileHandler(os.path.expanduser('~/eink_service.log'))
         ]
     )
     logger = logging.getLogger("eink_service")
