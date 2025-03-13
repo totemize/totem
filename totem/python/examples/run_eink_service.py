@@ -59,9 +59,6 @@ def main():
         global service
         service = EInkService()
         
-        # Initialize the service
-        service.init()
-        
         # Start the service - this initializes the display and starts the socket server
         if not service.start():
             print("Failed to start the e-ink service properly")
