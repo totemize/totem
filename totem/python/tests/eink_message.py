@@ -32,7 +32,7 @@ def display_message(message, nvme_compatible=False, mock_mode=False, font_size=3
         os.environ['EINK_MOCK_MODE'] = '1'
     
     # Import the EInk driver
-    from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
+    from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7, RST_PIN, DC_PIN, CS_PIN, BUSY_PIN
 
     try:
         # Initialize the display
@@ -44,13 +44,14 @@ def display_message(message, nvme_compatible=False, mock_mode=False, font_size=3
         print(f"  Mock mode: {epd.mock_mode}")
         print(f"  NVME compatible: {epd.nvme_compatible}")
         print(f"  Software SPI: {epd.using_sw_spi}")
-        print(f"  RST_PIN: {epd.rst_pin}")
-        print(f"  DC_PIN: {epd.dc_pin}")
-        print(f"  CS_PIN: {epd.cs_pin}")
-        print(f"  BUSY_PIN: {epd.busy_pin}")
+        print(f"  RST_PIN: {RST_PIN}")
+        print(f"  DC_PIN: {DC_PIN}")
+        print(f"  CS_PIN: {CS_PIN}")
+        print(f"  BUSY_PIN: {BUSY_PIN}")
         if epd.using_sw_spi:
-            print(f"  MOSI_PIN: {epd.mosi_pin}")
-            print(f"  SCK_PIN: {epd.sck_pin}")
+            from python.devices.eink.waveshare_3in7 import MOSI_PIN, SCK_PIN
+            print(f"  MOSI_PIN: {MOSI_PIN}")
+            print(f"  SCK_PIN: {SCK_PIN}")
         
         # Initialize the display
         epd.init()
