@@ -11,6 +11,7 @@ const main = async () => {
   try {
     const client = net.createConnection({ path: '/tmp/eink_service.sock' }, () => {
       console.log('Connected to server!');
+      console.log(`Writing request: ${JSON.stringify(request)}`); 
       client.write(JSON.stringify(request));
     });
   
@@ -26,7 +27,7 @@ const main = async () => {
   } catch (error) {
     console.error('Error in sync example:', error);
   }
-  
+
 }
 
 setInterval(main, 10000);  
