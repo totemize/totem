@@ -16,7 +16,8 @@ We've created several tools to help test the e-ink display:
 
 4. **Image File Display Script**: `python/examples/display_image_file.py`
    - This script demonstrates how to display an image file on the e-ink display.
-   - Run with: `sudo ./display_image_file.py /path/to/image.png`
+   - Run with: `sudo ./display_image_file.py [/path/to/image.png]`
+   - If no image path is provided, it will use the default bitmap sample from the assets folder.
    - Supports various image formats (PNG, JPG, BMP, etc.)
    - Automatically converts to grayscale and resizes to fit the display
    - Options:
