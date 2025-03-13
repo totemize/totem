@@ -74,7 +74,7 @@ sys.path.insert(0, "${TOTEM_DIR}")
 
 try:
     # Import using the correct path
-    from totem.python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
+    from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
     
     # Initialize display with environment variables already set by the script
     epd = WaveshareEPD3in7()
