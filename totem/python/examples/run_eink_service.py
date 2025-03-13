@@ -44,6 +44,10 @@ def main():
         os.environ['LOGLEVEL'] = 'DEBUG'
         os.environ['EINK_DEBUG'] = '1'
     
+    # Set socket path
+    os.environ['EINK_SOCKET_PATH'] = args.socket_path
+    os.environ['EINK_USE_TCP'] = '0'  # Force Unix socket mode
+    
     # Set signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -53,31 +57,22 @@ def main():
         
         # Create and start the service
         global service
-        service = EInkService(
-            socket_path=args.socket_path,
-            use_tcp=False,  # Use Unix socket
-            daemonize=False  # Don't run as daemon
-        )
+        service = EInkService()
         
         # Initialize the service
         service.init()
         
-        # Configure the service
-        service.config(
-            debug_timeout=None,  # Run indefinitely
-            no_auto_exit=True,  # Don't auto-exit
-            keep_running=True   # Keep running
-        )
-        
-        # Start the service
-        service.start()
+        # Start the service - this initializes the display and starts the socket server
+        if not service.start():
+            print("Failed to start the e-ink service properly")
+            return
         
         print("E-Ink service started successfully. Ctrl+C to stop.")
         print(f"Unix socket: {args.socket_path}")
         
         # Keep the script running
         try:
-            while True:
+            while not service.stop_event.is_set():
                 time.sleep(1)
         except KeyboardInterrupt:
             print("\nKeyboard interrupt received. Shutting down...")
