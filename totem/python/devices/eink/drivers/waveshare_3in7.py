@@ -44,6 +44,9 @@ if NVME_COMPATIBLE:
     SCK_PIN = int(os.environ.get('EINK_SCK_PIN', 11))
     USE_SW_SPI = True
 
+# Import EInkDeviceInterface at the top of the file
+from devices.eink.eink import EInkDeviceInterface
+
 class WaveshareEPD3in7:
     """
     Driver for Waveshare 3.7inch e-Paper HAT
@@ -499,7 +502,6 @@ class Driver(EInkDeviceInterface):
     
     def __init__(self):
         """Initialize the driver"""
-        from devices.eink.eink import EInkDeviceInterface
         # Import here to avoid circular imports
         
         # Create the underlying driver
