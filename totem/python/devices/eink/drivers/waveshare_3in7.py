@@ -45,7 +45,18 @@ if NVME_COMPATIBLE:
     USE_SW_SPI = True
 
 # Import EInkDeviceInterface at the top of the file
-from devices.eink.eink import EInkDeviceInterface
+try:
+    from devices.eink.eink import EInkDeviceInterface
+except ImportError:
+    try:
+        from python.devices.eink.eink import EInkDeviceInterface
+    except ImportError:
+        # Create a placeholder class if we can't import the real one
+        class EInkDeviceInterface:
+            def init(self): pass
+            def clear(self): pass
+            def display_image(self, image): pass
+            def display_bytes(self, image_bytes): pass
 
 class WaveshareEPD3in7:
     """
@@ -133,9 +144,14 @@ class WaveshareEPD3in7:
                     print("Using system-installed waveshare_epd driver")
                 except ImportError:
                     # If not found, try to import from our local package
-                    print("System driver not found, trying local package")
-                    from devices.eink.waveshare_epd import epd3in7
-                    print("Using local waveshare_epd driver")
+                    try:
+                        print("System driver not found, trying local package")
+                        from devices.eink.waveshare_epd import epd3in7
+                        print("Using local waveshare_epd driver")
+                    except ImportError:
+                        print("Local package not found, trying python module path")
+                        from python.devices.eink.waveshare_epd import epd3in7
+                        print("Using python module waveshare_epd driver")
                 
                 # Create the EPD instance
                 self.epd = epd3in7.EPD()
