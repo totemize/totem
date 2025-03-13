@@ -1186,22 +1186,25 @@ class EInkService:
             try:
                 logger.info(f"Initializing display (attempt {attempt+1}/{self.max_init_retries})...")
                 
-                if display_type in ['waveshare_3in7', 'waveshare', '3in7']:
-                    # Attempt to use legacy GPIO access by importing RPi.GPIO first
-                    try:
-                        import RPi.GPIO as GPIO
-                        GPIO.setmode(GPIO.BCM)
-                        GPIO.setwarnings(False)
-                        logger.info("Successfully imported and configured RPi.GPIO")
-                    except ImportError:
-                        logger.warning("Could not import RPi.GPIO, will rely on driver's GPIO handling")
-                    except Exception as e:
-                        logger.warning(f"Error configuring GPIO: {e}")
-                    
-                    # Directly use the WaveshareEPD3in7 class
-                    self.display = WaveshareEPD3in7()
-                else:
-                    logger.error(f"Unknown display type: {display_type}, falling back to waveshare_3in7")
+                # Attempt to use legacy GPIO access by importing RPi.GPIO first
+                try:
+                    import RPi.GPIO as GPIO
+                    GPIO.setmode(GPIO.BCM)
+                    GPIO.setwarnings(False)
+                    logger.info("Successfully imported and configured RPi.GPIO")
+                except ImportError:
+                    logger.warning("Could not import RPi.GPIO, will rely on driver's GPIO handling")
+                except Exception as e:
+                    logger.warning(f"Error configuring GPIO: {e}")
+                
+                # Use the Driver class instead of directly using WaveshareEPD3in7
+                try:
+                    from devices.eink.drivers.waveshare_3in7 import Driver
+                    self.display = Driver()
+                    logger.info("Successfully created Driver instance")
+                except ImportError:
+                    logger.warning("Could not import Driver class, falling back to direct WaveshareEPD3in7 usage")
+                    # Directly use the WaveshareEPD3in7 class as fallback
                     self.display = WaveshareEPD3in7()
                 
                 # Test display to confirm it works

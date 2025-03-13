@@ -134,11 +134,17 @@ class WaveshareEPD3in7:
                     from devices.eink.waveshare_epd import epd3in7
                     print("Using local waveshare_epd driver")
                 
+                # Create the EPD instance
                 self.epd = epd3in7.EPD()
+                
+                # Print the pin configuration for debugging
+                print(f"Manufacturer driver using pins: RST={self.epd.reset_pin}, DC={self.epd.dc_pin}, CS={self.epd.cs_pin}, BUSY={self.epd.busy_pin}")
                 
                 # Store display dimensions
                 self.width = self.epd.width
                 self.height = self.epd.height
+                
+                print(f"Display dimensions: {self.width}x{self.height}")
                 
             except ImportError as e:
                 error_msg = f"Could not import manufacturer's driver: {e}"
@@ -481,4 +487,77 @@ class WaveshareEPD3in7:
             traceback.print_exc()
             
             if not self.handle_errors:
-                raise RuntimeError(error_msg) 
+                raise RuntimeError(error_msg)
+
+class Driver(EInkDeviceInterface):
+    """
+    Driver implementation for Waveshare 3.7inch e-Paper HAT
+    
+    This class implements the EInkDeviceInterface and uses the WaveshareEPD3in7 class
+    to interact with the hardware.
+    """
+    
+    def __init__(self):
+        """Initialize the driver"""
+        from devices.eink.eink import EInkDeviceInterface
+        # Import here to avoid circular imports
+        
+        # Create the underlying driver
+        self.epd = WaveshareEPD3in7()
+        
+        # Store dimensions for convenience
+        self.width = self.epd.width
+        self.height = self.epd.height
+        
+        # Gray levels
+        self.GRAY1 = self.epd.GRAY1
+        self.GRAY2 = self.epd.GRAY2
+        self.GRAY3 = self.epd.GRAY3
+        self.GRAY4 = self.epd.GRAY4
+        
+        print(f"Initialized Waveshare 3.7inch driver with dimensions: {self.width}x{self.height}")
+        print(f"Using pins: RST={RST_PIN}, DC={DC_PIN}, CS={CS_PIN}, BUSY={BUSY_PIN}")
+        if USE_SW_SPI:
+            print(f"Using software SPI with pins: MOSI={MOSI_PIN}, SCK={SCK_PIN}")
+    
+    def init(self):
+        """Initialize the e-ink device."""
+        print("Driver.init() called")
+        # Always initialize in 4Gray mode (0) as in the manufacturer's example
+        self.epd.init(0)  # Initialize in 4Gray mode
+    
+    def clear(self):
+        """Clear the e-ink display."""
+        print("Driver.clear() called")
+        # Clear with white color (0xFF) in 4Gray mode (0)
+        self.epd.Clear(0xFF, 0)  # Clear with white color in 4Gray mode
+    
+    def display_image(self, image):
+        """Display an image on the e-ink screen."""
+        print("Driver.display_image() called")
+        # Convert the image to the right format if needed
+        buffer = self.epd.getbuffer_4Gray(image)
+        # Display the image
+        self.epd.display_4Gray(buffer)
+    
+    def display_bytes(self, image_bytes):
+        """Display raw byte data on the e-ink screen."""
+        print("Driver.display_bytes() called")
+        from PIL import Image
+        import io
+        
+        # Convert bytes to PIL Image
+        image = Image.open(io.BytesIO(image_bytes))
+        
+        # Display the image
+        self.display_image(image)
+    
+    def sleep(self):
+        """Put the display to sleep to save power."""
+        print("Driver.sleep() called")
+        self.epd.sleep()
+    
+    def close(self):
+        """Clean up resources."""
+        print("Driver.close() called")
+        self.epd.close() 
