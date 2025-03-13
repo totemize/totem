@@ -336,7 +336,19 @@ class EInkService:
         
         # Wait for threads to finish
         if hasattr(self, 'server_thread') and self.server_thread.is_alive():
+            logger.info("Waiting for server thread to finish...")
             self.server_thread.join(timeout=5.0)
+            if self.server_thread.is_alive():
+                logger.warning("Server thread did not exit cleanly")
+            
+        # Close the socket server explicitly
+        if hasattr(self, 'socket_server') and self.socket_server:
+            try:
+                logger.info("Closing socket server")
+                self.socket_server.close()
+            except Exception as e:
+                logger.error(f"Error closing socket server: {e}")
+            self.socket_server = None
             
         # Clean up display resources - try both self.display and self.eink for compatibility
         # First try with self.display
@@ -428,25 +440,83 @@ class EInkService:
             # Signal that the socket server is ready
             self.socket_server_ready.set()
             
-            while self.initialized:
+            while self.initialized and not self.stop_event.is_set():
                 try:
+                    # Check if the socket is still valid
+                    if self.socket_server.fileno() == -1:
+                        logger.error("Socket descriptor is invalid, recreating socket")
+                        # Recreate the socket
+                        self.socket_server.close()
+                        self.socket_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                        self.socket_server.bind(self.socket_path)
+                        self.socket_server.listen(5)
+                        self.socket_server.settimeout(1.0)
+                        continue
+
                     client, _ = self.socket_server.accept()
                     self._handle_client(client)
                 except socket.timeout:
                     # This just allows us to check the running flag
                     continue
+                except OSError as e:
+                    if e.errno == 9:  # Bad file descriptor
+                        if self.initialized and not self.stop_event.is_set():
+                            logger.error("Socket bad file descriptor, recreating socket")
+                            try:
+                                # Clean up and recreate the socket
+                                if os.path.exists(self.socket_path):
+                                    os.unlink(self.socket_path)
+                                self.socket_server.close()
+                                self.socket_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                                self.socket_server.bind(self.socket_path)
+                                self.socket_server.listen(5)
+                                self.socket_server.settimeout(1.0)
+                                os.chmod(self.socket_path, 0o666)
+                                logger.info("Socket recreated successfully")
+                            except Exception as recreate_error:
+                                logger.error(f"Failed to recreate socket: {recreate_error}")
+                                # If we can't recreate the socket, exit the loop
+                                break
+                        else:
+                            # We're shutting down, so just break out of the loop
+                            break
+                    else:
+                        # Handle other OSErrors
+                        if self.initialized and not self.stop_event.is_set():
+                            logger.error(f"Socket server error: {e}")
+                        # If we're in shutdown, just silently exit
+                        if not self.initialized or self.stop_event.is_set():
+                            break
                 except Exception as e:
-                    if self.initialized:  # Only log if we're not in shutdown
+                    if self.initialized and not self.stop_event.is_set():
                         logger.error(f"Socket server error: {e}")
                         logger.error(traceback.format_exc())
+                    # If we're in shutdown, just silently exit
+                    if not self.initialized or self.stop_event.is_set():
+                        break
             
             # Clean up
-            self.socket_server.close()
+            try:
+                self.socket_server.close()
+                if os.path.exists(self.socket_path):
+                    os.unlink(self.socket_path)
+                    logger.info(f"Removed socket file: {self.socket_path}")
+            except Exception as e:
+                logger.error(f"Error during socket cleanup: {e}")
+                
             logger.info("Unix socket server stopped")
         except Exception as e:
             logger.error(f"Error setting up Unix socket server: {e}")
             logger.error(traceback.format_exc())
             self.initialized = False
+            # Clean up after failure
+            try:
+                if hasattr(self, 'socket_server') and self.socket_server:
+                    self.socket_server.close()
+                if os.path.exists(self.socket_path):
+                    os.unlink(self.socket_path)
+            except:
+                pass
     
     def run_tcp_server(self):
         """Run a TCP server for network communication"""
@@ -568,75 +638,20 @@ class EInkService:
             logger.error("Socket server is not initialized, command processing loop cannot start")
             return
             
-        # Lists for select
-        inputs = [self.socket_server]
-        outputs = []
-        
-        # Add a safety timeout to prevent indefinite hanging
+        # Safety timeout to prevent indefinite hanging
         last_activity_time = time.time()
         safety_timeout = int(os.environ.get('EINK_SAFETY_TIMEOUT', str(INACTIVITY_TIMEOUT)))
         
         try:
-            while not self.stop_event.is_set():
-                # Use select with a timeout to allow checking the stop event
-                try:
-                    readable, writable, exceptional = select.select(
-                        inputs, outputs, inputs, 1.0)
-                    
-                    # Inactivity check - if no activity for a while, log and maybe exit
-                    if not readable and not writable and not exceptional:
-                        if time.time() - last_activity_time > safety_timeout:
-                            logger.warning(f"No activity for {safety_timeout} seconds, checking system health")
-                            # Just log for now, don't exit
-                            last_activity_time = time.time()  # Reset timer
-                    else:
-                        # Activity detected, reset the timer
-                        last_activity_time = time.time()
-                        
-                    for s in readable:
-                        if s is self.socket_server:
-                            # New connection
-                            client_socket, address = self.socket_server.accept()
-                            client_socket.setblocking(0)
-                            inputs.append(client_socket)
-                            logger.info(f"New connection from {address}")
-                        else:
-                            # Existing client sending data
-                            try:
-                                data = s.recv(MAX_MSG_SIZE)
-                                if data:
-                                    # Process the received command
-                                    self._handle_command(s, data)
-                                else:
-                                    # Connection closed by client
-                                    logger.info("Client closed connection")
-                                    inputs.remove(s)
-                                    s.close()
-                            except Exception as e:
-                                logger.error(f"Error handling client data: {e}")
-                                if s in inputs:
-                                    inputs.remove(s)
-                                s.close()
-                    
-                    # Check for exceptional conditions
-                    for s in exceptional:
-                        logger.warning(f"Exceptional condition on socket")
-                        inputs.remove(s)
-                        s.close()
-                
-                except select.error as e:
-                    # Handle select errors
-                    logger.error(f"Select error: {e}")
-                    # If the error is related to signal interrupts, just continue
-                    if e.args[0] == errno.EINTR:
-                        continue
-                    else:
-                        # For other errors, break the loop
-                        logger.error("Exiting command loop due to select error")
-                        break
-                
+            while not self.stop_event.is_set() and self.initialized:
                 # Process any queued commands
                 self._process_queued_commands()
+                
+                # Inactivity check
+                if time.time() - last_activity_time > safety_timeout:
+                    logger.warning(f"No activity for {safety_timeout} seconds, checking system health")
+                    # Just log for now, don't exit
+                    last_activity_time = time.time()  # Reset timer
                 
                 # Give the system a short break to prevent CPU hogging
                 time.sleep(0.01)
@@ -793,6 +808,10 @@ class EInkService:
         """Clean up resources"""
         logger.info("Cleaning up resources")
         
+        # Set stop event to signal threads to exit
+        if hasattr(self, 'stop_event'):
+            self.stop_event.set()
+        
         # Clean up display - try both self.display and self.eink for compatibility
         try:
             # First try using display directly
@@ -823,11 +842,12 @@ class EInkService:
         except Exception as e:
             logger.error(f"Error during display cleanup: {e}")
         
-        # Close the socket server
-        if hasattr(self, 'socket_server') and self.socket_server is not None:
+        # Close the socket server explicitly
+        if hasattr(self, 'socket_server') and self.socket_server:
             try:
                 logger.info("Closing socket server")
                 self.socket_server.close()
+                self.socket_server = None
             except Exception as e:
                 logger.error(f"Error closing socket server: {e}")
         
