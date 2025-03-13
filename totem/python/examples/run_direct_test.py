@@ -41,68 +41,14 @@ def main():
     
     logger.info(f"Updated sys.path: {sys.path}")
     
-    # Try to import the driver
-    driver_imported = False
-    
-    # Try all possible import paths
-    import_attempts = [
-        "from devices.eink.drivers.waveshare_3in7 import Driver",
-        "from python.devices.eink.drivers.waveshare_3in7 import Driver",
-        "from totem.devices.eink.drivers.waveshare_3in7 import Driver",
-        "from totem.python.devices.eink.drivers.waveshare_3in7 import Driver"
-    ]
-    
-    Driver = None
-    for attempt in import_attempts:
-        try:
-            logger.info(f"Trying import: {attempt}")
-            exec(attempt)
-            logger.info("Import successful!")
-            driver_imported = True
-            break
-        except ImportError as e:
-            logger.warning(f"Import failed: {e}")
-    
-    if not driver_imported:
-        # Last resort: try to find the file directly and import it
-        logger.info("Trying direct file import...")
-        
-        possible_driver_files = [
-            os.path.join(project_root, "devices", "eink", "drivers", "waveshare_3in7.py"),
-            os.path.join(project_root, "python", "devices", "eink", "drivers", "waveshare_3in7.py"),
-            os.path.join(os.path.dirname(project_root), "devices", "eink", "drivers", "waveshare_3in7.py"),
-            os.path.join(os.path.dirname(project_root), "python", "devices", "eink", "drivers", "waveshare_3in7.py"),
-        ]
-        
-        driver_file = None
-        for path in possible_driver_files:
-            if os.path.exists(path):
-                driver_file = path
-                logger.info(f"Found driver file at: {path}")
-                
-                # Add the directory to sys.path
-                driver_dir = os.path.dirname(path)
-                sys.path.insert(0, os.path.dirname(driver_dir))  # Add eink directory
-                sys.path.insert(0, os.path.dirname(os.path.dirname(driver_dir)))  # Add devices directory
-                
-                try:
-                    if "python/devices" in path:
-                        from python.devices.eink.drivers.waveshare_3in7 import Driver
-                    elif "devices/eink" in path:
-                        from devices.eink.drivers.waveshare_3in7 import Driver
-                    else:
-                        # Try a relative import based on the file path
-                        module_path = os.path.relpath(path, project_root).replace("/", ".").replace(".py", "")
-                        exec(f"from {module_path} import Driver")
-                    
-                    logger.info("Successfully imported Driver class")
-                    driver_imported = True
-                    break
-                except ImportError as e:
-                    logger.warning(f"Import failed even with direct path: {e}")
-        
-    if not driver_imported:
-        logger.error("Could not import Driver class. Please check your project structure.")
+    # Try to import the driver directly
+    try:
+        logger.info("Trying direct import...")
+        import python.devices.eink.drivers.waveshare_3in7
+        Driver = python.devices.eink.drivers.waveshare_3in7.Driver
+        logger.info("Successfully imported Driver class")
+    except ImportError as e:
+        logger.error(f"Failed to import Driver: {e}")
         sys.exit(1)
     
     # Import other required packages
