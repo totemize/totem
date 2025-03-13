@@ -218,6 +218,54 @@ class EInkClient:
             
         return self._send_command(command)
     
+    def display_image(self, image=None, image_path=None) -> Dict[str, Any]:
+        """
+        Display an image on the e-ink display
+        
+        Args:
+            image: PIL Image object (optional)
+            image_path: Path to image file (optional)
+            
+        Returns:
+            dict: Response from the service
+            
+        Note:
+            Either image or image_path must be provided, but not both.
+        """
+        if image is None and image_path is None:
+            raise ValueError("Either image or image_path must be provided")
+        
+        if image is not None and image_path is not None:
+            raise ValueError("Only one of image or image_path should be provided")
+        
+        command = {'action': 'display_image'}
+        
+        if image_path:
+            # Read image file
+            with open(image_path, 'rb') as f:
+                image_data = f.read()
+            
+            # Encode as base64
+            image_b64 = base64.b64encode(image_data).decode('utf-8')
+            
+            # Add to command
+            command['image_data'] = image_b64
+            command['image_format'] = Path(image_path).suffix[1:].lower()  # Get format from extension (e.g., "png", "jpg")
+        else:
+            # Convert PIL Image to bytes
+            buffer = BytesIO()
+            image.save(buffer, format='PNG')
+            image_data = buffer.getvalue()
+            
+            # Encode as base64
+            image_b64 = base64.b64encode(image_data).decode('utf-8')
+            
+            # Add to command
+            command['image_data'] = image_b64
+            command['image_format'] = 'png'
+        
+        return self._send_command(command)
+    
     def sleep(self) -> Dict[str, Any]:
         """
         Put the display to sleep

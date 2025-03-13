@@ -929,6 +929,62 @@ class EInkService:
                     'message': f'Displayed text: {text}'
                 }
                 
+            elif action == 'display_image':
+                # Get image data from command
+                image_data_b64 = command.get('image_data')
+                image_format = command.get('image_format', 'png')
+                
+                if not image_data_b64:
+                    logger.error("No image data provided in display_image command")
+                    return {
+                        'status': 'error',
+                        'message': 'No image data provided'
+                    }
+                
+                try:
+                    # Decode base64 image data
+                    image_data = base64.b64decode(image_data_b64)
+                    
+                    # Convert to PIL Image
+                    from PIL import Image
+                    import io
+                    image = Image.open(io.BytesIO(image_data))
+                    
+                    logger.info(f"Executing DISPLAY_IMAGE command with image format: {image_format}, size: {image.size}")
+                    
+                    # Check if display supports display_file method (for file paths)
+                    if 'image_path' in command and hasattr(self.display, 'display_file'):
+                        image_path = command.get('image_path')
+                        resize = command.get('resize', True)
+                        logger.info(f"Using display_file method with path: {image_path}, resize: {resize}")
+                        self.display.display_file(image_path, resize=resize)
+                    # Otherwise use display_image method
+                    elif hasattr(self.display, 'display_image'):
+                        logger.info("Using display_image method")
+                        self.display.display_image(image)
+                    else:
+                        # Fallback for displays without display_image method
+                        logger.warning("Display lacks display_image method, using mock implementation")
+                        # Mock implementation or return an error
+                        return {
+                            'status': 'error',
+                            'message': 'Display does not support image display'
+                        }
+                    
+                    logger.info("Display image command completed successfully")
+                    return {
+                        'status': 'success',
+                        'message': 'Image displayed successfully'
+                    }
+                    
+                except Exception as e:
+                    logger.error(f"Error processing image data: {e}")
+                    logger.error(traceback.format_exc())
+                    return {
+                        'status': 'error',
+                        'message': f'Error processing image: {str(e)}'
+                    }
+                
             elif action == 'sleep':
                 logger.info("Executing SLEEP display command")
                 self.display.sleep()
