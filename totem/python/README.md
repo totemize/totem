@@ -170,3 +170,58 @@ To start the web service:
 ```bash
 poetry run serve
 ``` 
+
+## E-Ink Service Management
+
+We've added Poetry scripts to easily manage the E-Ink display service:
+
+### Starting the Service
+
+```bash
+# Start the e-ink service (standard mode)
+poetry run eink-service
+
+# Start with verbose logging
+poetry run eink-service --verbose
+
+# Start in mock mode (no hardware)
+poetry run eink-service --mock
+
+# Start with debug logging
+poetry run eink-service --debug
+
+# Start with a custom socket path
+poetry run eink-service --socket-path=/tmp/custom_eink_socket.sock
+```
+
+### Checking Service Status
+
+```bash
+# Check the status of the e-ink service
+poetry run eink-service-status
+```
+
+This will show if the service is running, process information, and socket status.
+
+### Stopping the Service
+
+```bash
+# Stop the running e-ink service
+poetry run eink-service-stop
+```
+
+These commands provide a simple interface to manage the e-ink service without needing to remember complex command-line options or paths.
+
+### Using on Raspberry Pi
+
+When running on a Raspberry Pi, you'll likely need sudo permissions to access the GPIO pins:
+
+```bash
+# Start the service with sudo
+sudo poetry run eink-service
+
+# Or use the direct command if poetry with sudo has issues
+sudo python3 -m scripts.start_eink_service start
+```
+
+The service management scripts automatically handle the necessary permissions and cleanups. 

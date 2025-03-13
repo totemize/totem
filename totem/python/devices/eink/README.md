@@ -50,7 +50,28 @@ The EInk Service maintains persistent access to the display hardware. Here's how
 
 #### Starting the Service
 
-Start the service using the provided script:
+You can start the service using either the provided script or the Poetry commands:
+
+**Using Poetry (Recommended):**
+
+```bash
+# Start the service (standard mode)
+poetry run eink-service
+
+# Start with verbose logging
+poetry run eink-service --verbose
+
+# Start in mock mode (no hardware)
+poetry run eink-service --mock
+
+# Check service status
+poetry run eink-service-status
+
+# Stop the service
+poetry run eink-service-stop
+```
+
+**Using the Script (Legacy):**
 
 ```bash
 # Start the service with auto-detected driver
@@ -153,11 +174,17 @@ The e-ink display system uses several environment variables:
 
 ### Service Won't Start
 
-Check the service logs:
+Check the service status and logs:
 
 ```bash
+# Check detailed service status
+poetry run eink-service-status
+
+# View service logs
 cat /tmp/eink_service.log
 ```
+
+If the service fails to start, you might see GPIO conflicts or permission issues in the logs.
 
 ### Permission Issues
 
@@ -165,6 +192,12 @@ Make sure your user has access to GPIO devices:
 
 ```bash
 sudo usermod -a -G gpio your_username
+```
+
+Or simply run the service with sudo:
+
+```bash
+sudo poetry run eink-service
 ```
 
 ### Socket File Issues
