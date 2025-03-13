@@ -122,12 +122,21 @@ class UnixSocketDisplayClient:
         }
         return self._send_command(command)
 
+    def get_debug_info(self):
+        """Get debug information from the service"""
+        command = {
+            "command": "debug",
+            "request": "driver_status"
+        }
+        return self._send_command(command)
+
 def main():
     """Main function to demonstrate Unix socket communication with e-ink display"""
     parser = argparse.ArgumentParser(description='Unix Socket E-Ink Display Example')
     parser.add_argument('text', nargs='?', default="Hello via Unix Socket!", help='Text to display')
     parser.add_argument('--image', type=str, help='Path to an image file to display')
     parser.add_argument('--socket-path', type=str, help='Path to Unix socket file (default: /tmp/eink_service.sock)')
+    parser.add_argument('--debug', action='store_true', help='Get debug information')
     args = parser.parse_args()
     
     try:
@@ -142,6 +151,13 @@ def main():
             print(f"Error connecting to e-ink service: {e}")
             print("Is the e-ink service running? You can start it with:")
             print("  sudo python -m devices.eink.eink_service")
+            return
+        
+        # If debug mode, get debug info and exit
+        if args.debug:
+            print("Getting debug information...")
+            debug_info = client.get_debug_info()
+            print(f"Debug info: {debug_info}")
             return
         
         # Clear the screen first
