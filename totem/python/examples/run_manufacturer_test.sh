@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 echo -e "${YELLOW}=== Waveshare E-Ink Display Test ===${NC}"
 
 # Check if running as root
-if [ "$EUID" -ne 0 ]; then∑
+if [ "$EUID" -ne 0 ]; then
   echo -e "${RED}Please run as root (sudo) to access GPIO pins${NC}"
   exit 1
 fi
