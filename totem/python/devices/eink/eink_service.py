@@ -239,10 +239,19 @@ class EInkService:
                 self.mock_mode = True
                 self._initialize_display()  # Try once more with mock mode
             
+            # Mark as initialized
+            self.initialized = True
+            logger.info("Display initialized successfully")
+            
             # Start socket server
-            self._setup_socket_server()
+            logger.info("Setting up socket server...")
+            socket_setup_success = self._setup_socket_server()
+            if not socket_setup_success:
+                logger.error("Failed to set up socket server, service will not be able to receive commands")
+                return False
             
             # Start command processing loop
+            logger.info("Starting command processing loop...")
             self._process_commands()
             
         except Exception as e:
@@ -313,15 +322,20 @@ class EInkService:
         
         # Create socket server
         try:
-            server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            server.bind(self.socket_path)
-            server.listen(5)
-            server.settimeout(1.0)  # Allow checking running flag
+            self.socket_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.socket_server.bind(self.socket_path)
+            self.socket_server.listen(5)
+            self.socket_server.settimeout(1.0)  # Allow checking running flag
             
             # Ensure socket file has the right permissions
             try:
                 os.chmod(self.socket_path, 0o666)  # Allow anyone to read/write
                 logger.info(f"Set socket file permissions to 0o666")
+                # Add debug logging to verify socket file exists
+                if os.path.exists(self.socket_path):
+                    logger.info(f"Socket file created successfully at {self.socket_path}")
+                else:
+                    logger.error(f"Socket file not found at {self.socket_path} even though binding succeeded")
             except Exception as e:
                 logger.warning(f"Could not set socket file permissions: {e}")
             
@@ -329,7 +343,7 @@ class EInkService:
             
             while self.initialized:
                 try:
-                    client, _ = server.accept()
+                    client, _ = self.socket_server.accept()
                     self._handle_client(client)
                 except socket.timeout:
                     # This just allows us to check the running flag
@@ -340,7 +354,7 @@ class EInkService:
                         logger.error(traceback.format_exc())
             
             # Clean up
-            server.close()
+            self.socket_server.close()
             logger.info("Unix socket server stopped")
         except Exception as e:
             logger.error(f"Error setting up Unix socket server: {e}")
@@ -353,17 +367,17 @@ class EInkService:
         
         try:
             # Create socket server
-            server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            server.bind((self.tcp_host, self.tcp_port))
-            server.listen(5)
-            server.settimeout(1.0)  # Allow checking running flag
+            self.socket_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.socket_server.bind((self.tcp_host, self.tcp_port))
+            self.socket_server.listen(5)
+            self.socket_server.settimeout(1.0)  # Allow checking running flag
             
             logger.info("TCP server ready")
             
             while self.initialized:
                 try:
-                    client, addr = server.accept()
+                    client, addr = self.socket_server.accept()
                     logger.debug(f"Connection from {addr}")
                     self._handle_client(client)
                 except socket.timeout:
@@ -375,7 +389,7 @@ class EInkService:
                         logger.error(traceback.format_exc())
             
             # Clean up
-            server.close()
+            self.socket_server.close()
             logger.info("TCP server stopped")
         except Exception as e:
             logger.error(f"Error setting up TCP server: {e}")
@@ -459,6 +473,11 @@ class EInkService:
         """Process commands from the socket server"""
         logger.info("Starting command processing loop")
         
+        # Check if socket_server is initialized
+        if self.socket_server is None:
+            logger.error("Socket server is not initialized, command processing loop cannot start")
+            return
+            
         # Lists for select
         inputs = [self.socket_server]
         outputs = []
