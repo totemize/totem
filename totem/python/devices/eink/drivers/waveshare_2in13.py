@@ -161,6 +161,10 @@ class Driver(EInkDeviceInterface):
     SET_RAM_Y_ADDRESS_COUNTER              = 0x4F
     TERMINATE_FRAME_READ_WRITE             = 0xFF
     
+    # Properties to match EInk interface
+    width = WIDTH
+    height = HEIGHT
+    
     def __init__(self):
         self.initialized = False
         self.hardware_available = False  # Initialize hardware availability flag
@@ -170,15 +174,14 @@ class Driver(EInkDeviceInterface):
             import RPi.GPIO as GPIO
             import spidev
             self.GPIO = GPIO
-            self.spi = None  # Will be initialized during init()
+            self.SPI = spidev.SpiDev()
             self.hardware_available = True
-            logger.info("Hardware SPI and GPIO libraries available")
-        except ImportError as e:
-            logger.warning(f"Hardware libraries import failed: {e}")
+            logger.info("Hardware libraries loaded successfully")
+        except ImportError:
+            logger.warning("Hardware libraries not available, using mock mode")
             self.GPIO = MockGPIO
-            self.spi = MockSpiDev()
+            self.SPI = MockSpiDev()
             self.hardware_available = False
-            logger.warning("Using mock implementations for GPIO and SPI")
             
         # Display dimensions
         self.width = self.WIDTH
@@ -206,15 +209,14 @@ class Driver(EInkDeviceInterface):
             if self.hardware_available:
                 try:
                     # Initialize SPI
-                    self.spi = spidev.SpiDev()
-                    self.spi.open(0, 0)  # Bus 0, Device 0
-                    self.spi.max_speed_hz = 2000000  # 2MHz
-                    self.spi.mode = 0b00  # Mode 0
+                    self.SPI.open(0, 0)  # Bus 0, Device 0
+                    self.SPI.max_speed_hz = 2000000  # 2MHz
+                    self.SPI.mode = 0b00  # Mode 0
                     logger.info("SPI interface initialized")
                 except Exception as e:
                     logger.error(f"Failed to initialize SPI: {e}")
                     self.hardware_available = False
-                    self.spi = MockSpiDev()
+                    self.SPI = MockSpiDev()
                     logger.warning("Falling back to mock SPI implementation")
             
             # Reset the display
@@ -281,19 +283,19 @@ class Driver(EInkDeviceInterface):
 
     def send_command(self, command):
         self.GPIO.output(self.dc_pin, self.GPIO.LOW)
-        if hasattr(self.spi, 'writebytes'):
-            self.spi.writebytes([command])
+        if hasattr(self.SPI, 'writebytes'):
+            self.SPI.writebytes([command])
         else:
-            self.spi.xfer2([command])
+            self.SPI.xfer2([command])
 
     def send_data(self, data):
         self.GPIO.output(self.dc_pin, self.GPIO.HIGH)
         if isinstance(data, int):
             data = [data]
-        if hasattr(self.spi, 'writebytes'):
-            self.spi.writebytes(data)
+        if hasattr(self.SPI, 'writebytes'):
+            self.SPI.writebytes(data)
         else:
-            self.spi.xfer2(data)
+            self.SPI.xfer2(data)
 
     def wait_until_idle(self):
         logger.debug("Waiting for e-Paper display to become idle.")
@@ -414,9 +416,9 @@ class Driver(EInkDeviceInterface):
     def __del__(self):
         try:
             # Close SPI connection if it exists
-            if hasattr(self, 'spi') and self.spi is not None:
-                if hasattr(self.spi, 'close'):
-                    self.spi.close()
+            if hasattr(self, 'SPI') and self.SPI is not None:
+                if hasattr(self.SPI, 'close'):
+                    self.SPI.close()
             
             # Clean up GPIO
             if hasattr(self, 'GPIO') and hasattr(self.GPIO, 'cleanup'):
@@ -432,4 +434,42 @@ class Driver(EInkDeviceInterface):
             logger.info("Cleaned up SPI and GPIO.")
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
-            logger.error(traceback.format_exc()) 
+            logger.error(traceback.format_exc())
+
+    def getbuffer(self, image):
+        """Convert image to display buffer, similar to manufacturer's method"""
+        if not PIL_AVAILABLE:
+            logger.error("PIL is not available. Cannot process image.")
+            return None
+            
+        # Convert to black and white
+        if image.mode != '1':
+            image = image.convert('1')
+            
+        # Resize if needed
+        if image.size != (self.WIDTH, self.HEIGHT):
+            image = image.resize((self.WIDTH, self.HEIGHT))
+            
+        # Convert to buffer format
+        buf = bytearray(self.WIDTH * self.HEIGHT // 8)
+        for y in range(self.HEIGHT):
+            for x in range(self.WIDTH):
+                if image.getpixel((x, y)) == 0:  # Black pixel
+                    buf[(x + y * self.WIDTH) // 8] |= 0x80 >> (x % 8)
+                    
+        return buf
+    
+    def display(self, buffer):
+        """Display method that matches manufacturer's API"""
+        logger.info("Displaying buffer on e-Paper display")
+        if isinstance(buffer, (bytearray, bytes, list)):
+            # If buffer is already in bytes format, use it directly
+            return self.display_bytes(buffer)
+        else:
+            # Otherwise, assume it's an image and convert it
+            return self.display_image(buffer)
+    
+    def Clear(self, color):
+        """Clear method that matches manufacturer's API"""
+        logger.info(f"Clearing display with color {color}")
+        self.clear() 

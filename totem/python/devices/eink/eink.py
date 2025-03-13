@@ -48,8 +48,22 @@ class EInk:
             with open('/proc/cpuinfo', 'r') as f:
                 cpuinfo = f.read()
             if 'Raspberry Pi 5' in cpuinfo:
-                logger.info("Detected Raspberry Pi 5, using Pi 5 specific driver")
-                return 'waveshare_3in7_pi5'
+                logger.info("Detected Raspberry Pi 5")
+                
+                # Now determine which display is connected
+                # You can add additional detection logic here if needed
+                # For now, we'll use environment variables to specify the display type
+                display_type = os.environ.get('EINK_DISPLAY_TYPE', '').lower()
+                if display_type == '2in13':
+                    logger.info("Using 2.13 inch Pi 5 driver")
+                    return 'waveshare_2in13_pi5'
+                elif display_type == '3in7':
+                    logger.info("Using 3.7 inch Pi 5 driver")
+                    return 'waveshare_3in7_pi5'
+                else:
+                    # Default to 3.7 inch for Pi 5 if not specified
+                    logger.info("No specific display type set, defaulting to 3.7 inch Pi 5 driver")
+                    return 'waveshare_3in7_pi5'
         except Exception as e:
             logger.error(f"Error checking Raspberry Pi version: {e}")
         
@@ -58,18 +72,23 @@ class EInk:
             spi_devices = os.listdir('/dev/')
             spi_devices = [dev for dev in spi_devices if dev.startswith('spidev')]
             logger.debug(f"SPI devices found: {spi_devices}")
+            
+            if spi_devices:
+                # Determine which display is connected on non-Pi 5 systems
+                display_type = os.environ.get('EINK_DISPLAY_TYPE', '').lower()
+                if display_type == '2in13':
+                    logger.info("Using 2.13 inch driver")
+                    return 'waveshare_2in13'
+                elif display_type == '3in7':
+                    logger.info("Using 3.7 inch driver")
+                    return 'waveshare_3in7'
+                else:
+                    # Default to 3.7 inch if not specified
+                    logger.info("No specific display type set, defaulting to 3.7 inch driver")
+                    return 'waveshare_3in7'
         except Exception as e:
             logger.error(f"Error accessing /dev/: {e}")
             return None
-
-        hardware_map = {
-            'waveshare_3in7': 'waveshare_3in7',
-        }
-
-        # Check if any SPI device exists
-        if spi_devices:
-            logger.info("Detected SPI device, assuming waveshare_3in7")
-            return 'waveshare_3in7'
 
         logger.warning("No known E-Ink hardware detected.")
         return None
