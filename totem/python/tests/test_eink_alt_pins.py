@@ -25,7 +25,8 @@ logger = logging.getLogger("eink_test")
 
 # Set environment variables for alternative pins
 os.environ['USE_ALT_EINK_PINS'] = '1'
-os.environ['EINK_CS_PIN'] = '7'  # Use pin 7 instead of pin 8 for CS
+os.environ['EINK_CS_PIN'] = '9'  # Use pin 9 instead of 7 or 8 which are busy
+os.environ['USE_SW_SPI'] = '1'   # Use software SPI to avoid hardware SPI conflicts
 
 def test_eink_hardware():
     """Test the EInk display with hardware access"""
@@ -46,7 +47,7 @@ def test_eink_hardware():
                 logger.info("Imported with explicit path")
         
         logger.info("Initializing EInk display with alternative pins")
-        logger.info(f"Using CS_PIN = {os.environ.get('EINK_CS_PIN', '7')}")
+        logger.info(f"Using CS_PIN = {os.environ.get('EINK_CS_PIN', '9')} with software SPI")
         
         # Initialize the display
         epd = WaveshareEPD3in7()
@@ -59,7 +60,7 @@ def test_eink_hardware():
         
         # Display text
         logger.info("Displaying text")
-        epd.display_text("Hello Alt Pins! CS=7", 10, 10, 36)
+        epd.display_text("Hello Alt Pins! CS=9", 10, 10, 36)
         time.sleep(2)
         
         # Clear again
