@@ -831,8 +831,9 @@ class EInkService:
                 })
                 return
             
-            # Process the command
-            action = command.get('action')
+            # Process the command - check both 'action' and 'command' keys for compatibility
+            cmd_type = command.get('action', command.get('command', 'unknown'))
+            logger.info(f"Command of type {cmd_type} received and being queued")
             
             # Queue the command for processing
             self.command_queue.append((client_socket, command))
@@ -840,7 +841,7 @@ class EInkService:
             # Acknowledge receipt of the command
             self._send_response(client_socket, {
                 'status': 'queued',
-                'message': f'Command {action} queued for processing'
+                'message': f'Command accepted'
             })
             
         except Exception as e:
@@ -886,11 +887,16 @@ class EInkService:
                 'message': 'Display not initialized'
             }
         
-        action = command.get('action')
+        # Check for both 'action' and 'command' keys for compatibility
+        action = command.get('action', command.get('command'))
+        
+        logger.info(f"Executing command: {action} with args: {command}")
         
         try:
             if action == 'clear':
+                logger.info("Executing CLEAR display command")
                 self.display.Clear()
+                logger.info("Display clear command completed successfully")
                 return {
                     'status': 'success',
                     'message': 'Display cleared'
@@ -904,8 +910,11 @@ class EInkService:
                 text_color = command.get('text_color', 'black')
                 background_color = command.get('background_color', 'white')
                 
+                logger.info(f"Executing DISPLAY_TEXT command: '{text}' at ({x},{y}) with font_size={font_size}, text_color={text_color}, bg_color={background_color}")
+                
                 if hasattr(self.display, 'display_text'):
                     self.display.display_text(text, x, y, font_size, text_color, background_color)
+                    logger.info("Display text command completed successfully")
                 else:
                     # Fallback for displays without display_text method
                     logger.warning("Display lacks display_text method, using mock implementation")
@@ -921,28 +930,50 @@ class EInkService:
                 }
                 
             elif action == 'sleep':
+                logger.info("Executing SLEEP display command")
                 self.display.sleep()
+                logger.info("Display sleep command completed successfully")
                 return {
                     'status': 'success',
                     'message': 'Display put to sleep'
                 }
                 
             elif action == 'wake':
+                logger.info("Executing WAKE display command")
                 self.display.init()
+                logger.info("Display wake command completed successfully")
                 return {
                     'status': 'success',
                     'message': 'Display woken up'
                 }
                 
             elif action == 'status':
+                logger.info("Executing STATUS command")
                 return {
                     'status': 'success',
                     'initialized': self.initialized,
                     'mock_mode': self.mock_mode,
                     'display_type': type(self.display).__name__ if self.display else None
                 }
+            
+            elif action == 'debug':
+                request_type = command.get('request')
+                logger.info(f"Executing DEBUG command: {request_type}")
+                
+                # Check if we have debug handlers registered
+                if hasattr(self, '_debug_command_handlers') and request_type in self._debug_command_handlers:
+                    handler = self._debug_command_handlers[request_type]
+                    result = handler(self, command)
+                    logger.info(f"Debug command completed with result: {result}")
+                    return result
+                else:
+                    return {
+                        'status': 'error',
+                        'message': f'Unknown debug request: {request_type}'
+                    }
                 
             else:
+                logger.warning(f"Unknown action requested: {action}")
                 return {
                     'status': 'error',
                     'message': f'Unknown action: {action}'

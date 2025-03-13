@@ -410,6 +410,8 @@ class WaveshareEPD3in7:
             text_color: Color of the text (default: "black")
             background_color: Background color (default: "white")
         """
+        print(f"WaveshareEPD3in7: display_text called with: '{text}', pos=({x},{y}), font={font_size}, colors=({text_color}, {background_color})")
+        
         if not self.initialized:
             self.init(0)  # 4-Gray mode
             
@@ -436,6 +438,7 @@ class WaveshareEPD3in7:
             bg_color = convert_color(background_color)
             text_fill = convert_color(text_color)
             
+            print(f"Creating image with background color: {bg_color}")
             # Create a blank image with the specified background color
             image = Image.new('L', (self.width, self.height), bg_color)
             draw = ImageDraw.Draw(image)
@@ -454,6 +457,7 @@ class WaveshareEPD3in7:
                 if os.path.exists(path):
                     try:
                         font = ImageFont.truetype(path, font_size)
+                        print(f"Using font: {path}")
                         break
                     except Exception:
                         pass
@@ -463,10 +467,13 @@ class WaveshareEPD3in7:
                 font = ImageFont.load_default()
             
             # Draw text with the specified color
+            print(f"Drawing text with color: {text_fill}")
             draw.text((x, y), text, font=font, fill=text_fill)
             
             # Display the image
+            print("Sending image to display")
             self.display(image)
+            print("Image sent to display successfully")
             
         except Exception as e:
             error_msg = f"Error displaying text: {e}"
