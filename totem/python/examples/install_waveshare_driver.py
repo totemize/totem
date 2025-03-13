@@ -17,14 +17,16 @@ import subprocess
 import shutil
 from pathlib import Path
 
-def run_command(command, check=True):
+def run_command(command, check=False):
     """Run a shell command and return the result"""
     print(f"Running: {command}")
-    result = subprocess.run(command, shell=True, capture_output=True, text=True, check=check)
+    result = subprocess.run(command, shell=True, capture_output=True, text=True, check=False)
     if result.stdout:
         print(result.stdout)
     if result.stderr:
         print(f"Error: {result.stderr}", file=sys.stderr)
+    if result.returncode != 0 and check:
+        raise subprocess.CalledProcessError(result.returncode, command)
     return result
 
 def main():
@@ -43,7 +45,19 @@ def main():
     print("Installing required packages...")
     run_command("apt-get update")
     run_command("apt-get install -y python3-pip python3-pil python3-numpy git")
-    run_command("pip3 install RPi.GPIO spidev")
+    
+    # Try to install Python packages, but don't fail if they're already installed
+    print("Installing Python packages...")
+    try:
+        run_command("pip3 install RPi.GPIO", check=False)
+    except Exception as e:
+        print(f"Warning: Could not install RPi.GPIO: {e}")
+        print("This is normal if you're using a newer Raspberry Pi with libgpiod.")
+    
+    try:
+        run_command("pip3 install spidev", check=False)
+    except Exception as e:
+        print(f"Warning: Could not install spidev: {e}")
     
     # Clone Waveshare repository if not exists
     if not os.path.exists(waveshare_repo_path):
@@ -71,7 +85,11 @@ def main():
     # Install the package in development mode
     print("Installing the Waveshare driver package...")
     lib_path = os.path.join(waveshare_repo_path, "RaspberryPi_JetsonNano/python/lib")
-    run_command(f"cd {lib_path} && pip3 install -e .")
+    try:
+        run_command(f"cd {lib_path} && pip3 install -e .", check=False)
+    except Exception as e:
+        print(f"Warning: Could not install package in development mode: {e}")
+        print("This is not critical as we've already created the symbolic link.")
     
     # Create an __init__.py file if it doesn't exist
     init_file = os.path.join(target_path, "__init__.py")

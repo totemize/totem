@@ -4,8 +4,6 @@
 # 1. Installs the Waveshare driver if needed
 # 2. Runs the manufacturer's example script
 
-set -e  # Exit on error
-
 # Define colors for output
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -26,9 +24,29 @@ PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 echo -e "${YELLOW}Installing Waveshare driver if needed...${NC}"
 python3 "$SCRIPT_DIR/install_waveshare_driver.py"
+if [ $? -ne 0 ]; then
+  echo -e "${RED}Driver installation failed, but we'll try to run the example anyway${NC}"
+fi
+
+# Check if the manufacturer directory exists
+if [ ! -d "$SCRIPT_DIR/manufacturer" ]; then
+  echo -e "${RED}Manufacturer directory not found. Creating it...${NC}"
+  mkdir -p "$SCRIPT_DIR/manufacturer"
+fi
+
+# Check if the example script exists
+if [ ! -f "$SCRIPT_DIR/manufacturer/epd_3in7_test.py" ]; then
+  echo -e "${RED}Example script not found. Please make sure it exists at:${NC}"
+  echo -e "${RED}$SCRIPT_DIR/manufacturer/epd_3in7_test.py${NC}"
+  exit 1
+fi
 
 echo -e "${YELLOW}Running manufacturer's example script...${NC}"
 cd "$SCRIPT_DIR/manufacturer"
 python3 epd_3in7_test.py
+if [ $? -ne 0 ]; then
+  echo -e "${RED}Example script failed. Please check the error messages above.${NC}"
+  exit 1
+fi
 
 echo -e "${GREEN}Test complete!${NC}" 
