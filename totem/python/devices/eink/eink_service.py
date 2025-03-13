@@ -43,14 +43,20 @@ except ImportError:
     )
     logger = logging.getLogger("eink_service")
 
-# Only import EInk class after setting up paths
+# Import the display driver types
+from devices.eink.waveshare_3in7 import WaveshareEPD3in7
+from devices.eink.mock_epd import MockEPD
+
+# Fix imports for backward compatibility
 try:
+    # Try to import the eink module using the project import path
     from devices.eink.eink import EInk
-except ImportError as e:
-    logger.error(f"Error importing EInk: {e}")
-    logger.error(f"Python path: {sys.path}")
-    logger.error(traceback.format_exc())
-    sys.exit(1)
+    logger.info("Successfully imported EInk module")
+except ImportError:
+    # Fall back to using the newly implemented direct drivers
+    logger.warning("Could not import legacy EInk module, using direct driver access")
+    from waveshare_3in7 import WaveshareEPD3in7
+    from mock_epd import MockEPD
 
 # Constants
 DEFAULT_SOCKET_PATH = "/tmp/eink_service.sock"
@@ -205,22 +211,20 @@ class EInkService:
             return False, f"Error killing GPIO processes: {str(e)}"
     
     def start(self):
-        """Start the EInk service, including display initialization and server threads"""
-        if self.initialized:
-            logger.warning("EInk Service is already running")
-            return
-            
-        logger.info("Starting EInk Service")
-        self.initialized = True
+        """Initialize and start the EInk service"""
+        logger.info("Starting EInk service...")
         
+        # Register signal handlers
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
+
         try:
-            # Check GPIO availability before initializing
+            # Check if GPIO is available
             gpio_available, message = self._check_gpio_availability()
-            logger.info(f"GPIO check: {message}")
+            logger.info(f"GPIO availability check: {message}")
             
-            # If GPIO is not available and force killing is enabled
             if not gpio_available and self.force_kill_gpio:
-                logger.warning("Attempting to kill processes using GPIO...")
+                # Try to kill processes using GPIO
                 kill_success, kill_message = self._kill_gpio_processes()
                 logger.info(f"GPIO process cleanup: {kill_message}")
                 
@@ -228,75 +232,27 @@ class EInkService:
                 gpio_available, message = self._check_gpio_availability()
                 logger.info(f"GPIO availability after cleanup: {message}")
             
-            # Initialize the e-ink device with retries
-            retry_count = 0
-            initialized = False
-            last_error = None
+            # Initialize display (with retry mechanism)
+            if not self._initialize_display():
+                logger.error("Failed to initialize display after retries, using mock mode")
+                self.mock_mode = True
+                self._initialize_display()  # Try once more with mock mode
             
-            while retry_count < self.max_init_retries and not initialized:
-                try:
-                    # Initialize the e-ink device
-                    logger.info(f"Initializing EInk device (Attempt {retry_count + 1}/{self.max_init_retries})")
-                    self.display = EInk(os.environ.get('EINK_DISPLAY_TYPE', 'waveshare_3in7'), mock_mode=self.mock_mode)
-                    self.display.initialize()
-                    
-                    # Get display dimensions for reference
-                    width = self.display.driver.width
-                    height = self.display.driver.height
-                    logger.info(f"Display dimensions: {width}x{height}")
-                    
-                    initialized = True
-                except Exception as e:
-                    last_error = e
-                    logger.error(f"Initialization attempt {retry_count + 1} failed: {e}")
-                    
-                    # Clean up before retry
-                    if self.display:
-                        try:
-                            self.display.cleanup()
-                        except:
-                            pass
-                    
-                    # If we're in mock mode, consider it initialized
-                    if self.mock_mode:
-                        logger.info("Mock mode enabled, continuing despite initialization failure")
-                        initialized = True
-                        break
-                    
-                    # Wait before retrying
-                    retry_count += 1
-                    if retry_count < self.max_init_retries:
-                        logger.info(f"Waiting {RETRY_DELAY}s before retry #{retry_count + 1}...")
-                        time.sleep(RETRY_DELAY)
-            
-            # If we couldn't initialize and we're not in mock mode, fail
-            if not initialized and not self.mock_mode:
-                if os.environ.get('EINK_ALLOW_MOCK_FALLBACK', '1') == '1':
-                    logger.warning("Hardware initialization failed, falling back to mock mode")
-                    self.mock_mode = True
-                    self.display = EInk(os.environ.get('EINK_DISPLAY_TYPE', 'waveshare_3in7'), mock_mode=True)
-                    # No need to call initialize() for mock mode
-                else:
-                    raise Exception(f"Failed to initialize EInk device after {self.max_init_retries} attempts: {last_error}")
+            # Start socket server
+            self._setup_socket_server()
             
             # Start command processing loop
             self._process_commands()
             
-            # Start the appropriate server
-            if self.use_tcp:
-                self.server_thread = threading.Thread(target=self.run_tcp_server)
-            else:
-                self.server_thread = threading.Thread(target=self.run_unix_socket_server)
-            
-            self.server_thread.daemon = True
-            self.server_thread.start()
-            
-            logger.info("EInk Service started successfully")
         except Exception as e:
-            logger.error(f"Error starting EInk Service: {e}")
+            logger.error(f"Error starting EInk service: {e}")
             logger.error(traceback.format_exc())
-            self.initialized = False
-            raise
+            
+            # Clean up resources as best we can
+            self.cleanup()
+            return False
+            
+        return True
     
     def stop(self):
         """Stop the EInk service and clean up resources"""
@@ -606,11 +562,7 @@ class EInkService:
         
         try:
             if action == 'clear':
-                logger.info("Clearing display")
-                if self.mock_mode:
-                    logger.info("Mock clear display")
-                else:
-                    self.display.clear_display()
+                self.display.Clear()
                 return {
                     'status': 'success',
                     'message': 'Display cleared'
@@ -618,142 +570,49 @@ class EInkService:
                 
             elif action == 'display_text':
                 text = command.get('text', '')
-                font_size = command.get('font_size', 24)
                 x = command.get('x', 10)
                 y = command.get('y', 10)
-                font_name = command.get('font', None)
+                font_size = command.get('font_size', 24)
                 
-                logger.info(f"Displaying text: '{text}' at ({x}, {y}) with size {font_size}")
-                
-                try:
-                    # Create image
-                    image = Image.new('1', (self.display.driver.width, self.display.driver.height), 255)
-                    draw = ImageDraw.Draw(image)
-                    
-                    # Load font
-                    try:
-                        if font_name:
-                            font = ImageFont.truetype(font_name, font_size)
-                        else:
-                            font = ImageFont.load_default()
-                    except Exception as e:
-                        logger.warning(f"Could not load font, using default: {e}")
-                        font = ImageFont.load_default()
-                    
-                    # Draw text
-                    draw.text((x, y), text, font=font, fill=0)
-                    
-                    # Display image
-                    if self.mock_mode:
-                        logger.info(f"Mock display text '{text}'")
-                    else:
-                        self.display.display_image(image)
-                    return {
-                        'status': 'success',
-                        'message': f'Displayed text: {text}'
-                    }
-                except Exception as e:
-                    logger.error(f"Error displaying text: {e}")
-                    return {
-                        'status': 'error',
-                        'message': f'Error displaying text: {str(e)}'
-                    }
-            
-            elif action == 'display_image':
-                # Check for image data (base64 encoded)
-                image_data = command.get('image_data')
-                image_path = command.get('image_path')
-                
-                try:
-                    if image_data:
-                        logger.info("Displaying image from base64 data")
-                        try:
-                            # Decode base64 image data
-                            image_bytes = base64.b64decode(image_data)
-                            image = Image.open(BytesIO(image_bytes))
-                            if self.mock_mode:
-                                logger.info(f"Mock display image from data")
-                            else:
-                                self.display.display_image(image)
-                            return {
-                                'status': 'success',
-                                'message': 'Displayed image from base64 data'
-                            }
-                        except Exception as e:
-                            logger.error(f"Error displaying image from data: {e}")
-                            return {
-                                'status': 'error',
-                                'message': f'Error displaying image from data: {str(e)}'
-                            }
-                    elif image_path:
-                        logger.info(f"Displaying image from path: {image_path}")
-                        try:
-                            # Load image from file
-                            image = Image.open(image_path)
-                            if self.mock_mode:
-                                logger.info(f"Mock display image from path {image_path}")
-                            else:
-                                self.display.display_image(image)
-                            return {
-                                'status': 'success',
-                                'message': f'Displayed image from path: {image_path}'
-                            }
-                        except Exception as e:
-                            logger.error(f"Error displaying image from path: {e}")
-                            return {
-                                'status': 'error',
-                                'message': f'Error displaying image from path: {str(e)}'
-                            }
-                    else:
-                        logger.warning("No image data or path provided")
-                        return {
-                            'status': 'error',
-                            'message': 'No image data or path provided'
-                        }
-                except Exception as e:
-                    logger.error(f"Error in display_image: {e}")
-                    return {
-                        'status': 'error',
-                        'message': f'Error in display_image: {str(e)}'
-                    }
-            
-            elif action == 'sleep':
-                logger.info("Putting display to sleep")
-                if self.mock_mode:
-                    logger.info("Mock sleep")
-                elif hasattr(self.display.driver, 'sleep'):
-                    self.display.driver.sleep()
+                if hasattr(self.display, 'display_text'):
+                    self.display.display_text(text, x, y, font_size)
                 else:
-                    logger.warning("Sleep not supported by this driver")
+                    # Fallback for displays without display_text method
+                    logger.warning("Display lacks display_text method, using mock implementation")
+                    # Mock implementation or return an error
+                    return {
+                        'status': 'error',
+                        'message': 'Display does not support text display'
+                    }
+                
+                return {
+                    'status': 'success',
+                    'message': f'Displayed text: {text}'
+                }
+                
+            elif action == 'sleep':
+                self.display.sleep()
                 return {
                     'status': 'success',
                     'message': 'Display put to sleep'
                 }
-            
+                
             elif action == 'wake':
-                logger.info("Waking up display")
-                if self.mock_mode:
-                    logger.info("Mock wake")
-                else:
-                    self.display.initialize()
+                self.display.init()
                 return {
                     'status': 'success',
                     'message': 'Display woken up'
                 }
-            
+                
             elif action == 'status':
-                # This doesn't do anything to the display, just for diagnostics
-                logger.info("Status request received")
-                # Could implement returning status data in the future
                 return {
                     'status': 'success',
                     'initialized': self.initialized,
                     'mock_mode': self.mock_mode,
                     'display_type': type(self.display).__name__ if self.display else None
                 }
-            
+                
             else:
-                logger.warning(f"Unknown action: {action}")
                 return {
                     'status': 'error',
                     'message': f'Unknown action: {action}'
@@ -795,6 +654,75 @@ class EInkService:
                     os.unlink(self.socket_path)
             except Exception as e:
                 logger.error(f"Error removing socket file: {e}")
+
+    def _initialize_display(self) -> bool:
+        """
+        Initialize the e-ink display with retry logic
+        
+        Returns:
+            bool: Success or failure
+        """
+        # Determine which display driver to use
+        display_type = os.environ.get('EINK_DISPLAY_TYPE', 'waveshare_3in7').lower()
+        
+        # Use mock mode if specified
+        if self.mock_mode:
+            logger.info("Using mock e-ink display driver")
+            try:
+                self.display = MockEPD()
+                self.display.init()
+                self.initialized = True
+                logger.info("Mock display initialized successfully")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to initialize mock display: {e}")
+                return False
+        
+        # Retry logic for hardware display
+        for attempt in range(self.max_init_retries):
+            try:
+                logger.info(f"Initializing display (attempt {attempt+1}/{self.max_init_retries})...")
+                
+                if display_type in ['waveshare_3in7', 'waveshare', '3in7']:
+                    # Directly use the WaveshareEPD3in7 class
+                    self.display = WaveshareEPD3in7()
+                else:
+                    logger.error(f"Unknown display type: {display_type}, falling back to waveshare_3in7")
+                    self.display = WaveshareEPD3in7()
+                
+                # Test display to confirm it works
+                self.display.init()
+                self.display.Clear()
+                
+                logger.info("Display initialized successfully")
+                self.initialized = True
+                return True
+                
+            except Exception as e:
+                logger.error(f"Failed to initialize display (attempt {attempt+1}): {e}")
+                logger.error(traceback.format_exc())
+                
+                # Try to free GPIO resources if force_kill_gpio is enabled
+                if self.force_kill_gpio:
+                    kill_success, kill_message = self._kill_gpio_processes()
+                    logger.info(f"Attempted to free GPIO resources: {kill_message}")
+                    
+                # Clean up any partial initialization
+                try:
+                    if hasattr(self, 'display') and self.display is not None:
+                        self.display.close()
+                except:
+                    pass
+                
+                self.display = None
+                
+                # Wait before retry (skip delay on last attempt)
+                if attempt < self.max_init_retries - 1:
+                    logger.info(f"Waiting {RETRY_DELAY}s before retry...")
+                    time.sleep(RETRY_DELAY)
+
+        logger.error(f"Failed to initialize display after {self.max_init_retries} attempts")
+        return False
 
 
 def run_service():
