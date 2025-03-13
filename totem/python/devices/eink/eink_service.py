@@ -253,6 +253,9 @@ class EInkService:
         """Initialize and start the EInk service"""
         logger.info("Starting EInk service...")
         
+        # Set initialized flag to false initially
+        self.initialized = False
+        
         # Register signal handlers
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
@@ -293,7 +296,7 @@ class EInkService:
                         
                 self.eink = EinkWrapper(self.display)
             
-            # Mark as initialized
+            # Mark as initialized - this is what the main loop checks for termination
             self.initialized = True
             logger.info("Display initialized successfully")
             
@@ -302,12 +305,14 @@ class EInkService:
             socket_setup_success = self._setup_socket_server()
             if not socket_setup_success:
                 logger.error("Failed to set up socket server, service will not be able to receive commands")
+                self.initialized = False  # Important: Mark as not initialized if we fail
                 return False
             
             # Wait for socket server to be ready (with timeout)
             logger.info("Waiting for socket server to be ready...")
             if not self.socket_server_ready.wait(timeout=5.0):
                 logger.error("Timed out waiting for socket server to be ready")
+                self.initialized = False  # Important: Mark as not initialized if we fail
                 return False
                 
             logger.info("Socket server is ready, starting command processing loop...")
@@ -321,6 +326,7 @@ class EInkService:
             
             # Clean up resources as best we can
             self.cleanup()
+            self.initialized = False  # Important: Mark as not initialized if we fail
             return False
             
         return True
@@ -1143,7 +1149,10 @@ def run_service(debug_timeout=None):
             # Main service loop with timeout check
             loop_count = 0
             
-            while service.initialized:
+            # Create a bool flag to control our loop
+            running = True
+            
+            while running:
                 # Get current time for this iteration
                 current_time = time.time()
                 elapsed = current_time - start_time
@@ -1156,9 +1165,14 @@ def run_service(debug_timeout=None):
                 
                 # Exit if timeout reached
                 if current_time >= end_time:
-                    logger.info(f"Debug timeout of {debug_timeout}s reached, shutting down service (current time: {current_time})")
+                    logger.info(f"Debug timeout of {debug_timeout}s reached (current: {current_time:.1f}, end: {end_time:.1f})")
                     break
                 
+                # Also check service initialization state
+                if hasattr(service, 'initialized') and not service.initialized:
+                    logger.info("Service is no longer initialized, exiting loop")
+                    break
+                    
                 # Increment loop counter
                 loop_count += 1
                     
