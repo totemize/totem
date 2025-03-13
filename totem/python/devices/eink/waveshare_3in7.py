@@ -64,10 +64,13 @@ READ_OTP = 0xA2
 POWER_SAVING = 0xE3
 
 # Pin definitions (Waveshare 3.7inch e-Paper HAT)
-RST_PIN = 17
-DC_PIN = 25
-CS_PIN = 8
-BUSY_PIN = 24
+# These pins can be overridden by environment variables:
+# - USE_ALT_EINK_PINS=1 to enable using alternative pins
+# - EINK_RST_PIN, EINK_DC_PIN, EINK_CS_PIN, EINK_BUSY_PIN to set specific pins
+RST_PIN = int(os.environ.get('EINK_RST_PIN', 17)) if os.environ.get('USE_ALT_EINK_PINS') else 17
+DC_PIN = int(os.environ.get('EINK_DC_PIN', 25)) if os.environ.get('USE_ALT_EINK_PINS') else 25
+CS_PIN = int(os.environ.get('EINK_CS_PIN', 7)) if os.environ.get('USE_ALT_EINK_PINS') else 8  # Default to 8, override to 7
+BUSY_PIN = int(os.environ.get('EINK_BUSY_PIN', 24)) if os.environ.get('USE_ALT_EINK_PINS') else 24
 
 # Display resolution
 EPD_WIDTH = 280
