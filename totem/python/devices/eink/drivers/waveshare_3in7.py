@@ -124,7 +124,16 @@ class WaveshareEPD3in7:
                 
             # Import the manufacturer's module
             try:
-                from waveshare_epd import epd3in7
+                # First try to import from the standard location
+                try:
+                    from waveshare_epd import epd3in7
+                    print("Using system-installed waveshare_epd driver")
+                except ImportError:
+                    # If not found, try to import from our local package
+                    print("System driver not found, trying local package")
+                    from devices.eink.waveshare_epd import epd3in7
+                    print("Using local waveshare_epd driver")
+                
                 self.epd = epd3in7.EPD()
                 
                 # Store display dimensions
