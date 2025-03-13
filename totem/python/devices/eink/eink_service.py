@@ -95,6 +95,8 @@ class EInkService:
         self.force_kill_gpio = os.environ.get('EINK_FORCE_KILL_GPIO', '0') == '1'
         self.init_retries = 0
         self.max_init_retries = int(os.environ.get('EINK_MAX_INIT_RETRIES', MAX_RETRIES))
+        # Add a flag to track if the socket server is ready
+        self.socket_server_ready = threading.Event()
         
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -250,8 +252,15 @@ class EInkService:
                 logger.error("Failed to set up socket server, service will not be able to receive commands")
                 return False
             
+            # Wait for socket server to be ready (with timeout)
+            logger.info("Waiting for socket server to be ready...")
+            if not self.socket_server_ready.wait(timeout=5.0):
+                logger.error("Timed out waiting for socket server to be ready")
+                return False
+                
+            logger.info("Socket server is ready, starting command processing loop...")
+            
             # Start command processing loop
-            logger.info("Starting command processing loop...")
             self._process_commands()
             
         except Exception as e:
@@ -341,6 +350,9 @@ class EInkService:
             
             logger.info("Unix socket server ready")
             
+            # Signal that the socket server is ready
+            self.socket_server_ready.set()
+            
             while self.initialized:
                 try:
                     client, _ = self.socket_server.accept()
@@ -374,6 +386,9 @@ class EInkService:
             self.socket_server.settimeout(1.0)  # Allow checking running flag
             
             logger.info("TCP server ready")
+            
+            # Signal that the socket server is ready
+            self.socket_server_ready.set()
             
             while self.initialized:
                 try:
