@@ -525,7 +525,7 @@ class WaveshareEPD3in7:
             else:
                 raise
     
-    def wait_until_idle(self):
+    def wait_until_idle(self, timeout=10, debug_level=logging.INFO):
         """Wait until the display is idle (not busy)"""
         if self.mock_mode:
             print("Mock wait until idle")
@@ -535,15 +535,53 @@ class WaveshareEPD3in7:
         try:
             # Wait for busy pin to be high (not busy)
             print("Waiting for display to be ready...")
+            logging.log(debug_level, f"Waiting for BUSY_PIN ({BUSY_PIN}) to go high...")
+            
+            # First, verify we can read the busy pin
+            try:
+                busy_state = self._digital_read(BUSY_PIN)
+                logging.log(debug_level, f"Initial BUSY_PIN state: {busy_state}")
+            except Exception as e:
+                logging.error(f"Error reading BUSY_PIN: {e}")
+                if self.handle_errors:
+                    print("Falling back to mock mode due to BUSY_PIN read error")
+                    self.mock_mode = True
+                    return
+                else:
+                    raise
+            
+            # Now wait for it to change
             start_time = time.time()
+            poll_count = 0
+            timeout_occurred = False
+            
             while self._digital_read(BUSY_PIN) == 0:
                 time.sleep(0.1)
-                if time.time() - start_time > 10:  # Timeout after 10 seconds
-                    print("Warning: Busy timeout, continuing anyway")
+                poll_count += 1
+                
+                # Log progress periodically
+                if poll_count % 10 == 0:
+                    elapsed = time.time() - start_time
+                    logging.log(debug_level, f"Still waiting after {elapsed:.1f}s, poll count: {poll_count}")
+                
+                if time.time() - start_time > timeout:
+                    timeout_occurred = True
+                    print(f"Warning: Busy timeout after {timeout} seconds, continuing anyway")
+                    logging.warning(f"BUSY_PIN timeout after {timeout}s and {poll_count} polls")
                     break
+            
+            end_time = time.time()
+            elapsed = end_time - start_time
+            
+            if timeout_occurred:
+                logging.warning(f"BUSY timeout occurred after {elapsed:.1f}s")
+            else:
+                logging.log(debug_level, f"BUSY wait completed after {elapsed:.1f}s and {poll_count} polls")
+                print("Display is now ready")
         except Exception as e:
             error_msg = f"Error waiting for display: {str(e)}"
             print(error_msg)
+            traceback.print_exc()
             
             if self.handle_errors:
                 # Fall back to mock mode
@@ -741,17 +779,31 @@ class WaveshareEPD3in7:
             image = Image.new('1', (self.width, self.height), 255)
             draw = ImageDraw.Draw(image)
             
-            # Load a font
-            try:
-                font_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
-                                       'resources', 'fonts', 'FreeSans.ttf')
-                if not os.path.exists(font_path):
-                    print(f"Font not found at {font_path}, using default")
-                    font = ImageFont.load_default()
-                else:
-                    font = ImageFont.truetype(font_path, font_size)
-            except:
-                print("Error loading font, using default")
+            # Try to load a font from various paths
+            font = None
+            font_paths = [
+                # Try project fonts directory
+                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
+                           'resources', 'fonts', 'FreeSans.ttf'),
+                # Try common system font paths
+                '/usr/share/fonts/truetype/freefont/FreeSans.ttf',  # Debian/Ubuntu
+                '/usr/share/fonts/TTF/DejaVuSans.ttf',              # Arch Linux
+                '/usr/share/fonts/dejavu/DejaVuSans.ttf',           # Fedora/RHEL
+                '/System/Library/Fonts/Helvetica.ttc',               # macOS
+                'C:\\Windows\\Fonts\\Arial.ttf'                      # Windows
+            ]
+            
+            for font_path in font_paths:
+                if os.path.exists(font_path):
+                    try:
+                        font = ImageFont.truetype(font_path, font_size)
+                        print(f"Using font from: {font_path}")
+                        break
+                    except Exception as e:
+                        print(f"Error loading font from {font_path}: {e}")
+            
+            if font is None:
+                print("No TrueType fonts found, using default")
                 font = ImageFont.load_default()
             
             # Draw the text
@@ -762,6 +814,7 @@ class WaveshareEPD3in7:
         except Exception as e:
             error_msg = f"Error displaying text: {str(e)}"
             print(error_msg)
+            traceback.print_exc()
             
             if self.handle_errors:
                 # Fall back to mock mode
