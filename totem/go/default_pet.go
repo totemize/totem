@@ -29,7 +29,9 @@ func (p *DefaultPet) handleStoreEvent(ctx context.Context, evt *nostr.Event) {
 	fmt.Printf("Pet %s notified of event: %s\n", currentState.Name, evt.ID)
 
 	p.mutex.Lock()
-	p.state.Energy = max(0, p.state.Energy+5)
+
+	p.state.Energy = min(100, p.state.Energy+5)
+	p.state.Happiness = min(100, p.state.Happiness+2)
 
 	p.state.LastFed = time.Now()
 	p.mutex.Unlock()
@@ -50,11 +52,12 @@ func (p *DefaultPet) publishMetadataEvent(ctx context.Context) {
 		return
 	}
 
-	// Create the event
+	// Create the event with owner tag
 	ev := nostr.Event{
 		PubKey:    p.publicKey,
 		CreatedAt: nostr.Now(),
 		Kind:      nostr.KindProfileMetadata,
+		Tags:      nostr.Tags{{"p", p.BasePet.ownerPubKey}},
 		Content:   string(metadataJSON),
 	}
 
@@ -70,7 +73,6 @@ func (p *DefaultPet) publishMetadataEvent(ctx context.Context) {
 		fmt.Printf("Published metadata for pet %s with ID: %s\n", p.state.Name, ev.ID)
 	}
 }
-
 func (p *DefaultPet) handleDeleteEvent(ctx context.Context, evt *nostr.Event) {
 	p.mutex.RLock()
 	currentState := p.state

@@ -73,18 +73,17 @@ func (p *EggPet) GetStateEmoji() string {
 func (p *EggPet) HandleNaming(ctx context.Context, name string) Pet {
 	fmt.Printf("Egg hatching into pet named: %s\n", name)
 
+	basePet := NewBasePet(name)
+	basePet.ownerPubKey = p.ownerPubKey
+	basePet.privateKey = p.privateKey
+	basePet.publicKey = p.publicKey
+	basePet.state.Happiness = p.state.Happiness
+	basePet.state.Energy = p.state.Energy
+	basePet.state.LastFed = p.state.LastFed
+
 	pet := &DefaultPet{
-		BasePet: &BasePet{
-			state: State{
-				Name:      name,
-				Happiness: p.state.Happiness,
-				Energy:    p.state.Energy,
-				LastFed:   p.state.LastFed,
-			},
-			privateKey: p.privateKey,
-			publicKey:  p.publicKey,
-		},
-		totem: p.totem,
+		BasePet: basePet,
+		totem:   p.totem,
 	}
 
 	bgCtx := context.Background()

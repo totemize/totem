@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -38,6 +39,10 @@ func (t *Totem) NamePet(ctx context.Context, pubKey string, name string) (Pet, e
 	eggPet, ok := egg.(PetCreator)
 	if !ok {
 		return nil, fmt.Errorf("pet with pubkey %s is not in egg state", pubKey)
+	}
+
+	if eggPet.GetOwnerPubKey() == "" {
+		return nil, fmt.Errorf("egg with pubkey %s has no owner", pubKey)
 	}
 
 	namedPet := eggPet.HandleNaming(ctx, name)
@@ -76,67 +81,99 @@ func (t *Totem) FindEggsByOwner(ownerPubKey string) []PetCreator {
 	return eggs
 }
 
-func (t *Totem) processPetCreationEvent(ctx context.Context, evt *nostr.Event) bool {
-	// Check if this is a tool execution request (kind 5910)
-	if evt.Kind != 5910 {
+func (t *Totem) processTotemCommand(ctx context.Context, evt *nostr.Event) bool {
+	// Validate event kind
+	if evt.Kind != KindPetCommand {
 		return false
 	}
 
-	// Look for the "c" tag with "execute-tool" value
-	var isExecuteTool bool
-	for _, tag := range evt.Tags {
-		if len(tag) >= 2 && tag[0] == "c" && tag[1] == "execute-tool" {
-			isExecuteTool = true
-			break
+	// Validate command tag
+	if !ValidateCommandTag(evt.Tags) {
+		return false
+	}
+
+	// Parse command
+	cmd, err := ParseCommand(evt.Content)
+	if err != nil {
+		fmt.Printf("Error parsing command: %v\n", err)
+		return false
+	}
+
+	// Process command based on name
+	switch cmd.Name {
+	case CmdCreateEgg:
+		return t.handleCreateEggCommand(ctx, evt, cmd.Parameters)
+	case CmdNamePet:
+		return t.handleNamePetCommand(ctx, evt, cmd.Parameters)
+	default:
+		fmt.Printf("Unknown command: %s\n", cmd.Name)
+		return false
+	}
+}
+
+func (t *Totem) handleCreateEggCommand(ctx context.Context, evt *nostr.Event, rawParams json.RawMessage) bool {
+	_, err := ParseCreateEggParams(rawParams)
+	if err != nil {
+		fmt.Printf("Error parsing create_egg parameters: %v\n", err)
+		return false
+	}
+
+	// Create new egg
+	egg := t.CreatePet(ctx, evt.PubKey)
+	fmt.Printf("Created new egg for user %s with pubkey %s\n",
+		evt.PubKey, egg.GetPubKey())
+
+	return true
+}
+
+func (t *Totem) handleNamePetCommand(ctx context.Context, evt *nostr.Event, rawParams json.RawMessage) bool {
+	params, err := ParseNamePetParams(rawParams)
+	if err != nil {
+		fmt.Printf("Error parsing name_pet parameters: %v\n", err)
+		return false
+	}
+
+	var targetEgg PetCreator
+
+	// If pet_id is provided, find the egg with that ID
+	if params.PetID != "" {
+		pet, exists := t.pets[params.PetID]
+		if !exists {
+			fmt.Printf("Pet with ID %s not found\n", params.PetID)
+			return true
 		}
+
+		eggPet, ok := pet.(PetCreator)
+		if !ok {
+			fmt.Printf("Pet with ID %s is not an egg\n", params.PetID)
+			return true
+		}
+
+		// Security check: Verify that the event sender is the owner of the egg
+		if eggPet.GetOwnerPubKey() != evt.PubKey {
+			fmt.Printf("Security violation: User %s tried to name an egg owned by %s\n",
+				evt.PubKey, eggPet.GetOwnerPubKey())
+			return true
+		}
+
+		targetEgg = eggPet
+	} else {
+		// Find an egg owned by this user
+		eggs := t.FindEggsByOwner(evt.PubKey)
+		if len(eggs) == 0 {
+			fmt.Printf("User %s tried to name a pet but has no eggs\n", evt.PubKey)
+			return true
+		}
+		targetEgg = eggs[0]
 	}
 
-	if !isExecuteTool {
-		return false
-	}
-
-	// Parse the content as JSON
-	var request struct {
-		Name       string `json:"name"`
-		Parameters struct {
-			Name string `json:"name,omitempty"`
-		} `json:"parameters"`
-	}
-
-	if err := json.Unmarshal([]byte(evt.Content), &request); err != nil {
-		fmt.Printf("Error parsing pet creation event: %v\n", err)
-		return false
-	}
-
-	// Check if this is a pet creation request
-	if request.Name != "create_pet" {
-		return false
-	}
-
-	fmt.Printf("Processing pet creation request from %s\n", evt.PubKey)
-
-	// If no name is provided, create an egg
-	if request.Parameters.Name == "" {
-		egg := t.CreatePet(ctx, evt.PubKey)
-		fmt.Printf("Created new egg for user %s with pubkey %s\n",
-			evt.PubKey, egg.GetPubKey())
-		return true
-	}
-
-	// If a name is provided, check if the user has an egg
-	eggs := t.FindEggsByOwner(evt.PubKey)
-	if len(eggs) == 0 {
-		fmt.Printf("User %s tried to name a pet without an egg\n", evt.PubKey)
-		return true
-	}
-
-	// User has an egg, so name it
-	egg := eggs[0]
-	_, err := t.NamePet(ctx, egg.GetPubKey(), request.Parameters.Name)
+	// Name the pet
+	_, err = t.NamePet(ctx, targetEgg.GetPubKey(), params.Name)
 	if err != nil {
 		fmt.Printf("Error naming egg: %v\n", err)
 	} else {
-		fmt.Printf("Successfully named egg to: %s\n", request.Parameters.Name)
+		fmt.Printf("Successfully named egg with ID %s to: %s\n",
+			targetEgg.GetPubKey(), params.Name)
 	}
 
 	return true
@@ -178,8 +215,8 @@ func (t *Totem) GetPubKey() string {
 func (t *Totem) handleStoreEvent(ctx context.Context, evt *nostr.Event) {
 	fmt.Printf("Totem notified of event: %s\n", evt.ID)
 
-	if t.processPetCreationEvent(ctx, evt) {
-		fmt.Printf("Successfully processed pet creation event: %s\n", evt.ID)
+	if t.processTotemCommand(ctx, evt) {
+		fmt.Printf("Successfully processed totem command event: %s\n", evt.ID)
 		return
 	}
 
@@ -235,9 +272,34 @@ func (t *Totem) findTargetPet(evt *nostr.Event) Pet {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
 
-	// For this simple implementation, just return the first pet
-	// In a real implementation, we will have logic to determine the target
-	// based on tags, content, etc.
+	// 1. First, check if the event has any p tags that match pet pubkeys
+	for _, tag := range evt.Tags {
+		if len(tag) >= 2 && tag[0] == "p" {
+			taggedPubKey := tag[1]
+			// Check if this pubkey matches any pet
+			if pet, exists := t.pets[taggedPubKey]; exists {
+				fmt.Printf("Pet %s is tagged in event %s\n", pet.GetState().Name, evt.ID)
+				return pet
+			}
+		}
+	}
+
+	// 2. If no pet is tagged, check if the event sender owns a pet
+	for _, pet := range t.pets {
+		if pet.GetOwnerPubKey() == evt.PubKey {
+			return pet
+		}
+	}
+
+	// 3. If no pet owned by this user, pick a random pet (first non-egg pet for simplicity)
+	for _, pet := range t.pets {
+		// Skip eggs for random selection
+		if _, isEgg := pet.(PetCreator); !isEgg {
+			return pet
+		}
+	}
+
+	// 4. If no non-egg pets, just return the first pet
 	if len(t.pets) > 0 {
 		for _, pet := range t.pets {
 			return pet
@@ -256,5 +318,47 @@ func (t *Totem) GetPets() []Pet {
 		pets = append(pets, p)
 	}
 
+	// Sort pets by public key to ensure stable order
+	sort.Slice(pets, func(i, j int) bool {
+		return pets[i].GetPubKey() < pets[j].GetPubKey()
+	})
+
 	return pets
+}
+
+// StartPetStatusUpdates begins periodic status updates for all pets
+func (t *Totem) StartPetStatusUpdates(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				t.mutex.RLock()
+				pets := make([]Pet, 0, len(t.pets))
+				for _, pet := range t.pets {
+					pets = append(pets, pet)
+				}
+				t.mutex.RUnlock()
+
+				// Publish status for each pet
+				for _, pet := range pets {
+					// Create a new context for each publish operation
+					pubCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+
+					// Use the pet's PublishStatusEvent method
+					err := pet.PublishStatusEvent(pubCtx, t.publishEventHook)
+
+					cancel()
+
+					if err != nil {
+						fmt.Printf("Error publishing status for pet %s: %v\n", pet.GetState().Name, err)
+					}
+				}
+			}
+		}
+	}()
 }

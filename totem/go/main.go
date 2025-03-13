@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"log"
@@ -75,6 +76,9 @@ func main() {
 
 	// Create Totem
 	totem := NewTotem("totem-pubkey-123")
+
+	bgCtx := context.Background()
+	totem.StartPetStatusUpdates(bgCtx)
 
 	// Initialize relay with Totem and Database
 	totemRelay := NewTotemRelay(RelayInfo{
@@ -235,23 +239,30 @@ const htmlTemplate = `
           ]
         }
         </div>
+        <div class="code-block">
+            nak event -k 5910 -c '{"name":"create_egg","parameters":{}}' --tag 'c=execute-tool' ws://localhost:3334/nostr
+        </div>
         
         <h3>2. Name Your Pet to Hatch the Egg</h3>
         <div class="code-block">
         {
-          "kind": 5910,
-          "content": {
-            "name": "create_pet",
+        "kind": 5910,
+        "content": {
+            "name": "name_pet",
             "parameters": {
-              "name": "Your Pet Name"
+            "name": "Your Pet Name",
+            "pet_id": "optional-specific-egg-id"
             }
-          },
-          "tags": [
+        },
+        "tags": [
             ["c", "execute-tool"]
-          ]
+        ]
         }
         </div>
-        
+        <div class="code-block">
+            nak event -k 5910 -c '{"name":"name_pet","parameters":{"name":"Your Pet Name","pet_id":"<optional_pet_id>"}}' --tag 'c=execute-tool' ws://localhost:3334/nostr
+        </div>
+
         <h3>3. Feed Your Pet</h3>
         <p>Send regular notes (kind 1) to the relay to feed and interact with your pet!</p>
     </div>
