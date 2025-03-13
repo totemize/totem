@@ -111,8 +111,8 @@ class GPIOError(Exception):
 class WaveshareEPD3in7:
     """Waveshare 3.7inch e-Paper HAT driver"""
     
-    def __init__(self):
-        """Initialize the driver"""
+    def __init__(self, mock_mode=None, handle_errors=None, busy_timeout=None):
+        """Initialize the driver with parameters for compatibility with script calls"""
         self.width = EPD_WIDTH
         self.height = EPD_HEIGHT
         self.spi = None
@@ -124,13 +124,15 @@ class WaveshareEPD3in7:
         self.lut_wb = None     # Will be set during init
         self.lut_bb = None     # Will be set during init
         self.initialized = False
-        self.mock_mode = os.environ.get('EINK_MOCK_MODE', '0') == '1'
+        
+        # Allow parameters to override environment variables
+        self.mock_mode = mock_mode if mock_mode is not None else os.environ.get('EINK_MOCK_MODE', '0') == '1'
         self.using_rpi_gpio = False
         self.using_sw_spi = USE_SW_SPI
         self.nvme_compatible = NVME_COMPATIBLE
         self.hardware_type = self._detect_hardware()
-        self.handle_errors = os.environ.get('EINK_HANDLE_ERRORS', '1') == '1'
-        self.busy_timeout = int(os.environ.get('EINK_BUSY_TIMEOUT', 10))  # Timeout in seconds for busy pin
+        self.handle_errors = handle_errors if handle_errors is not None else os.environ.get('EINK_HANDLE_ERRORS', '1') == '1'
+        self.busy_timeout = busy_timeout if busy_timeout is not None else int(os.environ.get('EINK_BUSY_TIMEOUT', 10))
         
         if self.nvme_compatible:
             print("Running in NVME-compatible mode with software SPI")
@@ -484,22 +486,8 @@ class WaveshareEPD3in7:
         if self.mock_mode:
             return
         
-        if pin == RST_PIN:
-            pin_name = "RST"
-        elif pin == DC_PIN:
-            pin_name = "DC"
-        elif pin == CS_PIN:
-            pin_name = "CS"
-        elif pin == BUSY_PIN:
-            pin_name = "BUSY"
-        elif pin == MOSI_PIN:
-            pin_name = "MOSI"
-        elif pin == SCK_PIN:
-            pin_name = "SCK"
-        else:
-            pin_name = str(pin)
-        
-        logging.debug(f"Setting {pin_name}_PIN ({pin}) to {'HIGH' if value else 'LOW'}")
+        # Simple logging
+        logging.debug(f"Setting GPIO pin {pin} to {'HIGH' if value else 'LOW'}")
         
         try:
             if LGPIO_AVAILABLE and self.gpio_handle is not None:
@@ -508,8 +496,7 @@ class WaveshareEPD3in7:
                 else:
                     logging.warning(f"Pin {pin} not claimed")
             elif GPIO_AVAILABLE:
-                # For CS pin with hardware SPI, let spidev handle it 
-                # If we're using hardware SPI and it's the CS pin, skip
+                # Skip CS_PIN in hardware SPI mode like manufacturer does
                 if pin == CS_PIN and not self.using_sw_spi and hasattr(self, 'spi'):
                     # Let spidev handle CS in hardware mode
                     pass
@@ -520,14 +507,14 @@ class WaveshareEPD3in7:
         except Exception as e:
             if self.handle_errors:
                 logging.error(f"Error setting pin {pin}: {e}")
+                self.mock_mode = True
             else:
                 raise GPIOError(f"Could not set GPIO pin {pin}: {e}")
     
     def _digital_read(self, pin):
-        """Read from a GPIO pin"""
+        """Read from a GPIO pin - simplify to match manufacturer's approach"""
         if self.mock_mode:
-            print(f"Mock digital read: pin={pin}")
-            return 1  # Always return "not busy" in mock mode
+            return 0  # Return "not busy" in mock mode
             
         try:
             if self.using_rpi_gpio:
@@ -535,16 +522,12 @@ class WaveshareEPD3in7:
             else:
                 return lgpio.gpio_read(self.gpio_handle, pin)
         except Exception as e:
-            error_msg = f"Error reading from GPIO pin {pin}: {str(e)}"
-            print(error_msg)
-            
             if self.handle_errors:
-                # Fall back to mock mode
-                print("Falling back to mock mode after GPIO error")
+                logging.error(f"Error reading from pin {pin}: {e}")
                 self.mock_mode = True
-                return 1  # Return "not busy"
+                return 0  # Return "not busy"
             else:
-                raise GPIOError(error_msg)
+                raise GPIOError(f"Could not read GPIO pin {pin}: {e}")
     
     def _spi_transfer(self, data):
         """Transfer data over SPI (hardware or software)"""
@@ -666,62 +649,30 @@ class WaveshareEPD3in7:
             return
             
         try:
-            # Wait for busy pin to be low (not busy)
-            print("Waiting for display to be ready...")
-            logging.log(debug_level, f"Waiting for BUSY_PIN ({BUSY_PIN}) to go low...")
-            
-            # First, verify we can read the busy pin
-            try:
-                busy_state = self._digital_read(BUSY_PIN)
-                logging.log(debug_level, f"Initial BUSY_PIN state: {busy_state}")
-            except Exception as e:
-                logging.error(f"Error reading BUSY_PIN: {e}")
-                if self.handle_errors:
-                    print("Falling back to mock mode due to BUSY_PIN read error")
-                    self.mock_mode = True
-                    return
-                else:
-                    raise
-            
-            # Now wait for it to change - NOTE: Manufacturer's code indicates 1 is busy, 0 is idle
+            # Simple busy wait like the manufacturer's code - no complex error handling
+            logging.debug("e-Paper busy")
             start_time = time.time()
-            poll_count = 0
-            timeout_occurred = False
             
-            while self._digital_read(BUSY_PIN) == 1:  # 1 means busy, 0 means idle
-                time.sleep(0.1)
-                poll_count += 1
+            # Wait while BUSY_PIN is high (1) - when it's low (0), the display is idle
+            while self._digital_read(BUSY_PIN) == 1:
+                time.sleep(0.01)  # 10ms delay like manufacturer
                 
-                # Log progress periodically
-                if poll_count % 10 == 0:
-                    elapsed = time.time() - start_time
-                    logging.log(debug_level, f"Still waiting after {elapsed:.1f}s, poll count: {poll_count}")
-                
-                if time.time() - start_time > timeout:
-                    timeout_occurred = True
+                # Only add timeout check (manufacturer doesn't have this)
+                if timeout and (time.time() - start_time > timeout):
                     print(f"Warning: Busy timeout after {timeout} seconds, continuing anyway")
-                    logging.warning(f"BUSY_PIN timeout after {timeout}s and {poll_count} polls")
+                    logging.warning(f"BUSY_PIN timeout after {timeout}s")
                     break
             
-            end_time = time.time()
-            elapsed = end_time - start_time
+            logging.debug("e-Paper busy release")
+            print("Display is now ready")
             
-            if timeout_occurred:
-                logging.warning(f"BUSY timeout occurred after {elapsed:.1f}s")
-            else:
-                logging.log(debug_level, f"BUSY wait completed after {elapsed:.1f}s and {poll_count} polls")
-                print("Display is now ready")
         except Exception as e:
-            error_msg = f"Error waiting for display: {str(e)}"
-            print(error_msg)
-            traceback.print_exc()
-            
+            # Fall back to mock mode on error if handle_errors is enabled
             if self.handle_errors:
-                # Fall back to mock mode
-                print("Falling back to mock mode after wait error")
+                print(f"Error waiting for display: {e}")
                 self.mock_mode = True
             else:
-                raise RuntimeError(error_msg)
+                raise
     
     def set_lut(self):
         """Set the look-up tables for the display"""
@@ -847,6 +798,11 @@ class WaveshareEPD3in7:
                 self.mock_mode = True
             else:
                 raise RuntimeError(error_msg)
+    
+    # Alias for Clear() method to maintain compatibility with scripts
+    def clear(self, clear_color=0xFF, mode=0):
+        """Alias for Clear() method"""
+        return self.Clear(clear_color, mode)
     
     def display(self, image):
         """Display an image on the e-Paper display"""
