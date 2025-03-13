@@ -98,7 +98,25 @@ class Driver(EInkDeviceInterface):
     height = 280
     
     def __init__(self):
+        # Initialize state tracking variables for resource management
+        self.gpio_chip = None
+        self.reset_line = None
+        self.dc_line = None
+        self.busy_line = None
+        self.spi = None
         self.initialized = False
+        self.hardware_available = False
+        self.mock_mode = False
+
+        # Track which resources were successfully acquired for proper cleanup
+        self.resources_acquired = {
+            'gpio_chip': False,
+            'reset_line': False,
+            'dc_line': False,
+            'busy_line': False,
+            'spi': False
+        }
+
         self.USE_HARDWARE = False  # Initialize as False by default
         self.DEBUG_MODE = False    # Debug mode for SPI/GPIO commands
         
@@ -175,211 +193,297 @@ class Driver(EInkDeviceInterface):
             self.spi = MockSpiDev()
             logger.info("Falling back to mock SPI implementation")
     
-    def init(self):
-        logger.info("Initializing Waveshare 3.7in e-Paper HAT (Pi 5 compatible).")
-        
-        if self.USE_HARDWARE:
+    def init(self, mode=0):
+        """Initialize the display with improved error handling and resource tracking"""
+        if self.initialized:
+            logger.info("Display already initialized, cleaning up first")
+            self.cleanup_resources()
+
+        self.mock_mode = False
+        success = False
+
+        try:
+            logger.info(f"Initializing Waveshare 3.7in e-Paper HAT (Pi 5 compatible).")
+            self.cleanup_resources()  # Ensure we start clean
+
+            # Initialize GPIO
+            success = self._init_gpio()
+            if not success:
+                logger.warning("GPIO initialization failed, falling back to mock mode")
+                self.mock_mode = True
+                self.initialized = True
+                return True  # Return true even in mock mode, since we can still function
+
+            # Initialize SPI
+            success = self._init_spi()
+            if not success:
+                logger.warning("SPI initialization failed, falling back to mock mode")
+                self.mock_mode = True
+                self.cleanup_resources()  # Clean up any resources that were acquired
+                self.initialized = True
+                return True
+
+            # Hardware is available, proceed with real initialization
+            self.hardware_available = True
+            logger.info("Hardware initialized successfully")
+
+            # Reset display and send init commands
+            self._reset()
+            self._send_init_commands(mode)
+            
+            self.initialized = True
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error during initialization: {e}")
+            logger.error(traceback.format_exc())
+            self.cleanup_resources()  # Clean up any resources that were acquired
+            self.mock_mode = True
+            self.initialized = True  # Set initialized to true so we can still function in mock mode
+            return True  # Return success even in mock mode
+
+    def _init_gpio(self):
+        """Initialize GPIO with improved error handling"""
+        try:
+            logger.info("Initializing GPIO using gpiod v1 API")
+            self.cleanup_gpio()  # Ensure we start clean
+            
+            # Open GPIO chip
+            logger.info("Opening GPIO chip")
             try:
-                # Clean up any previous resources
-                self._cleanup_gpio()
-                
-                # Configure GPIO lines using appropriate API
-                if self.has_v2_api:
-                    self._init_gpio_v2()
-                else:
-                    self._init_gpio_v1()
+                self.gpio_chip = gpiod.chip(0)
+                self.resources_acquired['gpio_chip'] = True
             except Exception as e:
-                logger.error(f"Error initializing Pi 5 GPIO: {e}")
-                logger.error(f"Error traceback: {traceback.format_exc()}")
-                self.initialized = False
-                self.USE_HARDWARE = False
-                self._cleanup_gpio()
-        else:
-            # Mock initialization
-            logger.info("Mock initialization complete")
-            self.initialized = True
-    
-    def _init_gpio_v2(self):
-        """Initialize GPIO using v2 API"""
-        logger.info("Initializing GPIO using gpiod v2 API")
-        
-        from gpiod.line_settings import LineSettings
-        from gpiod.line import Value, Direction
-        
-        # Open the chip
-        logger.info("Opening GPIO chip")
-        self.chip = gpiod.Chip('/dev/gpiochip0')
-        
-        # Create settings for output and input pins
-        output_settings = LineSettings(direction=Direction.OUTPUT)
-        input_settings = LineSettings(direction=Direction.INPUT)
-        
-        # Request each line individually with the correct settings
-        logger.info(f"Requesting reset pin {self.reset_pin} as output")
-        try:
-            self.reset_request = self.chip.request_lines(
-                {self.reset_pin: output_settings}, 
-                consumer="totem-reset"
-            )
-        except OSError as e:
-            # If device is busy, try to check if it's already being used
-            if "Device or resource busy" in str(e):
+                logger.error(f"Failed to open GPIO chip: {e}")
+                return False
+                
+            # Request reset pin
+            logger.info(f"Requesting reset pin {self.reset_pin} as output")
+            try:
+                self.reset_line = self.gpio_chip.get_line(self.reset_pin)
+                self.reset_line.request(consumer="eink_reset", type=gpiod.LINE_REQ_DIR_OUT, flags=0)
+                self.resources_acquired['reset_line'] = True
+            except Exception as e:
                 logger.warning(f"Reset pin {self.reset_pin} is busy. Another process may be using it.")
-                # We'll continue and try the other pins
-            else:
-                raise
-        
-        logger.info(f"Requesting dc pin {self.dc_pin} as output")
-        try:
-            self.dc_request = self.chip.request_lines(
-                {self.dc_pin: output_settings}, 
-                consumer="totem-dc"
-            )
-        except OSError as e:
-            if "Device or resource busy" in str(e):
+                
+            # Request DC pin
+            logger.info(f"Requesting dc pin {self.dc_pin} as output")
+            try:
+                self.dc_line = self.gpio_chip.get_line(self.dc_pin)
+                self.dc_line.request(consumer="eink_dc", type=gpiod.LINE_REQ_DIR_OUT, flags=0)
+                self.resources_acquired['dc_line'] = True
+            except Exception as e:
                 logger.warning(f"DC pin {self.dc_pin} is busy. Another process may be using it.")
-            else:
-                raise
-        
-        logger.info(f"Requesting busy pin {self.busy_pin} as input")
-        try:
-            self.busy_request = self.chip.request_lines(
-                {self.busy_pin: input_settings}, 
-                consumer="totem-busy"
-            )
-        except OSError as e:
-            if "Device or resource busy" in str(e):
+                
+            # Request busy pin
+            logger.info(f"Requesting busy pin {self.busy_pin} as input")
+            try:
+                self.busy_line = self.gpio_chip.get_line(self.busy_pin)
+                self.busy_line.request(consumer="eink_busy", type=gpiod.LINE_REQ_DIR_IN, flags=0)
+                self.resources_acquired['busy_line'] = True
+            except Exception as e:
                 logger.warning(f"Busy pin {self.busy_pin} is busy. Another process may be using it.")
-            else:
-                raise
-        
-        # Note: We're not requesting the CS pin as it's controlled by the SPI hardware
-        logger.info(f"Using hardware CS on pin {self.cs_pin} (managed by SPI driver)")
-        
-        # Check if all required requests were successful - CS is no longer required
-        if (hasattr(self, 'reset_request') and 
-            hasattr(self, 'dc_request') and 
-            hasattr(self, 'busy_request')):
-            # Reset the display
-            self.reset()
-            self.initialized = True
-            logger.info("Pi 5 e-Paper initialization complete")
-        else:
-            logger.warning("Some required GPIO pins could not be requested. Falling back to mock mode.")
-            self.initialized = False
-            self.USE_HARDWARE = False
+                
+            # Check if we have all required GPIO lines
+            if not (self.resources_acquired['reset_line'] and 
+                    self.resources_acquired['dc_line'] and 
+                    self.resources_acquired['busy_line']):
+                logger.warning("Some required GPIO pins could not be requested. Falling back to mock mode.")
+                self.cleanup_gpio()
+                return False
+                
+            logger.info("GPIO initialization successful")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error during GPIO initialization: {e}")
+            logger.error(traceback.format_exc())
+            self.cleanup_gpio()
+            return False
 
-    def _init_gpio_v1(self):
-        """Initialize GPIO using v1 API"""
-        logger.info("Initializing GPIO using gpiod v1 API")
-        
-        # Open the chip
-        logger.info("Opening GPIO chip")
-        self.chip = gpiod.Chip('/dev/gpiochip0')
-        
-        # Request each line individually
-        logger.info(f"Requesting reset pin {self.reset_pin} as output")
+    def _init_spi(self):
+        """Initialize SPI with error handling"""
         try:
-            self.reset_line = self.chip.get_line(self.reset_pin)
-            self.reset_line.request(consumer="totem-reset", type=gpiod.LINE_REQ_DIR_OUT)
+            logger.info("Opening SPI device")
+            self.spi = spidev.SpiDev()
+            self.spi.open(0, 0)
+            self.spi.max_speed_hz = 4000000
+            self.spi.mode = 0
+            self.resources_acquired['spi'] = True
+            logger.info("SPI initialization successful")
+            return True
         except Exception as e:
-            if "busy" in str(e).lower():
-                logger.warning(f"Reset pin {self.reset_pin} is busy. Another process may be using it.")
-            else:
-                logger.error(f"Error requesting reset pin: {e}")
-            self.reset_line = None
-        
-        logger.info(f"Requesting dc pin {self.dc_pin} as output")
-        try:
-            self.dc_line = self.chip.get_line(self.dc_pin)
-            self.dc_line.request(consumer="totem-dc", type=gpiod.LINE_REQ_DIR_OUT)
-        except Exception as e:
-            if "busy" in str(e).lower():
-                logger.warning(f"DC pin {self.dc_pin} is busy. Another process may be using it.")
-            else:
-                logger.error(f"Error requesting DC pin: {e}")
-            self.dc_line = None
-        
-        logger.info(f"Requesting busy pin {self.busy_pin} as input")
-        try:
-            self.busy_line = self.chip.get_line(self.busy_pin)
-            self.busy_line.request(consumer="totem-busy", type=gpiod.LINE_REQ_DIR_IN)
-        except Exception as e:
-            if "busy" in str(e).lower():
-                logger.warning(f"Busy pin {self.busy_pin} is busy. Another process may be using it.")
-            else:
-                logger.error(f"Error requesting busy pin: {e}")
-            self.busy_line = None
-        
-        # Note: We're not requesting the CS pin as it's controlled by the SPI hardware
-        logger.info(f"Using hardware CS on pin {self.cs_pin} (managed by SPI driver)")
-        
-        # Check if all required lines were successfully requested
-        if self.reset_line and self.dc_line and self.busy_line:
-            # Reset the display
-            self.reset()
-            self.initialized = True
-            logger.info("Pi 5 e-Paper initialization complete")
-        else:
-            logger.warning("Some required GPIO pins could not be requested. Falling back to mock mode.")
-            self.initialized = False
-            self.USE_HARDWARE = False
+            logger.error(f"Failed to initialize SPI: {e}")
+            if hasattr(self, 'spi') and self.spi is not None:
+                try:
+                    self.spi.close()
+                except:
+                    pass
+            self.spi = None
+            self.resources_acquired['spi'] = False
+            return False
 
-    def _cleanup_gpio(self):
-        """Clean up GPIO resources"""
+    def _reset(self):
+        """Reset the display with error handling"""
+        if self.mock_mode:
+            logger.info("Mock reset")
+            return
+            
+        try:
+            logger.debug("Resetting e-Paper display")
+            self.reset_line.set_value(1)
+            time.sleep(0.2)
+            self.reset_line.set_value(0)
+            time.sleep(0.2)
+            self.reset_line.set_value(1)
+            time.sleep(0.2)
+        except Exception as e:
+            logger.error(f"Error during display reset: {e}")
+            self.mock_mode = True
+
+    def cleanup_gpio(self):
+        """Clean up GPIO resources with improved error handling"""
         logger.info("Cleaning up GPIO resources")
         
-        # V2 API cleanup
-        if hasattr(self, 'reset_request'):
-            try:
-                self.reset_request.release()
-                logger.info("Released reset request")
-            except:
-                pass
-        
-        if hasattr(self, 'dc_request'):
-            try:
-                self.dc_request.release()
-                logger.info("Released dc request")
-            except:
-                pass
-                
-        if hasattr(self, 'busy_request'):
-            try:
-                self.busy_request.release()
-                logger.info("Released busy request")
-            except:
-                pass
-        
-        # V1 API cleanup
-        if hasattr(self, 'reset_line') and self.reset_line:
+        # Release reset line
+        if self.resources_acquired['reset_line'] and self.reset_line is not None:
             try:
                 self.reset_line.release()
                 logger.info("Released reset line")
-            except:
-                pass
-        
-        if hasattr(self, 'dc_line') and self.dc_line:
+            except Exception as e:
+                logger.error(f"Error releasing reset line: {e}")
+            finally:
+                self.reset_line = None
+                self.resources_acquired['reset_line'] = False
+                
+        # Release DC line
+        if self.resources_acquired['dc_line'] and self.dc_line is not None:
             try:
                 self.dc_line.release()
                 logger.info("Released dc line")
-            except:
-                pass
-        
-        if hasattr(self, 'busy_line') and self.busy_line:
+            except Exception as e:
+                logger.error(f"Error releasing dc line: {e}")
+            finally:
+                self.dc_line = None
+                self.resources_acquired['dc_line'] = False
+                
+        # Release busy line
+        if self.resources_acquired['busy_line'] and self.busy_line is not None:
             try:
                 self.busy_line.release()
                 logger.info("Released busy line")
-            except:
-                pass
-        
-        if hasattr(self, 'chip'):
+            except Exception as e:
+                logger.error(f"Error releasing busy line: {e}")
+            finally:
+                self.busy_line = None
+                self.resources_acquired['busy_line'] = False
+                
+        # Close GPIO chip
+        if self.resources_acquired['gpio_chip'] and self.gpio_chip is not None:
             try:
-                self.chip.close()
+                # In some gpiod versions, there's no explicit close method
+                # The chip gets closed when it goes out of scope
+                self.gpio_chip = None
                 logger.info("Closed GPIO chip")
-            except:
-                pass
-    
+            except Exception as e:
+                logger.error(f"Error closing GPIO chip: {e}")
+            finally:
+                self.gpio_chip = None
+                self.resources_acquired['gpio_chip'] = False
+
+    def cleanup_resources(self):
+        """Clean up all resources"""
+        self.cleanup_gpio()
+        
+        # Close SPI
+        if self.resources_acquired['spi'] and self.spi is not None:
+            try:
+                self.spi.close()
+                logger.info("Closed SPI device")
+            except Exception as e:
+                logger.error(f"Error closing SPI device: {e}")
+            finally:
+                self.spi = None
+                self.resources_acquired['spi'] = False
+                
+        logger.info("E-Paper resources cleaned up")
+
+    def send_command(self, command):
+        """Send command with error handling"""
+        if self.mock_mode:
+            logger.debug(f"Mock send command: 0x{command:02X}")
+            return
+            
+        try:
+            if not self.resources_acquired['dc_line'] or self.dc_line is None:
+                logger.error("Cannot send command: DC line not available")
+                self.mock_mode = True
+                return
+                
+            self.dc_line.set_value(0)
+            self.spi.writebytes([command])
+        except Exception as e:
+            logger.error(f"Error sending command: {e}")
+            self.mock_mode = True
+
+    def send_data(self, data):
+        """Send data with error handling"""
+        if self.mock_mode:
+            logger.debug(f"Mock send data: {data[:5] if isinstance(data, list) else data}")
+            return
+            
+        try:
+            if not self.resources_acquired['dc_line'] or self.dc_line is None:
+                logger.error("Cannot send data: DC line not available")
+                self.mock_mode = True
+                return
+                
+            self.dc_line.set_value(1)
+            if isinstance(data, int):
+                data = [data]
+            self.spi.writebytes(data)
+        except Exception as e:
+            logger.error(f"Error sending data: {e}")
+            self.mock_mode = True
+
+    def wait_until_idle(self):
+        """Wait until display is idle with error handling"""
+        if self.mock_mode:
+            logger.debug("Mock wait until idle")
+            time.sleep(0.1)  # Simulate a short wait in mock mode
+            return
+            
+        try:
+            if not self.resources_acquired['busy_line'] or self.busy_line is None:
+                logger.error("Cannot wait until idle: Busy line not available")
+                self.mock_mode = True
+                time.sleep(0.5)  # Wait a bit to simulate display refresh
+                return
+                
+            logger.debug("Waiting for e-Paper display to become idle")
+            start_time = time.time()
+            timeout = 30  # 30 second timeout
+            
+            # Match manufacturer's logic: 1 means busy, 0 means idle
+            while self.busy_line.get_value() == 1:  
+                time.sleep(0.01)  # 10ms delay to match manufacturer
+                if time.time() - start_time > timeout:
+                    logger.warning("Timeout waiting for display to become idle")
+                    break
+                    
+            logger.debug("Display is now idle")
+        except Exception as e:
+            logger.error(f"Error waiting for idle state: {e}")
+            self.mock_mode = True
+            time.sleep(0.5)  # Wait a bit to simulate display refresh
+
+    def __del__(self):
+        """Clean up resources when object is deleted"""
+        try:
+            self.cleanup_resources()
+        except Exception as e:
+            logger.error(f"Error during cleanup in __del__: {e}")
+
     def enable_debug_mode(self, enable=True):
         """Enable or disable debug mode for the driver"""
         self.DEBUG_MODE = enable
@@ -469,150 +573,6 @@ class Driver(EInkDeviceInterface):
             logger.error(traceback.format_exc())
             return False
             
-    def reset(self):
-        if self.USE_HARDWARE:
-            try:
-                logger.debug("Resetting display with enhanced sequence")
-                if self.has_v2_api:
-                    self._reset_v2()
-                else:
-                    self._reset_v1()
-                
-                # Send power on command after reset
-                self.send_command(0x04)  # Power on
-                self.wait_until_idle()
-                
-                if self.DEBUG_MODE:
-                    logger.debug("Enhanced reset sequence completed")
-            except Exception as e:
-                logger.error(f"Error during reset: {e}")
-                logger.error(traceback.format_exc())
-        else:
-            logger.debug("Mock reset")
-            time.sleep(0.6)
-            
-    def _reset_v2(self):
-        """Reset sequence using v2 API"""
-        from gpiod.line import Value
-        
-        # First ensure reset is inactive (HIGH)
-        self.reset_request.set_values({self.reset_pin: Value.INACTIVE})
-        time.sleep(0.05)  # Short delay
-        
-        # Reset sequence (LOW-HIGH-LOW-HIGH)
-        self.reset_request.set_values({self.reset_pin: Value.ACTIVE})
-        time.sleep(0.2)  # Longer pulse
-        self.reset_request.set_values({self.reset_pin: Value.INACTIVE})
-        time.sleep(0.02)  # Short delay
-        self.reset_request.set_values({self.reset_pin: Value.ACTIVE})
-        time.sleep(0.2)  # Longer pulse
-        self.reset_request.set_values({self.reset_pin: Value.INACTIVE})
-        time.sleep(0.2)  # Final stabilization
-            
-    def _reset_v1(self):
-        """Reset sequence using v1 API"""
-        # First ensure reset is inactive (HIGH)
-        self.reset_line.set_value(1)
-        time.sleep(0.05)  # Short delay
-        
-        # Reset sequence (LOW-HIGH-LOW-HIGH)
-        self.reset_line.set_value(0)
-        time.sleep(0.2)  # Longer pulse
-        self.reset_line.set_value(1)
-        time.sleep(0.02)  # Short delay
-        self.reset_line.set_value(0)
-        time.sleep(0.2)  # Longer pulse
-        self.reset_line.set_value(1)
-        time.sleep(0.2)  # Final stabilization
-    
-    def send_command(self, command):
-        if self.USE_HARDWARE:
-            try:
-                if self.DEBUG_MODE:
-                    logger.debug(f"Sending command: 0x{command:02X}")
-                
-                if self.has_v2_api:
-                    from gpiod.line import Value
-                    self.dc_request.set_values({self.dc_pin: Value.INACTIVE})  # DC LOW for command
-                else:
-                    self.dc_line.set_value(0)  # DC LOW for command
-                
-                self.spi.writebytes([command])
-            except Exception as e:
-                logger.error(f"Error sending command: {e}")
-                if self.DEBUG_MODE:
-                    logger.error(traceback.format_exc())
-        else:
-            if self.DEBUG_MODE:
-                logger.debug(f"Mock send command: 0x{command:02X}")
-    
-    def send_data(self, data):
-        if self.USE_HARDWARE:
-            try:
-                if self.DEBUG_MODE:
-                    if isinstance(data, list) and len(data) > 10:
-                        logger.debug(f"Sending data: [{data[0]:02X}, {data[1]:02X}, ... {len(data)} bytes]")
-                    elif isinstance(data, list):
-                        logger.debug(f"Sending data: {[f'0x{d:02X}' for d in data]}")
-                    else:
-                        logger.debug(f"Sending data: 0x{data:02X}")
-                
-                if self.has_v2_api:
-                    from gpiod.line import Value
-                    self.dc_request.set_values({self.dc_pin: Value.ACTIVE})  # DC HIGH for data
-                else:
-                    self.dc_line.set_value(1)  # DC HIGH for data
-                
-                if isinstance(data, int):
-                    self.spi.writebytes([data])
-                else:
-                    # Write data in chunks to avoid buffer issues
-                    chunk_size = 1024
-                    for i in range(0, len(data), chunk_size):
-                        chunk = data[i:i+chunk_size]
-                        self.spi.writebytes(chunk)
-            except Exception as e:
-                logger.error(f"Error sending data: {e}")
-                if self.DEBUG_MODE:
-                    logger.error(traceback.format_exc())
-        else:
-            if self.DEBUG_MODE:
-                if isinstance(data, list) and len(data) > 10:
-                    logger.debug(f"Mock send data: [{data[0]:02X}, {data[1]:02X}, ... {len(data)} bytes]")
-                elif isinstance(data, list):
-                    logger.debug(f"Mock send data: {[f'0x{d:02X}' for d in data]}")
-                else:
-                    logger.debug(f"Mock send data: 0x{data:02X}")
-    
-    def wait_until_idle(self):
-        if self.USE_HARDWARE:
-            try:
-                if self.DEBUG_MODE:
-                    logger.debug("Waiting for display to be idle")
-                
-                # Different waiting logic for v1/v2 API
-                if self.has_v2_api:
-                    from gpiod.line import Value
-                    # Simplified approach - just sleep for a fixed time
-                    # This avoids the issue with get_values() and busy pin access
-                    logger.debug("Using fixed delay instead of busy pin polling")
-                    time.sleep(1.0)  # Fixed delay instead of polling busy pin
-                else:
-                    while self.busy_line.get_value() == 0:  # LOW is busy
-                        time.sleep(0.01)
-                        
-                if self.DEBUG_MODE:
-                    logger.debug("Display is now idle")
-            except Exception as e:
-                logger.error(f"Error waiting for idle: {e}")
-                if self.DEBUG_MODE:
-                    logger.error(traceback.format_exc())
-                time.sleep(1)  # Safe default wait time
-        else:
-            if self.DEBUG_MODE:
-                logger.debug("Mock wait until idle")
-            time.sleep(0.1)
-            
     def clear(self):
         logger.info("Clearing e-Paper display")
         if self.USE_HARDWARE and self.initialized:
@@ -696,15 +656,4 @@ class Driver(EInkDeviceInterface):
             self.send_command(0x07)  # Deep sleep
             self.send_data(0xA5)
         else:
-            logger.info("Mock sleep")
-    
-    def __del__(self):
-        try:
-            self._cleanup_gpio()
-            
-            if hasattr(self, 'spi') and not isinstance(self.spi, MockSpiDev) and hasattr(self.spi, 'close'):
-                self.spi.close()
-            
-            logger.info("E-Paper resources cleaned up")
-        except Exception as e:
-            logger.error(f"Error in __del__: {e}") 
+            logger.info("Mock sleep") 

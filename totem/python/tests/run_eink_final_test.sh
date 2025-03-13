@@ -53,7 +53,7 @@ logger = logging.getLogger('eink_test')
 sys.path.insert(0, '${TOTEM_DIR}')
 
 # Import the EInk driver
-from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
+from python.devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7
 
 try:
     # Initialize

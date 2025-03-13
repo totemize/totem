@@ -95,8 +95,39 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 try:
-    # Import the EInk driver
-    from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
+    # Import the EInk driver - use the one in the drivers directory
+    try:
+        # Try to detect Pi version
+        import platform
+        import re
+        
+        # Check if we're on a Pi5
+        pi_model = "unknown"
+        try:
+            with open('/proc/device-tree/model', 'r') as f:
+                model = f.read()
+                if 'Raspberry Pi 5' in model:
+                    pi_model = "pi5"
+                    print("Detected Raspberry Pi 5")
+                elif 'Raspberry Pi 4' in model:
+                    pi_model = "pi4"
+                    print("Detected Raspberry Pi 4")
+                else:
+                    print(f"Detected other Raspberry Pi: {model}")
+        except:
+            print("Could not detect Raspberry Pi model")
+        
+        # Use Pi5-specific driver if we're on a Pi5
+        if pi_model == "pi5":
+            print("Using Pi5-specific driver")
+            from python.devices.eink.drivers.waveshare_3in7_pi5 import WaveshareEPD3in7
+        else:
+            print("Using standard driver")
+            from python.devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7
+    except ImportError as e:
+        print(f"Error importing specific driver: {e}")
+        print("Falling back to standard driver")
+        from python.devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7
     
     # Print configuration
     print("Running in NVME-compatible mode with software SPI")

@@ -32,19 +32,12 @@ def test_eink_hardware():
     """Test the EInk display with hardware access"""
     try:
         try:
-            from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
-            logger.info("Imported from python.devices.eink.waveshare_3in7")
+            # Import from python path
+            from python.devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7
+            logger.info("Imported WaveshareEPD3in7 from drivers directory")
         except ImportError as e:
-            logger.warning(f"First import attempt failed: {e}")
-            try:
-                from totem.python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
-                logger.info("Imported from totem.python.devices.eink.waveshare_3in7")
-            except ImportError as e:
-                logger.warning(f"Second import attempt failed: {e}")
-                logger.info("Trying direct import...")
-                sys.path.append('/home/totem/totem')
-                from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
-                logger.info("Imported with explicit path")
+            logger.error(f"Failed to import WaveshareEPD3in7: {e}")
+            raise ImportError(f"Could not import WaveshareEPD3in7 from drivers directory: {e}")
         
         logger.info("Initializing EInk display with alternative pins")
         logger.info(f"Using CS_PIN = {os.environ.get('EINK_CS_PIN', '9')} with software SPI")

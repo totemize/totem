@@ -47,16 +47,48 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
+# System tests
 system-test = "tests.system_test:main"
 serve = "service.main:start_server"
+
+# E-ink display tests
 eink-debug = "tests.test_eink_debug:main"
 eink-pattern = "tests.test_eink_pattern:main"
-nvme-test = "tests.test_nvme:main"
-storage-test = "tests.test_storage_manager:main"
-pi5-eink-test = "tests.test_pi5_eink:main"
 eink-quick-test = "tests.eink_quick_test:main"
 eink-diag = "tests.eink_diag:main"
-gpio-test = "tests.simple_gpio_test:main"
 eink-gpio-debug = "tests.eink_gpio_debug:main"
 eink-pi5-test = "tests.eink_pi5_test:main"
-#init = "totem.init:main"
+pi5-eink-test = "tests.test_pi5_eink:main"
+eink-sw-cs-test = "tests.test_eink_sw_cs:main"
+eink-nvme-conflict-test = "tests.eink_nvme_conflict_test:main"
+eink-2in13-test = "tests.eink.test_2in13_eink:main"
+eink-spi-test = "tests.eink.eink_spi_test:main"
+eink-spi-alt-test = "tests.eink.eink_spi_alt_test:main"
+nfc-pn532-test = "tests.test_nfc_PNC532:main"
+
+# Storage tests
+nvme-test = "tests.test_nvme:main"
+storage-test = "tests.test_storage_manager:main"
+format-nvme = "scripts.format_nvme:main"
+
+# GPIO tests
+gpio-test = "tests.simple_gpio_test:main"
+gpio-cleanup = "scripts.gpio_cleanup:main"
+
+# Hardware diagnostics
+hardware-check = "scripts.hardware_check:main"
+
+# Scripts for setting up systems
+setup-wifi-hotspot = "scripts.setup_wifi_hotspot:main"
+setup-pi-system = "scripts.setup_pi_system:main"
+setup-network-routing = "scripts.setup_network_routing:main"
+setup-dependencies = "scripts.setup_dependencies:main"
+
+# Deployment and installation scripts
+install-totem = "scripts.install_totem:main"
+deploy = "scripts.deploy:main"
+
+# Diagnostic and fix scripts
+fix-eink = "scripts.fix_eink:main"
+eink-diagnostics = "scripts.eink_diagnostics:main"
+fix-eink-dependencies = "scripts.fix_eink_dependencies:main"

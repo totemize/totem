@@ -42,7 +42,9 @@ def display_message(message, nvme_compatible=False, mock_mode=False, font_size=3
     os.environ['EINK_BUSY_TIMEOUT'] = str(busy_timeout)
     
     # Import the EInk driver
-    from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7, RST_PIN, DC_PIN, CS_PIN, BUSY_PIN
+    from python.devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7, RST_PIN, DC_PIN, CS_PIN, BUSY_PIN
+    from python.devices.eink.drivers.waveshare_3in7 import MOSI_PIN, SCK_PIN
+    logger.info("Imported from python.devices.eink.drivers.waveshare_3in7")
 
     try:
         # Initialize the display
@@ -60,7 +62,6 @@ def display_message(message, nvme_compatible=False, mock_mode=False, font_size=3
         print(f"  CS_PIN: {CS_PIN}")
         print(f"  BUSY_PIN: {BUSY_PIN}")
         if epd.using_sw_spi:
-            from python.devices.eink.waveshare_3in7 import MOSI_PIN, SCK_PIN
             print(f"  MOSI_PIN: {MOSI_PIN}")
             print(f"  SCK_PIN: {SCK_PIN}")
         

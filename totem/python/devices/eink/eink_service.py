@@ -47,43 +47,31 @@ except ImportError:
 
 # Try to import the proper EInk driver classes
 try:
-    # First try to import from direct module path
-    from devices.eink.waveshare_3in7 import WaveshareEPD3in7
+    # Import directly from drivers subdirectory
+    from devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7
     from devices.eink.mock_epd import MockEPD
-    logger.info("Successfully imported direct device drivers")
+    logger.info("Successfully imported device drivers")
 except ImportError:
-    try:
-        # Try to import from drivers subdirectory
-        from devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7
-        from devices.eink.drivers.mock_epd import MockEPD
-        logger.info("Successfully imported device drivers from drivers subdirectory")
-    except ImportError:
-        # As a last resort, try importing from current directory
-        try:
-            from waveshare_3in7 import WaveshareEPD3in7
-            from mock_epd import MockEPD
-            logger.info("Successfully imported device drivers from current directory")
-        except ImportError:
-            logger.error("Failed to import device drivers")
-            # Create placeholder classes to avoid errors
-            class MockEPD:
-                def __init__(self):
-                    pass
-                def init(self):
-                    pass
-                def Clear(self):
-                    pass
-                def close(self):
-                    pass
-                def cleanup(self):
-                    pass
-                def sleep(self):
-                    pass
-                def display_text(self, text, x=10, y=10, font_size=24):
-                    pass
-            
-            class WaveshareEPD3in7(MockEPD):
-                pass
+    logger.error("Failed to import device drivers")
+    # Create placeholder classes to avoid errors
+    class MockEPD:
+        def __init__(self):
+            pass
+        def init(self):
+            pass
+        def Clear(self):
+            pass
+        def close(self):
+            pass
+        def cleanup(self):
+            pass
+        def sleep(self):
+            pass
+        def display_text(self, text, x=10, y=10, font_size=24):
+            pass
+    
+    class WaveshareEPD3in7(MockEPD):
+        pass
 
 # Try to import EInk class for higher-level abstraction
 try:

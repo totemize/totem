@@ -85,7 +85,7 @@ def run_test(nvme_compatible=False, mock_mode=False, busy_timeout=10):
             
         else:
             # Use our custom module with manufacturer-like approach
-            from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7, RST_PIN, DC_PIN, CS_PIN, BUSY_PIN
+            from python.devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7, RST_PIN, DC_PIN, CS_PIN, BUSY_PIN
             
             epd = WaveshareEPD3in7()
             

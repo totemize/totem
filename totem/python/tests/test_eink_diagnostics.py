@@ -32,7 +32,7 @@ def print_section(title):
 
 def test_init_only():
     """Test just initializing the EInk display"""
-    from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
+    from python.devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7
     
     print_section("Testing initialization only")
     logger.info("Creating EInk display object")
@@ -91,7 +91,7 @@ def test_gpio_pins():
 
 def test_digital_write_read():
     """Test digital write and read operations on GPIO pins"""
-    from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
+    from python.devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7
     
     print_section("Testing digital write/read")
     
@@ -135,7 +135,7 @@ def test_digital_write_read():
 
 def test_reset_only():
     """Test just the reset function of the EInk display"""
-    from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
+    from python.devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7
     
     print_section("Testing reset only")
     epd = WaveshareEPD3in7()
@@ -151,7 +151,7 @@ def test_reset_only():
 
 def test_busy_pin():
     """Test the busy pin of the EInk display"""
-    from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7, BUSY_PIN
+    from python.devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7, BUSY_PIN
     
     print_section("Testing busy pin")
     epd = WaveshareEPD3in7()
@@ -183,7 +183,7 @@ def test_busy_pin():
 
 def test_full_cycle():
     """Test a full cycle of the EInk display"""
-    from python.devices.eink.waveshare_3in7 import WaveshareEPD3in7
+    from python.devices.eink.drivers.waveshare_3in7 import WaveshareEPD3in7
     
     print_section("Testing full display cycle")
     epd = WaveshareEPD3in7()
