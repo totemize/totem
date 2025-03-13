@@ -326,77 +326,34 @@ class EInkService:
         return True
     
     def stop(self):
-        """Stop the EInk service and clean up resources"""
-        if not self.initialized:
-            logger.warning("EInk Service is not running")
+        """Stop the service and clean up resources."""
+        if not hasattr(self, 'initialized') or not self.initialized:
+            logger.warning("EInk service not initialized, nothing to stop")
             return
-            
-        logger.info("Stopping EInk Service")
-        self.stop_event.set()
+
+        logger.info("Stopping EInk service")
         
-        # Wait for threads to finish
-        if hasattr(self, 'server_thread') and self.server_thread.is_alive():
-            logger.info("Waiting for server thread to finish...")
-            self.server_thread.join(timeout=5.0)
-            if self.server_thread.is_alive():
-                logger.warning("Server thread did not exit cleanly")
-            
-        # Close the socket server explicitly
-        if hasattr(self, 'socket_server') and self.socket_server:
-            try:
-                logger.info("Closing socket server")
-                self.socket_server.close()
-            except Exception as e:
-                logger.error(f"Error closing socket server: {e}")
-            self.socket_server = None
-            
-        # Clean up display resources - try both self.display and self.eink for compatibility
-        # First try with self.display
-        if hasattr(self, 'display') and self.display is not None:
-            try:
-                # Put display to sleep
-                logger.info("Putting display to sleep before shutdown")
-                if hasattr(self.display, 'sleep'):
-                    self.display.sleep()
-                
-                # Perform cleanup
-                logger.info("Cleaning up hardware resources (display)")
-                if hasattr(self.display, 'cleanup'):
-                    self.display.cleanup()
-                elif hasattr(self.display, 'close'):
-                    self.display.close()
-            except Exception as e:
-                logger.error(f"Error during display cleanup: {e}")
-            self.display = None
+        # Set the stop event to signal threads to exit
+        if hasattr(self, 'stop_event'):
+            logger.info("Setting stop event")
+            self.stop_event.set()
         
-        # Then try with self.eink for backward compatibility
-        if hasattr(self, 'eink') and self.eink is not None:
+        # Wait for the server thread to finish if it's running
+        if hasattr(self, 'server_thread') and self.server_thread and self.server_thread.is_alive():
+            logger.info("Waiting for server thread to finish")
             try:
-                logger.info("Cleaning up hardware resources (eink)")
-                if hasattr(self.eink, 'driver'):
-                    driver = self.eink.driver
-                    if hasattr(driver, 'sleep'):
-                        logger.info("Putting eink driver to sleep")
-                        driver.sleep()
-                    if hasattr(driver, 'cleanup'):
-                        logger.info("Cleaning up eink driver")
-                        driver.cleanup()
-                    elif hasattr(driver, 'close'):
-                        logger.info("Closing eink driver")
-                        driver.close()
+                self.server_thread.join(timeout=5)  # Wait up to 5 seconds
+                if self.server_thread.is_alive():
+                    logger.warning("Server thread did not finish in time, proceeding with cleanup")
             except Exception as e:
-                logger.error(f"Error during eink driver cleanup: {e}")
-            self.eink = None
-            
-        # Remove socket file if using Unix sockets
-        if not self.use_tcp and hasattr(self, 'socket_path') and os.path.exists(self.socket_path):
-            try:
-                os.unlink(self.socket_path)
-                logger.info(f"Removed socket file: {self.socket_path}")
-            except Exception as e:
-                logger.error(f"Error removing socket file: {e}")
-            
-        logger.info("EInk Service stopped")
+                logger.error(f"Error joining server thread: {e}")
+        
+        # Perform resource cleanup
+        self.cleanup()
+        
+        # Final check to ensure we're marked as not initialized
+        self.initialized = False
+        logger.info("EInk service stopped")
     
     def signal_handler(self, sig, frame):
         """Handle termination signals for graceful shutdown"""
@@ -805,60 +762,96 @@ class EInkService:
             }
 
     def cleanup(self):
-        """Clean up resources"""
-        logger.info("Cleaning up resources")
-        
-        # Set stop event to signal threads to exit
-        if hasattr(self, 'stop_event'):
-            self.stop_event.set()
-        
-        # Clean up display - try both self.display and self.eink for compatibility
+        """Clean up resources when the service is terminated."""
+        logger.info("Cleaning up EInk service resources")
+
+        # First, handle socket resources if they exist
         try:
-            # First try using display directly
-            if hasattr(self, 'display') and self.display is not None:
+            if hasattr(self, 'server') and self.server:
+                logger.info("Closing socket server")
                 try:
-                    logger.info("Closing display")
-                    if hasattr(self.display, 'close'):
+                    # In case the socket is hanging
+                    if hasattr(self.server, 'socket') and self.server.socket:
+                        try:
+                            self.server.socket.shutdown(socket.SHUT_RDWR)
+                        except Exception as e:
+                            logger.warning(f"Error shutting down socket: {e}")
+                    self.server.server_close()
+                    logger.info("Socket server closed successfully")
+                except Exception as e:
+                    logger.error(f"Error closing socket server: {e}")
+        
+            # Clean up socket file if it exists and we're using Unix sockets
+            if self.socket_path and os.path.exists(self.socket_path):
+                logger.info(f"Removing socket file: {self.socket_path}")
+                try:
+                    os.unlink(self.socket_path)
+                    logger.info("Socket file removed successfully")
+                except Exception as e:
+                    logger.error(f"Error removing socket file: {e}")
+        except Exception as e:
+            logger.error(f"Error during socket cleanup: {e}")
+
+        # Then, handle display/eink resources
+        try:
+            # Try to clean up display if it exists
+            if hasattr(self, 'display') and self.display:
+                logger.info("Cleaning up display resources")
+                try:
+                    if hasattr(self.display, 'module_exit'):
+                        self.display.module_exit()
+                        logger.info("Display module_exit called successfully")
+                    elif hasattr(self.display, 'close'):
                         self.display.close()
+                        logger.info("Display close called successfully")
                     elif hasattr(self.display, 'cleanup'):
                         self.display.cleanup()
+                        logger.info("Display cleanup called successfully")
                 except Exception as e:
-                    logger.error(f"Error closing display: {e}")
-                self.display = None
+                    logger.error(f"Error cleaning up display resources: {e}")
             
-            # Also try eink for backward compatibility
-            if hasattr(self, 'eink') and self.eink is not None:
+            # Try to clean up eink if it exists and is different from display
+            if hasattr(self, 'eink') and self.eink and self.eink != self.display:
+                logger.info("Cleaning up eink resources")
                 try:
-                    logger.info("Cleaning up eink driver")
-                    if hasattr(self.eink, 'driver') and self.eink.driver is not None:
-                        if hasattr(self.eink.driver, 'close'):
-                            self.eink.driver.close()
-                        elif hasattr(self.eink.driver, 'cleanup'):
-                            self.eink.driver.cleanup()
+                    if hasattr(self.eink, 'module_exit'):
+                        self.eink.module_exit()
+                        logger.info("Eink module_exit called successfully")
+                    elif hasattr(self.eink, 'close'):
+                        self.eink.close()
+                        logger.info("Eink close called successfully")
+                    elif hasattr(self.eink, 'cleanup'):
+                        self.eink.cleanup()
+                        logger.info("Eink cleanup called successfully")
                 except Exception as e:
-                    logger.error(f"Error cleaning up eink driver: {e}")
-                self.eink = None
+                    logger.error(f"Error cleaning up eink resources: {e}")
                 
+            # Try to clean up RPi.GPIO if it was imported
+            try:
+                import RPi.GPIO as GPIO
+                logger.info("Cleaning up GPIO resources")
+                GPIO.cleanup()
+                logger.info("GPIO resources cleaned up successfully")
+            except (ImportError, RuntimeError) as e:
+                logger.debug(f"No GPIO cleanup needed: {e}")
+            except Exception as e:
+                logger.error(f"Error cleaning up GPIO: {e}")
+            
         except Exception as e:
-            logger.error(f"Error during display cleanup: {e}")
+            logger.error(f"Error during display/eink cleanup: {e}")
         
-        # Close the socket server explicitly
-        if hasattr(self, 'socket_server') and self.socket_server:
-            try:
-                logger.info("Closing socket server")
-                self.socket_server.close()
-                self.socket_server = None
-            except Exception as e:
-                logger.error(f"Error closing socket server: {e}")
+        # Remove PID file if it exists
+        try:
+            if self.pid_path and os.path.exists(self.pid_path):
+                logger.info(f"Removing PID file: {self.pid_path}")
+                os.unlink(self.pid_path)
+                logger.info("PID file removed successfully")
+        except Exception as e:
+            logger.error(f"Error removing PID file: {e}")
         
-        # Remove the socket file
-        if not self.use_tcp and hasattr(self, 'socket_path'):
-            try:
-                if os.path.exists(self.socket_path):
-                    logger.info(f"Removing socket file: {self.socket_path}")
-                    os.unlink(self.socket_path)
-            except Exception as e:
-                logger.error(f"Error removing socket file: {e}")
+        # Mark service as not initialized
+        self.initialized = False
+        logger.info("EInk service resources cleaned up")
 
     def _initialize_display(self) -> bool:
         """
@@ -1047,23 +1040,26 @@ def run_service(debug_timeout=None):
         # Use the shorter of debug_timeout or max_runtime if debug_timeout is set
         if debug_timeout:
             max_runtime = min(debug_timeout, max_runtime)
+            # Set an absolute end time
+            end_time = start_time + max_runtime
         
+        # Main service loop with timeout check
         while service.initialized:
             # Check if we've been running too long
-            elapsed = time.time() - start_time
-            if elapsed > max_runtime:
-                if debug_timeout:
-                    logger.info(f"Debug timeout of {debug_timeout}s reached, shutting down service")
-                else:
-                    logger.warning(f"Service has been running for over {max_runtime} seconds, shutting down")
+            current_time = time.time()
+            elapsed = current_time - start_time
+            
+            if debug_timeout and current_time >= end_time:
+                logger.info(f"Debug timeout of {debug_timeout}s reached, shutting down service")
                 break
                 
             # Print periodic status updates in debug timeout mode
             if debug_timeout and int(elapsed) % 5 == 0 and int(elapsed) > 0:
-                remaining = max_runtime - elapsed
+                remaining = max(0, end_time - current_time)
                 logger.info(f"Service running for {int(elapsed)}s, {int(remaining)}s until auto-shutdown")
                 
-            time.sleep(1)
+            # Short sleep to prevent CPU hogging, but allow quicker timeout response
+            time.sleep(0.1)
             
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received, shutting down")
@@ -1072,7 +1068,7 @@ def run_service(debug_timeout=None):
         logger.error(traceback.format_exc())
     finally:
         # Always clean up hardware resources on exit
-        if 'service' in locals() and service.initialized:
+        if 'service' in locals() and hasattr(service, 'initialized') and service.initialized:
             logger.info("Shutting down EInk service")
             service.stop()
         
@@ -1080,8 +1076,8 @@ def run_service(debug_timeout=None):
         runtime = time.time() - start_time
         logger.info(f"EInk service has been terminated after running for {int(runtime)}s")
         
-        # Make sure we exit the process
-        sys.exit(0)
+        # Force exit to ensure process termination
+        os._exit(0)
 
 
 if __name__ == "__main__":
