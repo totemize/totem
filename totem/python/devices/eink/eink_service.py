@@ -1072,6 +1072,17 @@ def run_service(debug_timeout=None):
     """
     start_time = time.time()
     
+    # Convert timeout to int if it's a string
+    if debug_timeout is not None and isinstance(debug_timeout, str):
+        try:
+            debug_timeout = int(debug_timeout)
+            logger.info(f"Converted timeout string to int: {debug_timeout}")
+        except ValueError:
+            logger.error(f"Invalid timeout value: {debug_timeout}, using default")
+            debug_timeout = 30
+    
+    logger.info(f"Debug timeout set to: {debug_timeout}")
+    
     # If debug_timeout is set, create a timeout watchdog thread
     if debug_timeout:
         def timeout_watchdog():
@@ -1119,6 +1130,7 @@ def run_service(debug_timeout=None):
             logger.info(f"Debug mode: Service will automatically exit after {debug_timeout} seconds")
             # Set an absolute end time for more precise timing
             end_time = start_time + debug_timeout
+            logger.info(f"End time set to: {end_time} (current time: {start_time})")
         
         # Keep the main thread running with a timeout
         if debug_timeout:
@@ -1126,30 +1138,35 @@ def run_service(debug_timeout=None):
             
             # Use a ticker to report status at regular intervals
             last_status_time = start_time
-            status_interval = 5  # Report status every 5 seconds
+            status_interval = 1  # Report status every second for debugging
             
             # Main service loop with timeout check
+            loop_count = 0
+            
             while service.initialized:
                 # Get current time for this iteration
                 current_time = time.time()
                 elapsed = current_time - start_time
                 remaining = max(0, end_time - current_time)
                 
-                # Check for ticker status update
+                # Log more frequently for debugging
                 if current_time - last_status_time >= status_interval:
-                    logger.info(f"Service running for {int(elapsed)}s, {int(remaining)}s until auto-shutdown")
+                    logger.info(f"Loop #{loop_count}: Running for {elapsed:.1f}s, {remaining:.1f}s remaining until timeout")
                     last_status_time = current_time
                 
                 # Exit if timeout reached
                 if current_time >= end_time:
-                    logger.info(f"Debug timeout of {debug_timeout}s reached, shutting down service")
+                    logger.info(f"Debug timeout of {debug_timeout}s reached, shutting down service (current time: {current_time})")
                     break
+                
+                # Increment loop counter
+                loop_count += 1
                     
                 # Short sleep to prevent CPU hogging, but allow quicker timeout response
                 time.sleep(0.1)
                 
             # We've exited the loop, perform cleanup
-            logger.info("Exiting debug mode main loop, cleaning up")
+            logger.info("Exited main loop, preparing for service shutdown")
             
             # Explicitly stop the service for clean shutdown
             try:
@@ -1206,18 +1223,33 @@ def run_service(debug_timeout=None):
 if __name__ == "__main__":
     # Check for command line arguments for debug mode
     debug_timeout = None
-    if len(sys.argv) > 1:
-        for arg in sys.argv[1:]:
-            if arg.startswith('--timeout='):
-                try:
-                    debug_timeout = int(arg.split('=')[1])
-                    print(f"Debug mode: Service will exit after {debug_timeout} seconds")
-                except (IndexError, ValueError):
-                    pass
-            elif arg == '--debug':
-                # Default debug timeout of 30 seconds
+    verbose = False
+    
+    # Process command line arguments
+    for i, arg in enumerate(sys.argv[1:]):
+        if arg == '--debug':
+            # If no timeout is specified with --debug, use a default
+            if debug_timeout is None:
                 debug_timeout = 30
+                print(f"Debug mode: Service will exit after {debug_timeout} seconds (default)")
+        elif arg.startswith('--timeout='):
+            try:
+                debug_timeout = int(arg.split('=')[1])
                 print(f"Debug mode: Service will exit after {debug_timeout} seconds")
+            except (IndexError, ValueError) as e:
+                print(f"Invalid timeout value: {arg}, using default of 30 seconds")
+                debug_timeout = 30
+        elif arg == '--verbose':
+            verbose = True
+            print("Verbose mode enabled")
+            # Set logging level to DEBUG
+            for handler in logger.handlers:
+                handler.setLevel(logging.DEBUG)
+            logger.setLevel(logging.DEBUG)
+    
+    # Log the final timeout value
+    if debug_timeout is not None:
+        logger.info(f"Debug mode enabled with timeout of {debug_timeout} seconds")
     
     # Run with the timeout if specified
     run_service(debug_timeout) 
