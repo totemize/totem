@@ -45,7 +45,8 @@ const main = async () => {
     const request = {
       action: 'display_image',
       image_data: imageData,
-      image_format: 'png'
+      image_format: 'png',
+      force_full_refresh: false  // Explicitly set to false to prevent full refresh on every update
     };
     
     console.log('Connecting to e-ink service...');

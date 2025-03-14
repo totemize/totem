@@ -558,6 +558,46 @@ class WaveshareEPD3in7:
             if not self.handle_errors:
                 raise RuntimeError(error_msg)
 
+    def refresh(self, mode=0):
+        """
+        Refresh the display with either full or partial refresh.
+        
+        Args:
+            mode: 0 for full refresh, 1 for partial refresh
+        """
+        print(f"Driver.refresh() called with mode={mode}")
+        
+        if self.mock_mode:
+            print(f"Mock refresh with mode={mode}")
+            return
+            
+        try:
+            # Full refresh (mode 0) uses the GC lookup table
+            if mode == 0:
+                print("Performing full refresh with GC lookup table")
+                self.epd.load_lut(self.epd.lut_4Gray_GC)
+                self.epd.send_command(0x22)
+                self.epd.send_data(0xC7)
+            # Partial refresh (mode 1) uses the DU lookup table for faster updates with less flashing
+            else:
+                print("Performing partial refresh with DU lookup table")
+                self.epd.load_lut(self.epd.lut_1Gray_DU)
+                self.epd.send_command(0x22)
+                self.epd.send_data(0xC7)
+                
+            # Send refresh command
+            self.epd.send_command(0x20)
+            self.epd.ReadBusy()
+            
+        except Exception as e:
+            error_msg = f"Error refreshing display: {e}"
+            print(error_msg)
+            
+            if self.handle_errors:
+                print("Falling back to mock refresh")
+            else:
+                raise RuntimeError(error_msg)
+
 class Driver(EInkDeviceInterface):
     """
     Driver implementation for Waveshare 3.7inch e-Paper HAT
@@ -608,10 +648,17 @@ class Driver(EInkDeviceInterface):
     def display_image(self, image):
         """Display an image on the e-ink screen."""
         print("Driver.display_image() called")
+        
         # Convert the image to the right format if needed
         buffer = self.epd.getbuffer_4Gray(image)
-        # Display the image
-        self.epd.display_4Gray(buffer)
+        
+        # Send the image data to the display buffer
+        self.epd.send_command(0x24)
+        self.epd.send_data2(buffer)
+        
+        # Note: We don't refresh here - the refresh will be called separately
+        # by the EInkService with the appropriate refresh mode
+        print("Image data sent to display buffer (refresh deferred)")
     
     def display_bytes(self, image_bytes):
         """Display raw byte data on the e-ink screen."""
