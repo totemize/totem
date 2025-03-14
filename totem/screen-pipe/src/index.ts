@@ -3,24 +3,13 @@ import * as net from 'net';
 import sharp from 'sharp';
 import * as fs from 'fs';
 
-// Example path to a bitmap file
+// Example path to a png file
 const png_path = '/tmp/totem.png';
-const bmp_path = '/tmp/totem.bmp';
+// const bmp_path = '/tmp/totem.bmp'; // No longer needed
 
 // Counter for tracking updates to control periodic full refreshes
 let updateCounter = 0;
 const FULL_REFRESH_INTERVAL = 20; // Match the server-side setting
-
-// Convert the png image to a bmp image to the bmp path 
-const convertPngToBmp = async () => {
-  try {
-    const pngImage = sharp(png_path);
-    await pngImage.toFile(bmp_path);
-    console.log(`Converted ${png_path} to ${bmp_path}`);
-  } catch (error) {
-    console.error('Error converting PNG to BMP:', error);
-  }
-}
 
 // Function to read a file and convert it to base64
 const fileToBase64 = (filePath: string): string => {
@@ -35,11 +24,8 @@ const fileToBase64 = (filePath: string): string => {
 
 const main = async () => {
   try {
-    // First convert PNG to BMP if needed
-    await convertPngToBmp();
-    
-    // Read the BMP file and convert to base64
-    const imageData = fileToBase64(bmp_path);
+    // Read the PNG file directly and convert to base64
+    const imageData = fileToBase64(png_path);
     if (!imageData) {
       console.error('Failed to read image data');
       return;
@@ -62,7 +48,7 @@ const main = async () => {
     const request = {
       action: 'display_image',
       image_data: imageData,
-      image_format: 'bmp',
+      image_format: 'png',
       force_full_refresh: needsFullRefresh // Set to true on the Nth update
     };
     
