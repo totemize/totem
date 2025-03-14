@@ -113,7 +113,7 @@ class WaveshareEPD3in7:
         """Import the manufacturer's driver"""
         try:
             # If we're in mock mode, don't even try to import
-            if self.mock_mode:
+            if hasattr(self, 'mock_mode') and self.mock_mode:
                 print("Running in mock mode - not importing hardware driver")
                 self.width = 280
                 self.height = 480
@@ -199,7 +199,7 @@ class WaveshareEPD3in7:
             return
             
         try:
-            if self.mock_mode:
+            if hasattr(self, 'mock_mode') and self.mock_mode:
                 print(f"Mock init with mode={mode}")
                 self.initialized = True
                 return
@@ -231,7 +231,7 @@ class WaveshareEPD3in7:
             self.init(mode)
             
         try:
-            if self.mock_mode:
+            if hasattr(self, 'mock_mode') and self.mock_mode:
                 print(f"Mock clear display with color={clear_color}, mode={mode}")
                 return
                 
@@ -263,7 +263,7 @@ class WaveshareEPD3in7:
             self.init(0)  # 4-Gray mode
             
         try:
-            if self.mock_mode:
+            if hasattr(self, 'mock_mode') and self.mock_mode:
                 print("Mock display_4Gray")
                 return
                 
@@ -291,7 +291,7 @@ class WaveshareEPD3in7:
             self.init(1)  # 1-Gray mode
             
         try:
-            if self.mock_mode:
+            if hasattr(self, 'mock_mode') and self.mock_mode:
                 print("Mock display_1Gray")
                 return
                 
@@ -320,7 +320,7 @@ class WaveshareEPD3in7:
             self.init(0)  # 4-Gray mode
             
         try:
-            if self.mock_mode:
+            if hasattr(self, 'mock_mode') and self.mock_mode:
                 print("Mock display")
                 return
                 
@@ -345,7 +345,7 @@ class WaveshareEPD3in7:
         Args:
             image: PIL image
         """
-        if self.mock_mode:
+        if hasattr(self, 'mock_mode') and self.mock_mode:
             print("Mock getbuffer")
             return bytearray(int(self.width * self.height / 8))
             
@@ -368,7 +368,7 @@ class WaveshareEPD3in7:
         Args:
             image: PIL image
         """
-        if self.mock_mode:
+        if hasattr(self, 'mock_mode') and self.mock_mode:
             print("Mock getbuffer_4Gray")
             return bytearray(int(self.width * self.height * 2 / 8))
             
@@ -387,7 +387,7 @@ class WaveshareEPD3in7:
     
     def sleep(self):
         """Put the display to sleep"""
-        if self.mock_mode:
+        if hasattr(self, 'mock_mode') and self.mock_mode:
             print("Mock sleep")
             return
             
@@ -403,7 +403,7 @@ class WaveshareEPD3in7:
     
     def close(self):
         """Clean up resources"""
-        if self.mock_mode:
+        if hasattr(self, 'mock_mode') and self.mock_mode:
             print("Mock close")
             return
             
@@ -445,7 +445,7 @@ class WaveshareEPD3in7:
             
             # Convert color strings to RGB tuples for PIL
             def convert_color(color_name):
-                if self.mock_mode:
+                if hasattr(self, 'mock_mode') and self.mock_mode:
                     color_map = {
                         "black": 0,
                         "white": 255,
@@ -567,7 +567,7 @@ class WaveshareEPD3in7:
         """
         print(f"Driver.refresh() called with mode={mode}")
         
-        if self.mock_mode:
+        if hasattr(self, 'mock_mode') and self.mock_mode:
             print(f"Mock refresh with mode={mode}")
             return
             
@@ -598,6 +598,57 @@ class WaveshareEPD3in7:
             else:
                 raise RuntimeError(error_msg)
 
+    def display_image(self, image):
+        """
+        Direct low-level display of image data without automatic refresh
+        This method sends image data directly to the display buffer
+        """
+        self.logger.debug("Driver.display_image() called")
+        
+        # Handle None image
+        if image is None:
+            self.logger.error("Cannot display None image")
+            return False
+
+        # Handle mock mode - just log the request
+        if hasattr(self, 'mock_mode') and self.mock_mode:
+            self.logger.info("MOCK MODE: Would display image")
+            return True
+            
+        # Convert image to buffer
+        try:
+            # Make sure EPD is initialized
+            if self.epd is None:
+                self.logger.error("EPD not initialized")
+                return False
+                
+            buffer = self._convert_image_to_buffer(image)
+            if not buffer:
+                self.logger.error("Failed to convert image to buffer")
+                return False
+            
+            # Send commands to display - 4Gray
+            self.epd.send_command(0x24)  # Transmit data to black display first
+            self.epd.send_data2(buffer)
+            
+            self.epd.send_command(0x26)  # Transmit data to secondary (red) display
+            self.epd.send_data2(buffer)
+            
+            # Set starting position
+            self.epd.send_command(0x4E)  # Set RAM X address counter
+            self.epd.send_data(0x00)
+            self.epd.send_data(0x00)
+            self.epd.send_command(0x4F)  # Set RAM Y address counter
+            self.epd.send_data(0x00)
+            self.epd.send_data(0x00)
+            
+            self.logger.debug("Image data sent to display buffer, waiting for refresh command")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error displaying image: {e}")
+            return False
+
 class Driver(EInkDeviceInterface):
     """
     Driver implementation for Waveshare 3.7inch e-Paper HAT
@@ -606,12 +657,39 @@ class Driver(EInkDeviceInterface):
     to interact with the hardware.
     """
     
-    def __init__(self):
+    def __init__(self, logger=None):
         """Initialize the driver"""
-        # Import here to avoid circular imports
+        super().__init__(logger)
+        self.logger = logger or logging.getLogger(self.__class__.__name__)
+        self.epd = None
+        self.width = 280
+        self.height = 480
+        self.mock_mode = False
         
-        # Create the underlying driver
-        self.epd = WaveshareEPD3in7()
+        try:
+            self.logger.debug("Initializing Waveshare 3.7inch e-Paper Display Driver...")
+            # More imports inside the try block to handle import errors gracefully
+            self.logger.debug("Importing manufacturer driver...")
+            sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))))
+            
+            from waveshare_epd import epd3in7
+            self.epd = epd3in7.EPD()
+            self.epd.init()
+            self.epd.Clear()
+            self.logger.info("Display initialized successfully")
+            
+        except ImportError as e:
+            self.logger.warning(f"Failed to import manufacturer driver: {e}")
+            self.logger.warning("Falling back to mock implementation")
+            self.mock_mode = True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize display: {e}")
+            if "GPIO is busy" in str(e):
+                self.logger.warning("GPIO busy, falling back to mock mode (service already running?)")
+                self.mock_mode = True
+            else:
+                raise
         
         # Store dimensions for convenience
         self.width = self.epd.width
@@ -646,39 +724,88 @@ class Driver(EInkDeviceInterface):
         self.epd.Clear(clear_color, mode)
     
     def display_image(self, image):
-        """Display an image on the e-ink screen."""
-        print("Driver.display_image() called")
+        """
+        Direct low-level display of image data without automatic refresh
+        This method sends image data directly to the display buffer
+        """
+        self.logger.debug("Driver.display_image() called")
         
-        # Convert the image to the right format if needed
-        buffer = self.epd.getbuffer_4Gray(image)
-        
-        # Send the image data to the display buffer but don't refresh
-        # We need to modify how we call display_4Gray to prevent auto-refresh
-        if self.mock_mode:
-            print("Mock display_image")
-        else:
-            # Instead of calling self.epd.display_4Gray(buffer) which would auto-refresh,
-            # we need to send the data directly to the display without refreshing
+        # Handle None image
+        if image is None:
+            self.logger.error("Cannot display None image")
+            return False
+
+        # Handle mock mode - just log the request
+        if hasattr(self, 'mock_mode') and self.mock_mode:
+            self.logger.info("MOCK MODE: Would display image")
+            return True
             
-            # These steps replicate what display_4Gray does but without the final refresh
-            self.epd.send_command(0x4E)
-            self.epd.send_data(0x00)
-            self.epd.send_data(0x00)
-            self.epd.send_command(0x4F)
-            self.epd.send_data(0x00)
-            self.epd.send_data(0x00)
+        # Convert image to buffer
+        try:
+            # Make sure EPD is initialized
+            if self.epd is None:
+                self.logger.error("EPD not initialized")
+                return False
+                
+            buffer = self._convert_image_to_buffer(image)
+            if not buffer:
+                self.logger.error("Failed to convert image to buffer")
+                return False
             
-            # Send the image data to the display buffer
-            self.epd.send_command(0x24)
+            # Send commands to display - 4Gray
+            self.epd.send_command(0x24)  # Transmit data to black display first
             self.epd.send_data2(buffer)
             
-            # For 4-gray mode, need to send data to the second buffer as well
-            self.epd.send_command(0x26)
+            self.epd.send_command(0x26)  # Transmit data to secondary (red) display
             self.epd.send_data2(buffer)
-        
-        print("Image data sent to display buffer (refresh deferred)")
+            
+            # Set starting position
+            self.epd.send_command(0x4E)  # Set RAM X address counter
+            self.epd.send_data(0x00)
+            self.epd.send_data(0x00)
+            self.epd.send_command(0x4F)  # Set RAM Y address counter
+            self.epd.send_data(0x00)
+            self.epd.send_data(0x00)
+            
+            self.logger.debug("Image data sent to display buffer, waiting for refresh command")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error displaying image: {e}")
+            return False
     
     def display_bytes(self, image_bytes):
+        """Display raw byte data on the screen."""
+        self.logger.debug("WaveshareEPD3in7.display_bytes() called")
+        
+        # Handle None image
+        if image_bytes is None:
+            self.logger.error("Cannot display None image_bytes")
+            return False
+            
+        # Handle mock mode
+        if hasattr(self, 'mock_mode') and self.mock_mode:
+            self.logger.info("MOCK MODE: Would display image bytes")
+            return True
+            
+        # Handle None image
+        if image_bytes is None:
+            self.logger.error("Cannot display None image_bytes")
+            return False
+            
+        # Handle mock mode
+        if hasattr(self, 'mock_mode') and self.mock_mode:
+            self.logger.info("MOCK MODE: Would display image bytes")
+            return True
+            
+        # Handle None image
+        if image_bytes is None:
+            self.logger.error("Cannot display None image_bytes")
+            return False
+            
+        # Handle mock mode
+        if hasattr(self, 'mock_mode') and self.mock_mode:
+            self.logger.info("MOCK MODE: Would display image bytes")
         """Display raw byte data on the e-ink screen."""
         print("Driver.display_bytes() called")
         from PIL import Image
