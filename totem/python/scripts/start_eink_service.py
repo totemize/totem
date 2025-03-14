@@ -100,12 +100,15 @@ def main():
             log_file.flush()
             
             # Start the process with stdout and stderr redirected to the log file
+            # Use subprocess.DEVNULL for stdin to fully detach from terminal
             process = subprocess.Popen(
                 cmd,
+                stdin=subprocess.DEVNULL,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                start_new_session=True  # This creates a new process group
             )
             
             # Wait a bit for the service to start
@@ -120,21 +123,37 @@ def main():
                 print("To stop it, run: sudo pkill -f 'run_eink_service.py|eink_service.py'")
                 print(f"To view logs: tail -f {args.log_file}")
                 
-                # Detach the process (doesn't work fully in Python, but helps)
-                os.setpgrp()
+                # We don't need to call os.setpgrp() here since we used start_new_session=True
             else:
                 stdout, _ = process.communicate()
                 print(f"Service failed to start. Exit code: {process.returncode}")
                 print(f"Check the log file for details: {args.log_file}")
                 return 1
         
+        # Reset terminal to fix any display issues
+        # This sends a terminal reset sequence
+        print("\033[0m", end="", flush=True)  # Reset all attributes
+        
         return 0
     except KeyboardInterrupt:
         print("\nStartup interrupted by user")
+        # Reset terminal
+        print("\033[0m", end="", flush=True)
         return 0
     except Exception as e:
         print(f"Error starting service: {e}")
+        # Reset terminal
+        print("\033[0m", end="", flush=True)
         return 1
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    try:
+        exit_code = main()
+        # Final terminal reset before exiting
+        print("\033[0m", end="", flush=True)
+        sys.exit(exit_code)
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        # Reset terminal
+        print("\033[0m", end="", flush=True)
+        sys.exit(1) 
