@@ -7,6 +7,10 @@ import * as fs from 'fs';
 const png_path = '/tmp/totem.png';
 const bmp_path = '/tmp/totem.bmp';
 
+// Counter for tracking updates to control periodic full refreshes
+let updateCounter = 0;
+const FULL_REFRESH_INTERVAL = 20; // Match the server-side setting
+
 // Convert the png image to a bmp image to the bmp path 
 const convertPngToBmp = async () => {
   try {
@@ -41,15 +45,28 @@ const main = async () => {
       return;
     }
     
+    // Increment update counter
+    updateCounter++;
+    
+    // Determine if we need a full refresh based on counter
+    const needsFullRefresh = updateCounter >= FULL_REFRESH_INTERVAL;
+    
+    // Reset counter if we're doing a full refresh
+    if (needsFullRefresh) {
+      console.log(`Triggering full refresh after ${updateCounter} updates`);
+      updateCounter = 0;
+    }
+    
     // Create the proper request format
     const request = {
       action: 'display_image',
       image_data: imageData,
       image_format: 'png',
-      force_full_refresh: false  // Explicitly set to false to prevent full refresh on every update
+      force_full_refresh: needsFullRefresh // Set to true on the Nth update
     };
     
     console.log('Connecting to e-ink service...');
+    console.log(`Full refresh: ${request.force_full_refresh ? 'Yes' : 'No'}, Counter: ${updateCounter}`);
     
     const client = net.createConnection({ path: '/tmp/eink_service.sock' }, () => {
       console.log('Connected to server!');

@@ -4,11 +4,20 @@ import path from 'path';
 
 // Create a variable to store the interval ID for cleanup
 let intervalId: NodeJS.Timeout;
+let browser: any = null;
 
-const browser = await chromium.launch();
-console.log('Browser launched');
+// Initialize browser asynchronously 
+const initBrowser = async () => {
+    browser = await chromium.launch();
+    console.log('Browser launched');
+    return browser;
+};
 
 const main = async () => {
+    if (!browser) {
+        browser = await initBrowser();
+    }
+    
     console.log('Starting screenshot capture...');
     try {
         const startTime = Date.now();
@@ -40,23 +49,48 @@ const main = async () => {
 };
 
 // Setup clean shutdown
-const cleanup = () => {
+const cleanup = async () => {
     console.log('Cleaning up...');
     if (intervalId) {
         clearInterval(intervalId);
         console.log('Screenshot interval cleared');
     }
+    
+    if (browser) {
+        await browser.close();
+        console.log('Browser closed');
+    }
+    
     process.exit(0);
 };
 
 // Handle termination signals
-process.on('SIGINT', cleanup);
-process.on('SIGTERM', cleanup);
+process.on('SIGINT', () => {
+    cleanup().catch(console.error);
+});
+process.on('SIGTERM', () => {
+    cleanup().catch(console.error);
+});
 
-console.log('Starting screenshot capture interval (every 10 seconds)');
-intervalId = setInterval(main, 10000);
+// Start the process
+const start = async () => {
+    // Initialize browser first
+    await initBrowser();
+    
+    // Run once immediately
+    await main().catch(error => {
+        console.error('Error in initial screenshot capture:', error);
+    });
+    
+    console.log('Starting screenshot capture interval (every 10 seconds)');
+    intervalId = setInterval(() => {
+        main().catch(error => {
+            console.error('Error in scheduled screenshot capture:', error);
+        });
+    }, 10000);
+};
 
-// Run once immediately
-main().catch(error => {
-    console.error('Error in initial screenshot capture:', error);
+// Start the application
+start().catch(error => {
+    console.error('Failed to start application:', error);
 });
