@@ -402,141 +402,85 @@ class EInkService:
         self.stop()
     
     def run_unix_socket_server(self):
-        """Run a Unix domain socket server for local communication"""
-        logger.info(f"Starting Unix socket server at {self.socket_path}")
+        """Run the Unix domain socket server"""
+        logger.info("Starting Unix socket server at {}".format(self.socket_path))
         
-        # Check stop event frequently to enable responsive termination
-        check_interval = 0.1  # Check every 100ms
-        last_check_time = time.time()
-        
-        # Check if socket directory exists and is writable
-        socket_dir = os.path.dirname(self.socket_path)
-        if not os.path.exists(socket_dir):
-            try:
-                logger.info(f"Creating socket directory: {socket_dir}")
-                os.makedirs(socket_dir, exist_ok=True)
-            except Exception as e:
-                logger.error(f"Failed to create socket directory: {e}")
-                self.socket_server_ready.set()  # Set event to unblock main thread
-                self.initialized = False
-                return
-            
-        if not os.access(socket_dir, os.W_OK):
-            logger.error(f"No write permission to socket directory: {socket_dir}")
-            self.socket_server_ready.set()  # Set event to unblock main thread
-            self.initialized = False
-            return
-        
-        # Remove existing socket file if it exists
+        # Check if socket file already exists
         if os.path.exists(self.socket_path):
             try:
                 os.unlink(self.socket_path)
                 logger.info(f"Removed existing socket file: {self.socket_path}")
-            except Exception as e:
+            except OSError as e:
                 logger.error(f"Error removing existing socket file: {e}")
-                # Continue anyway and attempt to bind
+                self.socket_server_ready.set()  # Set event to unblock main thread
+                return
         
-        # Create socket server
+        # Create socket directory if it doesn't exist
+        socket_dir = os.path.dirname(self.socket_path)
+        if not os.path.exists(socket_dir):
+            try:
+                os.makedirs(socket_dir, exist_ok=True)
+                logger.info(f"Created socket directory: {socket_dir}")
+            except OSError as e:
+                logger.error(f"Error creating socket directory: {e}")
+                self.socket_server_ready.set()  # Set event to unblock main thread
+                return
+        
         try:
-            # Create the socket with explicit settings
+            # Create the socket
             self.socket_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            logger.debug(f"Created Unix socket with file descriptor: {self.socket_server.fileno()}")
             
             # Set socket options
-            try:
-                # Set SO_REUSEADDR to avoid "Address already in use" errors
-                self.socket_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                logger.debug("Set SO_REUSEADDR socket option")
-            except Exception as e:
-                logger.warning(f"Could not set socket options: {e}")
+            self.socket_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            logger.debug("Set SO_REUSEADDR option on socket")
             
-            # Try to bind to the socket path
+            # Bind to the socket path
             try:
-                logger.debug(f"Binding to socket path: {self.socket_path}")
                 self.socket_server.bind(self.socket_path)
-                logger.debug("Socket bind successful")
+                logger.info(f"Bound socket to path: {self.socket_path}")
             except OSError as e:
-                # If binding fails because the socket file exists but can't be unlocked,
-                # try to forcefully remove it again and retry
                 if e.errno == errno.EADDRINUSE:
-                    logger.warning(f"Address in use error: {e}, trying forced cleanup and retry")
+                    logger.error(f"Socket address already in use: {self.socket_path}")
+                    # Try to forcibly remove the socket file and rebind
                     try:
-                        # Force remove socket file
                         os.unlink(self.socket_path)
-                        # Try binding again
+                        logger.info(f"Forcibly removed existing socket file: {self.socket_path}")
                         self.socket_server.bind(self.socket_path)
-                        logger.info("Socket bind successful after forced cleanup")
-                    except Exception as retry_error:
-                        logger.error(f"Failed to bind socket even after cleanup: {retry_error}")
-                        # Signal that the server isn't ready and exit the thread
+                        logger.info(f"Successfully rebound socket to path: {self.socket_path}")
+                    except Exception as rebind_error:
+                        logger.error(f"Error rebinding socket: {rebind_error}")
                         self.socket_server_ready.set()  # Set the event to unblock the main thread
-                        self.initialized = False
                         return
                 else:
-                    # For other socket errors, log and exit the thread
-                    logger.error(f"Fatal socket error: {e}")
+                    logger.error(f"Error binding socket: {e}")
                     self.socket_server_ready.set()  # Set the event to unblock the main thread
-                    self.initialized = False
                     return
             
-            # Make sure the socket server is set up correctly
+            # Set permissions on the socket file
             try:
-                self.socket_server.listen(5)
-                logger.debug("Socket now listening")
-            except Exception as e:
-                logger.error(f"Socket listen failed: {e}")
-                self.socket_server_ready.set()
-                self.initialized = False
-                return
-            
-            self.socket_server.settimeout(check_interval)  # Very short timeout to allow frequent checks
-            
-            # Ensure socket file has the right permissions and verify it exists
-            try:
-                os.chmod(self.socket_path, 0o666)  # Allow anyone to read/write
+                os.chmod(self.socket_path, 0o666)
                 logger.info(f"Set socket file permissions to 0o666")
-                
-                # Verify the socket file exists
-                if os.path.exists(self.socket_path):
-                    logger.info(f"Socket file created successfully at {self.socket_path}")
-                    # Print stat information about the socket file for debugging
-                    try:
-                        statinfo = os.stat(self.socket_path)
-                        logger.debug(f"Socket file stats: mode={oct(statinfo.st_mode)}, uid={statinfo.st_uid}, gid={statinfo.st_gid}")
-                    except Exception as stat_error:
-                        logger.warning(f"Error getting file stats: {stat_error}")
-                else:
-                    logger.error(f"Socket file not found at {self.socket_path} even though binding succeeded")
-                    # This indicates that binding succeeded but the file wasn't created, which would be unusual
-                    self.socket_server_ready.set()
-                    self.initialized = False
-                    return
-                
+                # Log the actual permissions to verify
+                st = os.stat(self.socket_path)
+                logger.info(f"Socket file stats: mode={oct(st.st_mode)}, uid={st.st_uid}, gid={st.st_gid}")
             except Exception as e:
-                logger.warning(f"Could not set socket file permissions: {e}")
-                # Continue anyway, since the socket might still be usable
-                
-            # Do a final check to make sure the socket file exists
-            if not os.path.exists(self.socket_path):
-                logger.error(f"Socket file still not found at {self.socket_path} after setup")
-                self.socket_server_ready.set()
-                self.initialized = False
-                return
+                logger.error(f"Error setting socket permissions: {e}")
             
+            # Start listening
+            self.socket_server.listen(5)
+            logger.info(f"Socket server listening with backlog of 5")
+            
+            # Signal that the server is ready
+            self.socket_server_ready.set()
             logger.info("Unix socket server ready")
             
-            # Signal that the socket server is ready
-            self.socket_server_ready.set()
+            # Set a short timeout to allow checking the stop event
+            check_interval = 0.5  # seconds
+            self.socket_server.settimeout(check_interval)  # Very short timeout to allow frequent checks
             
-            # Server main loop
-            while self.initialized and not self.stop_event.is_set():
-                # Check for termination more frequently
-                current_time = time.time()
-                if current_time - last_check_time >= check_interval:
-                    # Check if we should terminate
-                    if self.stop_event.is_set() or not self.initialized:
-                        logger.info("Stop event detected in socket server loop, breaking out")
-                        break
-                    last_check_time = current_time
+            # Main server loop
+            while not self.stop_event.is_set():
                 
                 try:
                     # Check if the socket is still valid
@@ -548,60 +492,17 @@ class EInkService:
                         self.socket_server.bind(self.socket_path)
                         self.socket_server.listen(5)
                         self.socket_server.settimeout(check_interval)
+                        logger.info("Socket recreated successfully")
                         continue
 
+                    logger.debug("Waiting for client connection...")
                     client, _ = self.socket_server.accept()
+                    logger.info("Client connection accepted")
                     self._handle_client(client)
                 except socket.timeout:
                     # This just allows us to check the running flag
+                    logger.debug("Socket accept timeout (normal for polling)")
                     continue
-                except OSError as e:
-                    if e.errno == 9:  # Bad file descriptor
-                        if self.initialized and not self.stop_event.is_set():
-                            logger.error("Socket bad file descriptor, recreating socket")
-                            try:
-                                # Clean up and recreate the socket
-                                if os.path.exists(self.socket_path):
-                                    os.unlink(self.socket_path)
-                                self.socket_server.close()
-                                self.socket_server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                                self.socket_server.bind(self.socket_path)
-                                self.socket_server.listen(5)
-                                self.socket_server.settimeout(check_interval)
-                                os.chmod(self.socket_path, 0o666)
-                                logger.info("Socket recreated successfully")
-                            except Exception as recreate_error:
-                                logger.error(f"Failed to recreate socket: {recreate_error}")
-                                # If we can't recreate the socket, exit the loop
-                                break
-                        else:
-                            # We're shutting down, so just break out of the loop
-                            break
-                    else:
-                        # Handle other OSErrors
-                        if self.initialized and not self.stop_event.is_set():
-                            logger.error(f"Socket server error: {e}")
-                        # If we're in shutdown, just silently exit
-                        if not self.initialized or self.stop_event.is_set():
-                            break
-                except Exception as e:
-                    if self.initialized and not self.stop_event.is_set():
-                        logger.error(f"Socket server error: {e}")
-                        logger.error(traceback.format_exc())
-                    # If we're in shutdown, just silently exit
-                    if not self.initialized or self.stop_event.is_set():
-                        break
-            
-            # Clean up
-            try:
-                self.socket_server.close()
-                if os.path.exists(self.socket_path):
-                    os.unlink(self.socket_path)
-                    logger.info(f"Removed socket file: {self.socket_path}")
-            except Exception as e:
-                logger.error(f"Error during socket cleanup: {e}")
-                
-            logger.info("Unix socket server stopped")
         except Exception as e:
             logger.error(f"Error setting up Unix socket server: {e}")
             logger.error(traceback.format_exc())
@@ -668,52 +569,84 @@ class EInkService:
     
     def _handle_client(self, client):
         """Handle a client connection and process their command"""
+        client_addr = "unknown"
         try:
+            # Get client address info for logging
+            try:
+                if hasattr(client, 'getpeername'):
+                    client_addr = str(client.getpeername())
+                elif hasattr(client, 'getsockname'):
+                    client_addr = str(client.getsockname())
+            except:
+                pass
+                
+            logger.info(f"New client connection from {client_addr}")
+            
             # Set a timeout for receiving data
             client.settimeout(5.0)
             
             # Read data from client
             data = b""
             while True:
-                chunk = client.recv(MAX_MSG_SIZE)
-                if not chunk:
-                    break
-                data += chunk
-                
-                # Check if we have a complete JSON object
                 try:
-                    _ = json.loads(data.decode('utf-8'))
-                    break  # We have a complete JSON object
-                except:
-                    pass  # Continue reading
+                    chunk = client.recv(MAX_MSG_SIZE)
+                    logger.debug(f"Received chunk of size {len(chunk)} bytes from {client_addr}")
+                    if not chunk:
+                        logger.debug(f"Client {client_addr} closed connection (empty chunk)")
+                        break
+                    data += chunk
+                    
+                    # Check if we have a complete JSON object
+                    try:
+                        _ = json.loads(data.decode('utf-8'))
+                        logger.debug(f"Received complete JSON object from {client_addr}")
+                        break  # We have a complete JSON object
+                    except json.JSONDecodeError:
+                        logger.debug(f"Incomplete JSON, continuing to read from {client_addr}")
+                        pass  # Continue reading
+                except socket.timeout:
+                    logger.warning(f"Socket timeout while reading from client {client_addr}")
+                    break
+                except Exception as e:
+                    logger.error(f"Error reading from client {client_addr}: {e}")
+                    break
             
             if not data:
+                logger.warning(f"No data received from client {client_addr}")
                 return
                 
             # Parse command
             try:
                 command = json.loads(data.decode('utf-8'))
-                logger.debug(f"Received command: {command}")
+                logger.info(f"Received command from {client_addr}: {command}")
                 
                 # Queue the command for processing
                 self.command_queue.append((client, command))
+                logger.debug(f"Command from {client_addr} queued for processing")
                 
                 # Send acknowledgement
                 response = {"status": "queued", "message": "Command accepted"}
                 client.send(json.dumps(response).encode('utf-8'))
-            except json.JSONDecodeError:
-                logger.error(f"Invalid JSON data: {data.decode('utf-8')}")
-                response = {"status": "error", "message": "Invalid JSON data"}
+                logger.debug(f"Sent acknowledgement to {client_addr}: {response}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON data from {client_addr}: {e}")
+                logger.error(f"Raw data: {data.decode('utf-8', errors='replace')}")
+                response = {"status": "error", "message": f"Invalid JSON data: {str(e)}"}
                 client.send(json.dumps(response).encode('utf-8'))
         except Exception as e:
-            logger.error(f"Error handling client: {e}")
+            logger.error(f"Error handling client {client_addr}: {e}")
+            logger.error(traceback.format_exc())
             try:
                 response = {"status": "error", "message": str(e)}
                 client.send(json.dumps(response).encode('utf-8'))
             except:
-                pass
+                logger.error(f"Failed to send error response to client {client_addr}")
         finally:
-            client.close()
+            try:
+                client.close()
+                logger.debug(f"Closed connection to client {client_addr}")
+            except:
+                logger.error(f"Error closing client socket for {client_addr}")
     
     def _setup_socket_server(self):
         """Set up the socket server (Unix domain socket or TCP)"""
@@ -943,12 +876,16 @@ class EInkService:
                 
                 try:
                     # Decode base64 image data
+                    logger.debug(f"Decoding base64 image data (length: {len(image_data_b64)})")
                     image_data = base64.b64decode(image_data_b64)
+                    logger.debug(f"Decoded image data size: {len(image_data)} bytes")
                     
                     # Convert to PIL Image
                     from PIL import Image
                     import io
+                    logger.debug(f"Opening image from bytes with format: {image_format}")
                     image = Image.open(io.BytesIO(image_data))
+                    logger.info(f"Image decoded successfully: format={image.format}, mode={image.mode}, size={image.size}")
                     
                     logger.info(f"Executing DISPLAY_IMAGE command with image format: {image_format}, size: {image.size}")
                     
