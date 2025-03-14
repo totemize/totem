@@ -1,4 +1,5 @@
-import { writable } from 'svelte/store';
+// src/lib/stores/pets.ts
+import { writable, derived } from 'svelte/store';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 export interface Pet {
@@ -13,7 +14,17 @@ export interface Pet {
 	lastUpdated: Date;
 }
 
+// Main store for all pets
 export const pets = writable<Record<string, Pet>>({});
+
+// Derived stores for better usability
+export const petsArray = derived(pets, ($pets) => Object.values($pets));
+
+export const eggPets = derived(petsArray, ($petsArray) => $petsArray.filter((pet) => pet.isEgg));
+
+export const hatchedPets = derived(petsArray, ($petsArray) =>
+	$petsArray.filter((pet) => !pet.isEgg)
+);
 
 // Extract pet profile info from kind 0 events
 export function processPetProfileEvent(event: NostrEvent) {
@@ -48,7 +59,6 @@ export function processPetProfileEvent(event: NostrEvent) {
 
 // Update pet stats from kind 30078 events
 export function processPetStatusEvent(event: NostrEvent) {
-	console.log('status event', event);
 	try {
 		// Extract tag values
 		const getTagValue = (tagName: string): string | undefined => {
