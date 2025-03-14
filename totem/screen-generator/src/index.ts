@@ -35,7 +35,7 @@ const main = async () => {
         fs.writeFileSync(outputPath, screenshotBuffer);
         console.log(`Screenshot saved to ${path.resolve(outputPath)}`);
     } catch (error) {
-        console.error('Error during screenshot capture:', error);
+        console.error('Screenshot capture error:', error);
     }
 };
 

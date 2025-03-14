@@ -17,6 +17,7 @@ from io import BytesIO
 from pathlib import Path
 from PIL import Image
 from typing import Dict, Any, Union, Optional
+import stat
 
 # Add the parent directory to path to import from the project
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -117,6 +118,105 @@ class EInkClient:
                     time.sleep(RETRY_DELAY)
                     continue
                 raise EInkClientError(f"Failed to connect to EInk service: {e}")
+    
+    def run_diagnostics(self) -> Dict[str, Any]:
+        """
+        Run diagnostics on the connection to the EInk service
+        
+        Returns:
+            dict: Diagnostic information
+        """
+        logger.info("Running EInkClient diagnostics...")
+        diagnostics = {
+            "timestamp": time.time(),
+            "use_tcp": self.use_tcp,
+            "socket_path": self.socket_path if not self.use_tcp else None,
+            "tcp_host": self.tcp_host if self.use_tcp else None,
+            "tcp_port": self.tcp_port if self.use_tcp else None,
+            "timeout": self.timeout,
+            "socket_exists": False,
+            "socket_permissions": None,
+            "socket_is_socket": False,
+            "connection_successful": False,
+            "service_status": None,
+            "errors": []
+        }
+        
+        try:
+            # Check if socket file exists (for Unix socket)
+            if not self.use_tcp:
+                if os.path.exists(self.socket_path):
+                    diagnostics["socket_exists"] = True
+                    logger.info(f"Socket file exists: {self.socket_path}")
+                    
+                    # Check socket file permissions
+                    try:
+                        stat_info = os.stat(self.socket_path)
+                        mode = stat_info.st_mode
+                        diagnostics["socket_permissions"] = {
+                            "mode": oct(mode),
+                            "uid": stat_info.st_uid,
+                            "gid": stat_info.st_gid
+                        }
+                        logger.info(f"Socket permissions: mode={oct(mode)}, uid={stat_info.st_uid}, gid={stat_info.st_gid}")
+                        
+                        # Check if it's actually a socket
+                        is_socket = stat.S_ISSOCK(mode)
+                        diagnostics["socket_is_socket"] = is_socket
+                        if is_socket:
+                            logger.info(f"File is a socket: {self.socket_path}")
+                        else:
+                            logger.error(f"File is NOT a socket: {self.socket_path}")
+                            diagnostics["errors"].append(f"File exists but is not a socket: {self.socket_path}")
+                    except Exception as e:
+                        logger.error(f"Error checking socket file: {e}")
+                        diagnostics["errors"].append(f"Error checking socket file: {str(e)}")
+                else:
+                    logger.error(f"Socket file not found: {self.socket_path}")
+                    diagnostics["errors"].append(f"Socket file not found: {self.socket_path}")
+                    
+                    # Check socket directory
+                    socket_dir = os.path.dirname(self.socket_path)
+                    if os.path.exists(socket_dir):
+                        logger.info(f"Socket directory exists: {socket_dir}")
+                        
+                        # Check directory permissions
+                        try:
+                            dir_stat = os.stat(socket_dir)
+                            logger.info(f"Socket directory permissions: {oct(dir_stat.st_mode)}")
+                            logger.info(f"Socket directory owner: uid={dir_stat.st_uid}, gid={dir_stat.st_gid}")
+                        except Exception as e:
+                            logger.error(f"Error checking socket directory: {e}")
+                            diagnostics["errors"].append(f"Error checking socket directory: {str(e)}")
+                    else:
+                        logger.error(f"Socket directory does not exist: {socket_dir}")
+                        diagnostics["errors"].append(f"Socket directory does not exist: {socket_dir}")
+            
+            # Try to connect to the service
+            try:
+                sock = self._connect()
+                diagnostics["connection_successful"] = True
+                logger.info("Successfully connected to EInk service")
+                
+                # Try to get service status
+                try:
+                    status = self.get_status()
+                    diagnostics["service_status"] = status
+                    logger.info(f"Service status: {status}")
+                except Exception as e:
+                    logger.error(f"Error getting service status: {e}")
+                    diagnostics["errors"].append(f"Error getting service status: {str(e)}")
+                
+                sock.close()
+            except EInkClientError as e:
+                logger.error(f"Connection failed: {e}")
+                diagnostics["errors"].append(f"Connection failed: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error during diagnostics: {e}")
+            diagnostics["errors"].append(f"Error during diagnostics: {str(e)}")
+        
+        logger.info("EInkClient diagnostics completed")
+        return diagnostics
     
     def _send_command(self, command: Dict[str, Any]) -> Dict[str, Any]:
         """

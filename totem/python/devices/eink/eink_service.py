@@ -31,19 +31,41 @@ devices_dir = os.path.dirname(os.path.dirname(script_dir))
 python_dir = os.path.dirname(devices_dir)
 sys.path.insert(0, python_dir)
 
+# Define log file path
+LOG_FILE_PATH = '/tmp/totem-eink-service.log'
+
 try:
     from utils.logger import logger
 except ImportError:
     # Create a logger if the main logger is not available
-    logging.basicConfig(
-        level=logging.INFO if os.environ.get('LOGLEVEL', 'INFO') != 'DEBUG' else logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(os.path.expanduser('~/eink_service.log'))
-        ]
-    )
-    logger = logging.getLogger("eink_service")
+    try:
+        # Ensure the log file is writable
+        with open(LOG_FILE_PATH, 'a') as f:
+            f.write("Log file initialized\n")
+        
+        logging.basicConfig(
+            level=logging.INFO if os.environ.get('LOGLEVEL', 'INFO') != 'DEBUG' else logging.DEBUG,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.StreamHandler(),
+                logging.FileHandler(LOG_FILE_PATH)
+            ]
+        )
+        logger = logging.getLogger("eink_service")
+        logger.info(f"Logger initialized with log file at {LOG_FILE_PATH}")
+    except Exception as e:
+        # If we can't write to the log file, fall back to console only
+        print(f"Error setting up log file at {LOG_FILE_PATH}: {e}")
+        logging.basicConfig(
+            level=logging.INFO if os.environ.get('LOGLEVEL', 'INFO') != 'DEBUG' else logging.DEBUG,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.StreamHandler()
+            ]
+        )
+        logger = logging.getLogger("eink_service")
+        logger.error(f"Failed to set up log file at {LOG_FILE_PATH}: {e}")
+        logger.info("Falling back to console logging only")
 
 # Try to import the proper EInk driver classes
 try:
@@ -652,6 +674,9 @@ class EInkService:
         """Set up the socket server (Unix domain socket or TCP)"""
         logger.info("Setting up socket server")
         
+        # Add socket diagnostics
+        self._run_socket_diagnostics()
+        
         try:
             # Create and start the server thread
             if self.use_tcp:
@@ -700,7 +725,117 @@ class EInkService:
             logger.error(f"Error setting up socket server: {e}")
             logger.error(traceback.format_exc())
             return False
+    
+    def _run_socket_diagnostics(self):
+        """Run diagnostics on the socket setup to help debug issues"""
+        logger.info("Running socket diagnostics...")
+        
+        # Check if we're using Unix socket or TCP
+        if self.use_tcp:
+            logger.info(f"Socket type: TCP on {self.tcp_host}:{self.tcp_port}")
             
+            # Check if the port is already in use
+            try:
+                test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                test_socket.bind((self.tcp_host, self.tcp_port))
+                test_socket.close()
+                logger.info(f"TCP port {self.tcp_port} is available")
+            except OSError as e:
+                if e.errno == errno.EADDRINUSE:
+                    logger.error(f"TCP port {self.tcp_port} is already in use")
+                else:
+                    logger.error(f"Error checking TCP port: {e}")
+        else:
+            logger.info(f"Socket type: Unix domain socket at {self.socket_path}")
+            
+            # Check socket directory
+            socket_dir = os.path.dirname(self.socket_path)
+            logger.info(f"Socket directory: {socket_dir}")
+            
+            if os.path.exists(socket_dir):
+                logger.info(f"Socket directory exists: {socket_dir}")
+                
+                # Check directory permissions
+                try:
+                    dir_stat = os.stat(socket_dir)
+                    logger.info(f"Socket directory permissions: {oct(dir_stat.st_mode)}")
+                    logger.info(f"Socket directory owner: uid={dir_stat.st_uid}, gid={dir_stat.st_gid}")
+                    
+                    # Check if we have write permission
+                    if os.access(socket_dir, os.W_OK):
+                        logger.info(f"We have write permission to socket directory: {socket_dir}")
+                    else:
+                        logger.error(f"No write permission to socket directory: {socket_dir}")
+                        
+                        # Check current user and group
+                        try:
+                            import pwd, grp
+                            current_uid = os.getuid()
+                            current_gid = os.getgid()
+                            user_name = pwd.getpwuid(current_uid).pw_name
+                            group_name = grp.getgrgid(current_gid).gr_name
+                            logger.info(f"Current user: {user_name} (uid={current_uid})")
+                            logger.info(f"Current group: {group_name} (gid={current_gid})")
+                        except Exception as e:
+                            logger.error(f"Error getting current user/group info: {e}")
+                except Exception as e:
+                    logger.error(f"Error checking socket directory permissions: {e}")
+            else:
+                logger.error(f"Socket directory does not exist: {socket_dir}")
+                
+                # Check if we can create the directory
+                try:
+                    parent_dir = os.path.dirname(socket_dir)
+                    if os.path.exists(parent_dir):
+                        if os.access(parent_dir, os.W_OK):
+                            logger.info(f"We have permission to create socket directory in: {parent_dir}")
+                        else:
+                            logger.error(f"No permission to create socket directory in: {parent_dir}")
+                    else:
+                        logger.error(f"Parent directory does not exist: {parent_dir}")
+                except Exception as e:
+                    logger.error(f"Error checking parent directory: {e}")
+            
+            # Check if socket file already exists
+            if os.path.exists(self.socket_path):
+                logger.info(f"Socket file already exists: {self.socket_path}")
+                
+                # Check if it's actually a socket
+                try:
+                    mode = os.stat(self.socket_path).st_mode
+                    is_socket = stat.S_ISSOCK(mode)
+                    if is_socket:
+                        logger.info(f"Existing file is a socket: {self.socket_path}")
+                        
+                        # Try to connect to the socket to see if it's active
+                        try:
+                            test_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                            test_socket.settimeout(1.0)
+                            test_socket.connect(self.socket_path)
+                            logger.warning(f"Socket is active and accepting connections: {self.socket_path}")
+                            test_socket.close()
+                        except ConnectionRefusedError:
+                            logger.info(f"Socket exists but is not accepting connections: {self.socket_path}")
+                        except Exception as e:
+                            logger.info(f"Socket exists but connection test failed: {e}")
+                    else:
+                        logger.error(f"Existing file is NOT a socket (mode={oct(mode)}): {self.socket_path}")
+                except Exception as e:
+                    logger.error(f"Error checking socket file: {e}")
+                
+                # Check if we can remove the socket file
+                try:
+                    if os.access(self.socket_path, os.W_OK):
+                        logger.info(f"We have permission to remove socket file: {self.socket_path}")
+                    else:
+                        logger.error(f"No permission to remove socket file: {self.socket_path}")
+                except Exception as e:
+                    logger.error(f"Error checking socket file permissions: {e}")
+            else:
+                logger.info(f"Socket file does not exist: {self.socket_path}")
+        
+        logger.info("Socket diagnostics completed")
+
     def _process_commands(self):
         """Process commands from the socket server"""
         logger.info("Starting command processing loop")

@@ -27,6 +27,9 @@ SERVICE_SCRIPT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../exa
 if not os.path.exists(SERVICE_SCRIPT):
     SERVICE_SCRIPT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../devices/eink/eink_service.py'))
 
+# Define log file path
+LOG_FILE_PATH = '/tmp/totem-eink-service.log'
+
 def check_if_service_running():
     """Check if the e-ink service is already running"""
     try:
@@ -52,6 +55,8 @@ def main():
                       help='Path to the Unix socket file')
     parser.add_argument('--debug', action='store_true', help='Enable debug logging')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
+    parser.add_argument('--log-file', type=str, default=LOG_FILE_PATH,
+                      help='Path to the log file')
     args = parser.parse_args()
     
     # Check if service is already running
@@ -76,36 +81,52 @@ def main():
     # Output status
     print(f"Starting E-Ink service...")
     print(f"Command: {' '.join(cmd)}")
+    print(f"Logging output to: {args.log_file}")
     
     try:
-        # Start the process
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1
-        )
+        # Make sure the log directory exists
+        log_dir = os.path.dirname(args.log_file)
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+            print(f"Created log directory: {log_dir}")
         
-        # Wait a bit for the service to start
-        time.sleep(3)
-        
-        # Check if the process is still running
-        if process.poll() is None:
-            print(f"E-Ink service started successfully with PID {process.pid}")
-            print(f"Socket path: {args.socket_path}")
-            print("The service is running in the background.")
-            print("To stop it, run: sudo pkill -f 'run_eink_service.py|eink_service.py'")
+        # Open the log file
+        with open(args.log_file, 'a') as log_file:
+            # Write a startup marker to the log
+            log_file.write(f"\n\n{'='*80}\n")
+            log_file.write(f"Starting E-Ink service at {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            log_file.write(f"Command: {' '.join(cmd)}\n")
+            log_file.write(f"{'='*80}\n\n")
+            log_file.flush()
             
-            # Detach the process (doesn't work fully in Python, but helps)
-            process.stdout.close()
-            os.setpgrp()
-        else:
-            stdout, _ = process.communicate()
-            print(f"Service failed to start. Exit code: {process.returncode}")
-            print("Output:")
-            print(stdout)
-            return 1
+            # Start the process with stdout and stderr redirected to the log file
+            process = subprocess.Popen(
+                cmd,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            
+            # Wait a bit for the service to start
+            time.sleep(3)
+            
+            # Check if the process is still running
+            if process.poll() is None:
+                print(f"E-Ink service started successfully with PID {process.pid}")
+                print(f"Socket path: {args.socket_path}")
+                print(f"Log file: {args.log_file}")
+                print("The service is running in the background.")
+                print("To stop it, run: sudo pkill -f 'run_eink_service.py|eink_service.py'")
+                print(f"To view logs: tail -f {args.log_file}")
+                
+                # Detach the process (doesn't work fully in Python, but helps)
+                os.setpgrp()
+            else:
+                stdout, _ = process.communicate()
+                print(f"Service failed to start. Exit code: {process.returncode}")
+                print(f"Check the log file for details: {args.log_file}")
+                return 1
         
         return 0
     except KeyboardInterrupt:
