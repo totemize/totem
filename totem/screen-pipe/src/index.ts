@@ -36,10 +36,10 @@ const fileToBase64 = (filePath: string): string => {
 const main = async () => {
   try {
     // First convert PNG to BMP if needed
-    // await convertPngToBmp();
+    await convertPngToBmp();
     
     // Read the BMP file and convert to base64
-    const imageData = fileToBase64(png_path);
+    const imageData = fileToBase64(bmp_path);
     if (!imageData) {
       console.error('Failed to read image data');
       return;
@@ -61,12 +61,14 @@ const main = async () => {
     const request = {
       action: 'display_image',
       image_data: imageData,
-      image_format: 'png',
+      image_format: 'bmp',
       force_full_refresh: needsFullRefresh // Set to true on the Nth update
     };
     
-    console.log('Connecting to e-ink service...');
+    // Always output the full refresh status and counter for debugging
     console.log(`Full refresh: ${request.force_full_refresh ? 'Yes' : 'No'}, Counter: ${updateCounter}`);
+    
+    console.log('Connecting to e-ink service...');
     
     const client = net.createConnection({ path: '/tmp/eink_service.sock' }, () => {
       console.log('Connected to server!');
