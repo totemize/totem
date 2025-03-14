@@ -20,7 +20,7 @@ import logging
 import subprocess
 import select
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from typing import Dict, Any, Optional, List, Tuple, Union
 import errno
 import stat
@@ -35,10 +35,10 @@ sys.path.insert(0, python_dir)
 LOG_FILE_PATH = '/tmp/totem-eink-service.log'
 
 # E-Ink refresh settings
-# Number of updates before performing a full refresh (set to 1 to refresh every time)
-FULL_REFRESH_INTERVAL = int(os.environ.get('EINK_FULL_REFRESH_INTERVAL', '5'))
-# Whether to clear the screen during a full refresh
-CLEAR_ON_FULL_REFRESH = os.environ.get('EINK_CLEAR_ON_FULL_REFRESH', '1') == '1'
+# How often to do a full refresh (every N partial refreshes)
+FULL_REFRESH_INTERVAL = 20  # Increasing from 5 to 20
+# Whether to clear the screen before doing a full refresh
+CLEAR_ON_FULL_REFRESH = True
 
 try:
     from utils.logger import logger
@@ -1028,11 +1028,50 @@ class EInkService:
                     logger.debug(f"Decoded image data size: {len(image_data)} bytes")
                     
                     # Convert to PIL Image
-                    from PIL import Image
+                    from PIL import Image, ImageOps
                     import io
                     logger.debug(f"Opening image from bytes with format: {image_format}")
+                    
+                    # For debugging, save the raw decoded data to a file
+                    debug_path = '/tmp/eink_debug_raw.bin'
+                    with open(debug_path, 'wb') as f:
+                        f.write(image_data)
+                    logger.debug(f"Saved raw decoded data to {debug_path}")
+                    
+                    # Open the image from the byte stream
                     image = Image.open(io.BytesIO(image_data))
+                    
+                    # Save the image as received to a debug file
+                    debug_image_path = f'/tmp/eink_debug_image.{image_format}'
+                    image.save(debug_image_path)
+                    logger.debug(f"Saved debug image to {debug_image_path}")
+                    
                     logger.info(f"Image decoded successfully: format={image.format}, mode={image.mode}, size={image.size}")
+                    
+                    # Convert to grayscale if needed
+                    if image.mode != 'L':
+                        logger.info(f"Converting image from {image.mode} to grayscale")
+                        image = ImageOps.grayscale(image)
+                    
+                    # Get the display dimensions
+                    display_width = 280  # Default Waveshare 3.7" width
+                    display_height = 480 # Default Waveshare 3.7" height
+                    
+                    # Get actual dimensions if available from the driver
+                    if hasattr(self.display, 'width') and hasattr(self.display, 'height'):
+                        display_width = self.display.width
+                        display_height = self.display.height
+                        logger.info(f"Using display dimensions from driver: {display_width}x{display_height}")
+                    
+                    # Resize image to fit the display if needed
+                    if image.size[0] != display_width or image.size[1] != display_height:
+                        logger.info(f"Resizing image from {image.size} to {display_width}x{display_height}")
+                        image = image.resize((display_width, display_height))
+                    
+                    # Save the processed image for debug purposes
+                    debug_processed_path = '/tmp/eink_debug_processed.png'
+                    image.save(debug_processed_path)
+                    logger.debug(f"Saved processed image to {debug_processed_path}")
                     
                     # Check if it's time for a full refresh
                     needs_full_refresh = False
@@ -1068,6 +1107,11 @@ class EInkService:
                     elif hasattr(self.display, 'display_image'):
                         logger.info("Using display_image method")
                         self.display.display_image(image)
+                        
+                        # Explicitly call driver refresh to ensure update
+                        if hasattr(self.display, 'refresh'):
+                            logger.info("Explicitly calling refresh method")
+                            self.display.refresh(0 if needs_full_refresh else 1)
                     else:
                         # Fallback for displays without display_image method
                         logger.warning("Display lacks display_image method, using mock implementation")
@@ -1423,6 +1467,10 @@ class EInkService:
             
         return False
 
+    def _handle_refresh(self, operation=None):
+        """
+        Handle refresh logic for display operations
+        """
 
 def run_service(debug_timeout=None):
     """
