@@ -54,6 +54,7 @@ const main = async () => {
     // Reset counter if we're doing a full refresh
     if (needsFullRefresh) {
       console.log(`Triggering full refresh after ${updateCounter} updates`);
+      console.error(`FULL REFRESH TRIGGERED after ${updateCounter} updates`); // Use error log to ensure visibility
       updateCounter = 0;
     }
     
@@ -67,6 +68,7 @@ const main = async () => {
     
     // Always output the full refresh status and counter for debugging
     console.log(`Full refresh: ${request.force_full_refresh ? 'Yes' : 'No'}, Counter: ${updateCounter}`);
+    console.error(`COUNTER: ${updateCounter}, FULL REFRESH: ${request.force_full_refresh ? 'Yes' : 'No'}`); // Use error log to ensure visibility
     
     console.log('Connecting to e-ink service...');
     
