@@ -14,7 +14,6 @@
   })
 
   function handleSubmit(event: Event) {
-    alert('submit')
     event.preventDefault();
     const form = event.target as HTMLFormElement;
     const input = form.querySelector('input[type="text"]');
@@ -41,7 +40,7 @@
   <!-- Input field -->
   <input
     type="text"
-    class="w-48 max-w-full rounded bg-gray-200 px-4 py-2 text-center md:w-56"
+    class="w-48 mb-3 max-w-full rounded bg-gray-200 px-4 py-2 text-center md:w-56"
     placeholder="Enter name..."
     
   />

@@ -31,6 +31,4 @@
 	
 </script>
 
-{$currentStage}
-
 {@render children()}
