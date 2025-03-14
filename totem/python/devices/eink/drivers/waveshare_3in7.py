@@ -652,9 +652,10 @@ class Driver(EInkDeviceInterface):
         # Convert the image to the right format if needed
         buffer = self.epd.getbuffer_4Gray(image)
         
-        # Send the image data to the display buffer
-        self.epd.send_command(0x24)
-        self.epd.send_data2(buffer)
+        # Send the image data to the display buffer but don't refresh
+        # We'll use the original display_4Gray method but override the refresh
+        # by loading our own LUT afterward
+        self.epd.display_4Gray(buffer)
         
         # Note: We don't refresh here - the refresh will be called separately
         # by the EInkService with the appropriate refresh mode
