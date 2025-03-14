@@ -34,7 +34,6 @@
 		"vitest": "^3.0.0"
 	},
 	"dependencies": {
-		"@nostrify/nostrify": "npm:@jsr/nostrify__nostrify",
-		"nostr-tools": "^2.10.4"
+		"@nostrify/nostrify": "npm:@jsr/nostrify__nostrify"
 	}
 }

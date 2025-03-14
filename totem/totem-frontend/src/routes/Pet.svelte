@@ -1,6 +1,9 @@
-<!-- Pet.svelte -->
 <script>
 	export let pet;
+	import { namePet } from '$lib/services/nostr';
+
+	let nameInput = '';
+	let isNaming = false;
 
 	function formatTime(timeString) {
 		if (!timeString) return 'Never';
@@ -11,10 +14,22 @@
 			return timeString;
 		}
 	}
+
+	function startNaming() {
+		isNaming = true;
+		nameInput = '';
+	}
+
+	function submitName() {
+		if (nameInput.trim()) {
+			namePet(nameInput.trim(), pet.pubkey);
+			isNaming = false;
+		}
+	}
 </script>
 
 <div
-	class={`rounded-xl border-2 p-6 text-center transition-all hover:translate-y-[-5px] hover:shadow-md ${pet.stateEmoji === '🥚' ? 'border-amber-200 bg-amber-50' : 'border-gray-200'}`}
+	class={`rounded-xl border-2 p-6 text-center transition-all hover:translate-y-[-5px] hover:shadow-md ${pet.isEgg ? 'border-amber-200 bg-amber-50' : 'border-gray-200'}`}
 >
 	<div class="my-2 text-5xl">{pet.stateEmoji}</div>
 	<div class="mt-4 text-left">
@@ -37,8 +52,29 @@
 
 		<p class="my-1"><strong>Last Fed:</strong> {formatTime(pet.lastFed)}</p>
 
-		{#if pet.stateEmoji === '🥚'}
-			<p class="mt-2 italic">This pet is still an egg! Send a naming event to hatch it.</p>
+		{#if pet.isEgg}
+			<div class="mt-2">
+				{#if isNaming}
+					<div class="flex gap-2">
+						<input
+							type="text"
+							bind:value={nameInput}
+							class="flex-1 rounded border border-gray-300 px-2 py-1 text-sm"
+							placeholder="Enter name..."
+						/>
+						<button on:click={submitName} class="rounded bg-blue-500 px-3 py-1 text-sm text-white">
+							Name
+						</button>
+					</div>
+				{:else}
+					<button
+						on:click={startNaming}
+						class="w-full rounded bg-amber-500 px-2 py-1 text-sm text-white"
+					>
+						Name this egg
+					</button>
+				{/if}
+			</div>
 		{/if}
 
 		<p class="mt-2 text-xs text-gray-500">Last updated: {pet.lastUpdated?.toLocaleString()}</p>

@@ -102,13 +102,17 @@ func main() {
 	mux.Handle("/nostr", totemRelay)
 
 	// Start periodic updates for all pets
+	// In main.go, modify the update loop:
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 
 		for range ticker.C {
 			for _, pet := range totem.GetPets() {
-				pet.Update()
+				// Skip updates for egg pets
+				if _, isEgg := pet.(PetCreator); !isEgg {
+					pet.Update()
+				}
 			}
 		}
 	}()

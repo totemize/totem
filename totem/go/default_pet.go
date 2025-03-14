@@ -22,21 +22,24 @@ func NewDefaultPet(name string, totem *Totem) *DefaultPet {
 }
 
 func (p *DefaultPet) handleStoreEvent(ctx context.Context, evt *nostr.Event) {
-	p.mutex.RLock()
-	currentState := p.state
-	p.mutex.RUnlock()
+	if evt.Kind == 1 {
+		p.mutex.RLock()
+		currentState := p.state
+		p.mutex.RUnlock()
 
-	fmt.Printf("Pet %s notified of event: %s\n", currentState.Name, evt.ID)
+		fmt.Printf("Pet %s notified of event: %s\n", currentState.Name, evt.ID)
 
-	p.mutex.Lock()
+		p.mutex.Lock()
 
-	p.state.Energy = min(100, p.state.Energy+5)
-	p.state.Happiness = min(100, p.state.Happiness+2)
+		p.state.Energy = min(100, p.state.Energy+5)
+		p.state.Happiness = min(100, p.state.Happiness+2)
 
-	p.state.LastFed = time.Now()
-	p.mutex.Unlock()
+		p.state.LastFed = time.Now()
+		p.mutex.Unlock()
 
-	fmt.Printf("Pet %s's state updated after event\n", currentState.Name)
+		fmt.Printf("Pet %s's state updated after event\n", currentState.Name)
+
+	}
 }
 
 func (p *DefaultPet) publishMetadataEvent(ctx context.Context) {

@@ -35,6 +35,15 @@ func NewEggPet(ownerPubKey string, totem *Totem) *EggPet {
 	return eggPet
 }
 
+func (p *EggPet) Update() {
+	// Do nothing - eggs don't decay
+}
+
+func (p *EggPet) PublishStatusEvent(ctx context.Context, publishFunc func(context.Context, *nostr.Event) error) error {
+	// Do nothing - eggs don't publish status
+	return nil
+}
+
 func (p *EggPet) publishMetadataEvent(ctx context.Context) {
 	metadata := map[string]string{
 		"name":  p.state.Name,
