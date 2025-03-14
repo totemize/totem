@@ -340,7 +340,10 @@ func (t *Totem) StartPetStatusUpdates(ctx context.Context) {
 				t.mutex.RLock()
 				pets := make([]Pet, 0, len(t.pets))
 				for _, pet := range t.pets {
-					pets = append(pets, pet)
+					// Skip eggs when collecting pets for status updates
+					if _, isEgg := pet.(PetCreator); !isEgg {
+						pets = append(pets, pet)
+					}
 				}
 				t.mutex.RUnlock()
 

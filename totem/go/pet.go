@@ -91,7 +91,6 @@ func (p *BasePet) Update() {
 
 // PublishEvent signs and publishes a nostr event from the pet
 func (p *BasePet) PublishEvent(ctx context.Context, evt *nostr.Event, publishFunc func(context.Context, *nostr.Event) error) error {
-	// Sign the event with the pet's private key
 	evt.Sign(p.privateKey)
 
 	// Publish through the provided function

@@ -71,8 +71,10 @@ func (r *TotemRelay) handleStoreEvent(ctx context.Context, evt *nostr.Event) err
 
 	fmt.Printf("Relay storing event: %s\n", evt.ID)
 
-	go r.totem.handleStoreEvent(ctx, evt)
+	// Broadcast the event to all active subscriptions that match the event
+	r.BroadcastEvent(evt)
 
+	go r.totem.handleStoreEvent(ctx, evt)
 	return nil
 }
 
