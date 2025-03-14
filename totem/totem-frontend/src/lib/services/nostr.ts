@@ -24,7 +24,7 @@ function getOrCreatePrivateKey(): Uint8Array {
 }
 
 // Cache for deduplicating events
-const eventCache = new NCache({ max: 1000 });
+export const eventCache = new NCache({ max: 1000 });
 
 // Relay and signer
 let relay: NRelay1 | null = null;
