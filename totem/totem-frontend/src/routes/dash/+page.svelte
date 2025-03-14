@@ -3,8 +3,7 @@
 		connectToRelay,
 		createEgg,
 		connectionStatus,
-		connectionError,
-		pubkey
+		connectionError
 	} from '$lib/services/nostr';
 	import { eggPets, hatchedPets, petsArray } from '$lib/stores/pets';
 	import Pet from '../Pet.svelte';

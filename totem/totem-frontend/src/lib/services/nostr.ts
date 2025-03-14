@@ -94,6 +94,7 @@ async function subscribeToProfiles() {
 		for await (const msg of relay.req([{ kinds: [0] }])) {
 			if (msg[0] === 'EVENT') {
 				const event = msg[2] as NostrEvent;
+				console.log('new profile event', event);
 				if (await processUniqueEvent(event)) {
 					processPetProfileEvent(event);
 				}
@@ -129,13 +130,44 @@ async function subscribeToStatusUpdates() {
 // Helper to deduplicate events using the cache
 async function processUniqueEvent(event: NostrEvent): Promise<boolean> {
 	try {
-		const cachedEvents = await eventCache.query([{ ids: [event.id] }]);
-		if (cachedEvents.length > 0) {
-			return false; // Already processed
+		// For metadata (kind 0) events, check by pubkey to get the latest profile
+		if (event.kind === 0) {
+			// Query for any existing metadata events for this pubkey
+			const existingProfiles = await eventCache.query([{ kinds: [0], authors: [event.pubkey] }]);
+
+			// If we found existing profiles, keep only the newest one
+			if (existingProfiles.length > 0) {
+				// Sort by creation time (newest first)
+				existingProfiles.sort((a, b) => b.created_at - a.created_at);
+
+				// If this event is older than our newest cached one, skip it
+				if (existingProfiles[0].created_at >= event.created_at) {
+					return false; // Skip older event
+				}
+
+				// This is newer, so remove old ones and add this one
+				for (const oldEvent of existingProfiles) {
+					eventCache.delete(oldEvent);
+				}
+			}
 		}
 
+		// For status events (kind 30078), replace older ones for the same pet
+		if (event.kind === 30078) {
+			// Find any existing status events for this pet
+			const existingStatuses = await eventCache.query([
+				{ kinds: [30078], authors: [event.pubkey] }
+			]);
+
+			// Remove all older status events for this pet
+			for (const oldEvent of existingStatuses) {
+				eventCache.delete(oldEvent);
+			}
+		}
+
+		// Add the new event to cache
 		await eventCache.event(event);
-		return true;
+		return true; // Process this event
 	} catch (error) {
 		console.error('Error checking event cache:', error);
 		return true; // Process anyway if cache fails

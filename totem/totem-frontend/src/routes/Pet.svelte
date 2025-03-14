@@ -13,10 +13,18 @@
 
 	// Calculate time since last interaction for more user-friendly display
 	function timeSinceLastFed(timeString) {
+		// Handle missing or invalid timeString
 		if (!timeString) return 'Never fed';
 
 		try {
+			// Create date object from the timeString
 			const lastFedDate = new Date(timeString);
+
+			// Validate that we have a proper date
+			if (isNaN(lastFedDate.getTime())) {
+				return 'Unknown';
+			}
+
 			const now = new Date();
 			const diffMs = now.getTime() - lastFedDate.getTime();
 
@@ -36,6 +44,22 @@
 			const diffDays = Math.floor(diffHrs / 24);
 			if (diffDays === 1) return '1 day ago';
 			return `${diffDays} days ago`;
+		} catch (e) {
+			// If any error occurs, return a fallback
+			console.warn('Error parsing date:', e);
+			return 'Unknown';
+		}
+	}
+
+	// Format a date for direct display if needed
+	function formatDate(timeString) {
+		if (!timeString) return 'Never';
+
+		try {
+			const date = new Date(timeString);
+			if (isNaN(date.getTime())) return timeString;
+
+			return date.toLocaleString();
 		} catch (e) {
 			return timeString;
 		}
@@ -145,7 +169,14 @@
 		</div>
 
 		<p class="my-1 text-sm">
-			Last Fed: <span class="font-medium">{timeSinceLastFed(pet.lastFed)}</span>
+			Last Fed:
+			<span class="font-medium">
+				{#if timeSinceLastFed(pet.lastFed) === 'Unknown'}
+					{formatDate(pet.lastFed)}
+				{:else}
+					{timeSinceLastFed(pet.lastFed)}
+				{/if}
+			</span>
 		</p>
 
 		<!-- Interaction section -->

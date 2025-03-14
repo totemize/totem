@@ -102,7 +102,7 @@ func (p *BasePet) PublishStatusEvent(ctx context.Context, publishFunc func(conte
 	p.mutex.RLock()
 	state := p.state
 	p.mutex.RUnlock()
-
+	unixTimestamp := state.LastFed.Unix() * 1000
 	// Create status event
 	evt := &nostr.Event{
 		Kind:      30078,
@@ -111,7 +111,7 @@ func (p *BasePet) PublishStatusEvent(ctx context.Context, publishFunc func(conte
 			{"d", "pet/status"},
 			{"energy", fmt.Sprintf("%.1f", state.Energy)},
 			{"happiness", fmt.Sprintf("%.1f", state.Happiness)},
-			{"last_fed", state.LastFed.Format(time.UnixDate)},
+			{"last_fed", fmt.Sprintf("%d", unixTimestamp)}, // Unix timestamp in milliseconds
 			{"name", state.Name},
 			{"state_emoji", p.GetStateEmoji()},
 		},

@@ -30,7 +30,7 @@ export const hatchedPets = derived(petsArray, ($petsArray) =>
 export function processPetProfileEvent(event: NostrEvent) {
 	try {
 		const content = JSON.parse(event.content);
-		const isEgg = content.about?.includes('egg waiting to be named') || false;
+		const isEgg = content.name?.includes('egg') || false;
 
 		pets.update((currentPets) => {
 			// Check if we already have this pet
@@ -58,6 +58,7 @@ export function processPetProfileEvent(event: NostrEvent) {
 }
 
 // Update pet stats from kind 30078 events
+// Update pet stats from kind 30078 events
 export function processPetStatusEvent(event: NostrEvent) {
 	try {
 		// Extract tag values
@@ -68,9 +69,21 @@ export function processPetStatusEvent(event: NostrEvent) {
 
 		const energy = parseFloat(getTagValue('energy') || '0');
 		const happiness = parseFloat(getTagValue('happiness') || '0');
-		const lastFed = getTagValue('last_fed') || '';
+		let lastFed = getTagValue('last_fed') || '';
 		const name = getTagValue('name') || '';
 		const stateEmoji = getTagValue('state_emoji') || '😊';
+
+		// Try to parse lastFed as a timestamp
+		try {
+			const timestamp = parseInt(lastFed);
+			if (!isNaN(timestamp)) {
+				// Convert valid timestamp to ISO string
+				lastFed = new Date(timestamp).toISOString();
+			}
+		} catch (e) {
+			// If parsing fails, keep the original string
+			console.warn('Failed to parse lastFed timestamp:', lastFed);
+		}
 
 		pets.update((currentPets) => {
 			// Check if we already have this pet
