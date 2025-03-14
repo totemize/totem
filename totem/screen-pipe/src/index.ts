@@ -32,10 +32,10 @@ const fileToBase64 = (filePath: string): string => {
 const main = async () => {
   try {
     // First convert PNG to BMP if needed
-    await convertPngToBmp();
+    // await convertPngToBmp();
     
     // Read the BMP file and convert to base64
-    const imageData = fileToBase64(bmp_path);
+    const imageData = fileToBase64(png_path);
     if (!imageData) {
       console.error('Failed to read image data');
       return;
@@ -45,7 +45,7 @@ const main = async () => {
     const request = {
       action: 'display_image',
       image_data: imageData,
-      image_format: 'bmp'
+      image_format: 'png'
     };
     
     console.log('Connecting to e-ink service...');

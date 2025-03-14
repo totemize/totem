@@ -318,13 +318,14 @@ class EInkClient:
             
         return self._send_command(command)
     
-    def display_image(self, image=None, image_path=None) -> Dict[str, Any]:
+    def display_image(self, image=None, image_path=None, force_full_refresh=False) -> Dict[str, Any]:
         """
         Display an image on the e-ink display
         
         Args:
             image: PIL Image object (optional)
             image_path: Path to image file (optional)
+            force_full_refresh: Force a full refresh regardless of the counter (optional)
             
         Returns:
             dict: Response from the service
@@ -339,6 +340,10 @@ class EInkClient:
             raise ValueError("Only one of image or image_path should be provided")
         
         command = {'action': 'display_image'}
+        
+        # Add force_full_refresh flag if specified
+        if force_full_refresh:
+            command['force_full_refresh'] = True
         
         if image_path:
             # Read image file
