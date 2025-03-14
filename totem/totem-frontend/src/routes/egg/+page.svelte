@@ -1,7 +1,31 @@
-<script>
+<script lang="ts">
+  import { createEgg, namePet } from '$lib/services/nostr';
+	import { onMount } from 'svelte';
+	import { writable } from 'svelte/store';
+
   // For e-screen (mobile screen) display
   let isMobile = false;
+
+  const ready = writable(false);
+  
+  onMount(async () => {
+    await createEgg();
+    ready.set(true);
+  })
+
+  function handleSubmit(event: Event) {
+    alert('submit')
+    event.preventDefault();
+    const form = event.target as HTMLFormElement;
+    const input = form.querySelector('input[type="text"]');
+    if (input instanceof HTMLInputElement) {
+      namePet(input.value);
+    }
+  }
+
 </script>
+
+<form on:submit={handleSubmit}>
 
 <div class="flex flex-col items-center justify-center text-center">
   <!-- Egg image -->
@@ -19,8 +43,17 @@
     type="text"
     class="w-48 max-w-full rounded bg-gray-200 px-4 py-2 text-center md:w-56"
     placeholder="Enter name..."
+    
+  />
+
+  <input 
+    type="submit"
+    value="submit"
+    class="w-48 max-w-full rounded bg-gray-200 px-4 py-2 text-center md:w-56"
   />
 </div>
+
+</form>
 
 <!-- E-screen version (mobile QR version) -->
 {#if isMobile}
@@ -33,3 +66,5 @@
   </p>
 </div>
 {/if}
+
+
