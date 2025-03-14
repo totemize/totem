@@ -34,6 +34,12 @@ sys.path.insert(0, python_dir)
 # Define log file path
 LOG_FILE_PATH = '/tmp/totem-eink-service.log'
 
+# E-Ink refresh settings
+# Number of updates before performing a full refresh (set to 1 to refresh every time)
+FULL_REFRESH_INTERVAL = int(os.environ.get('EINK_FULL_REFRESH_INTERVAL', '5'))
+# Whether to clear the screen during a full refresh
+CLEAR_ON_FULL_REFRESH = os.environ.get('EINK_CLEAR_ON_FULL_REFRESH', '1') == '1'
+
 try:
     from utils.logger import logger
 except ImportError:
@@ -144,6 +150,12 @@ class EInkService:
         self.max_init_retries = int(os.environ.get('EINK_MAX_INIT_RETRIES', MAX_RETRIES))
         # Add a flag to track if the socket server is ready
         self.socket_server_ready = threading.Event()
+        
+        # Refresh counter for tracking when to do a full refresh
+        self.update_counter = 0
+        self.full_refresh_interval = FULL_REFRESH_INTERVAL
+        self.clear_on_full_refresh = CLEAR_ON_FULL_REFRESH
+        logger.info(f"Full refresh will occur every {self.full_refresh_interval} updates")
         
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -1022,6 +1034,28 @@ class EInkService:
                     image = Image.open(io.BytesIO(image_data))
                     logger.info(f"Image decoded successfully: format={image.format}, mode={image.mode}, size={image.size}")
                     
+                    # Check if it's time for a full refresh
+                    needs_full_refresh = False
+                    force_full_refresh = command.get('force_full_refresh', False)
+                    
+                    if force_full_refresh:
+                        needs_full_refresh = True
+                        logger.info("Forcing full refresh as requested")
+                        self.update_counter = 0
+                    elif self.full_refresh_interval > 0:
+                        self.update_counter += 1
+                        if self.update_counter >= self.full_refresh_interval:
+                            needs_full_refresh = True
+                            self.update_counter = 0
+                            logger.info(f"Performing full refresh after {self.full_refresh_interval} updates")
+                    
+                    # Perform full refresh if needed
+                    if needs_full_refresh and hasattr(self.display, 'Clear') and self.clear_on_full_refresh:
+                        logger.info("Clearing display for full refresh")
+                        self.display.Clear()
+                        # Small delay to allow the clear to complete
+                        time.sleep(0.5)
+                    
                     logger.info(f"Executing DISPLAY_IMAGE command with image format: {image_format}, size: {image.size}")
                     
                     # Check if display supports display_file method (for file paths)
@@ -1046,7 +1080,8 @@ class EInkService:
                     logger.info("Display image command completed successfully")
                     return {
                         'status': 'success',
-                        'message': 'Image displayed successfully'
+                        'message': 'Image displayed successfully',
+                        'full_refresh': needs_full_refresh
                     }
                     
                 except Exception as e:
