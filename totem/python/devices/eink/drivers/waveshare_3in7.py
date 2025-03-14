@@ -653,12 +653,29 @@ class Driver(EInkDeviceInterface):
         buffer = self.epd.getbuffer_4Gray(image)
         
         # Send the image data to the display buffer but don't refresh
-        # We'll use the original display_4Gray method but override the refresh
-        # by loading our own LUT afterward
-        self.epd.display_4Gray(buffer)
+        # We need to modify how we call display_4Gray to prevent auto-refresh
+        if self.mock_mode:
+            print("Mock display_image")
+        else:
+            # Instead of calling self.epd.display_4Gray(buffer) which would auto-refresh,
+            # we need to send the data directly to the display without refreshing
+            
+            # These steps replicate what display_4Gray does but without the final refresh
+            self.epd.send_command(0x4E)
+            self.epd.send_data(0x00)
+            self.epd.send_data(0x00)
+            self.epd.send_command(0x4F)
+            self.epd.send_data(0x00)
+            self.epd.send_data(0x00)
+            
+            # Send the image data to the display buffer
+            self.epd.send_command(0x24)
+            self.epd.send_data2(buffer)
+            
+            # For 4-gray mode, need to send data to the second buffer as well
+            self.epd.send_command(0x26)
+            self.epd.send_data2(buffer)
         
-        # Note: We don't refresh here - the refresh will be called separately
-        # by the EInkService with the appropriate refresh mode
         print("Image data sent to display buffer (refresh deferred)")
     
     def display_bytes(self, image_bytes):
