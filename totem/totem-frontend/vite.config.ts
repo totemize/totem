@@ -6,6 +6,16 @@ import { defineConfig } from 'vite';
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 
+	resolve: {
+		alias: {
+			crypto: 'crypto-browserify',
+			stream: 'stream-browserify',
+			buffer: 'buffer',
+			events: 'events',
+			process: 'process/browser'
+		}
+	},
+
 	test: {
 		workspace: [
 			{
