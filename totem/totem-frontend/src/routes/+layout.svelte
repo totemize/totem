@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '$lib/polyfills';
 	import { onMount } from 'svelte';
 	import '../app.css';
 	import { goto } from '$app/navigation';
