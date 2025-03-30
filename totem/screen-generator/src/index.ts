@@ -29,7 +29,7 @@ const main = async () => {
         console.log('Viewport size set to 240x480');
         
         console.log('Navigating to totem');
-        await page.goto('https://localhost:5173', { waitUntil: 'networkidle' });
+        await page.goto('https://zombo.com', { waitUntil: 'networkidle' });
         console.log('Page loaded');
         
         // Take screenshot directly with Playwright
