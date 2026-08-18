@@ -1,13 +1,22 @@
 import os
 from devices.nvme.nvme import NVMEDeviceInterface
+from devices.nvme.storage import ConfinedStorage
 from utils.logger import logger
 
 class Driver(NVMEDeviceInterface):
+    def __init__(self, root=None):
+        configured_root = root or os.environ.get(
+            "TOTEM_STORAGE_ROOT", "/var/lib/totem/storage"
+        )
+        self.storage = ConfinedStorage(configured_root)
+
     def init(self):
         """Initialize the filesystem driver."""
-        logger.info("Initializing filesystem storage driver")
-        # No special initialization needed for basic file operations
-        pass
+        self.storage.initialize()
+        logger.info(
+            "Initialized filesystem storage at %s", self.storage.root
+        )
+        return True
 
     def read_file(self, file_path):
         """
@@ -17,16 +26,11 @@ class Driver(NVMEDeviceInterface):
             file_path: Path to the file to read
             
         Returns:
-            str: The file contents
+            bytes: The exact file contents
         """
-        try:
-            with open(file_path, 'r') as file:
-                data = file.read()
-            logger.debug(f"Read {len(data)} bytes from {file_path}")
-            return data
-        except Exception as e:
-            logger.error(f"Error reading from {file_path}: {e}")
-            raise
+        data = self.storage.read(file_path)
+        logger.debug(f"Read {len(data)} bytes from {file_path}")
+        return data
 
     def write_file(self, file_path, data, options=None):
         """
@@ -39,16 +43,6 @@ class Driver(NVMEDeviceInterface):
         Returns:
             bool: True if successful
         """
-        try:
-            # Create directory if it doesn't exist
-            directory = os.path.dirname(file_path)
-            if directory and not os.path.exists(directory):
-                os.makedirs(directory, exist_ok=True)
-                
-            with open(file_path, 'w') as file:
-                file.write(data)
-            logger.debug(f"Wrote {len(data)} bytes to {file_path}")
-            return True
-        except Exception as e:
-            logger.error(f"Error writing to {file_path}: {e}")
-            return False
+        result = self.storage.write(file_path, data, options)
+        logger.debug(f"Wrote {len(data)} bytes to {file_path}")
+        return result

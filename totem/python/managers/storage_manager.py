@@ -3,8 +3,8 @@ from utils.logger import logger
 from typing import Optional
 
 class StorageManager:
-    def __init__(self, driver_name: Optional[str] = None):
-        self.nvme_device = NVME(driver_name)
+    def __init__(self, driver_name: Optional[str] = None, *, storage_root=None):
+        self.nvme_device = NVME(driver_name, storage_root=storage_root)
         self.nvme_device.initialize()
 
     def write_data(self, file_path: str, data: bytes, options: Optional[dict] = None) -> bool:
@@ -46,4 +46,4 @@ class StorageManager:
             bytes: Data read from file
         """
         logger.info(f"Reading data from {file_path}")
-        return self.nvme_device.read_file(file_path) 
+        return self.nvme_device.read_file(file_path)

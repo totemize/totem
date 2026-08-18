@@ -24,7 +24,8 @@ class NVMEDeviceInterface(DeviceDriver):
 
 
 class NVME:
-    def __init__(self, driver_name: Optional[str] = None):
+    def __init__(self, driver_name: Optional[str] = None, *, storage_root=None):
+        self.storage_root = storage_root
         if driver_name:
             self.driver = self._load_driver_by_name(driver_name)
         else:
@@ -62,7 +63,9 @@ class NVME:
             if not issubclass(driver_class, NVMEDeviceInterface):
                 raise TypeError(f"{driver_name} does not implement NVMEDeviceInterface")
             logger.info(f"Loaded driver: {driver_name}")
-            return driver_class()
+            if self.storage_root is None:
+                return driver_class()
+            return driver_class(root=self.storage_root)
         except (ImportError, AttributeError, TypeError) as e:
             logger.error(f"Error loading driver '{driver_name}': {e}")
             raise
