@@ -1,11 +1,10 @@
 from abc import abstractmethod
-import importlib
-import os
 import subprocess
 import sys
 from typing import Optional
 from utils.logger import logger
 from devices.contracts import DeviceDriver
+from devices.registry import DriverRegistry, DriverSpec, HardwareNotFoundError
 
 class WiFiDeviceInterface(DeviceDriver):
     @abstractmethod
@@ -38,25 +37,40 @@ class WiFiDeviceInterface(DeviceDriver):
         """Get the current Wi-Fi status."""
         pass
 
+
+WIFI_DRIVERS = DriverRegistry(
+    WiFiDeviceInterface,
+    (
+        DriverSpec("rpi5_onboard_wifi", "devices.wifi.drivers.rpi5_onboard_wifi"),
+        DriverSpec("usb_wifi_adapter", "devices.wifi.drivers.usb_wifi_adapter"),
+        DriverSpec("mock_wifi", "devices.wifi.drivers.mock_wifi", is_mock=True),
+    ),
+)
+
 class WiFi:
-    def __init__(self, driver_name: Optional[str] = None):
+    def __init__(
+        self, driver_name: Optional[str] = None, *, allow_mock: bool = False
+    ):
+        self.allow_mock = allow_mock
         if driver_name:
             self.driver = self._load_driver_by_name(driver_name)
         else:
             detected_driver = self._detect_hardware()
             if detected_driver:
                 self.driver = self._load_driver_by_name(detected_driver)
-            else:
-                logger.warning("No hardware detected, using mock WiFi device.")
+            elif allow_mock:
+                logger.warning("No hardware detected; explicit mock mode is enabled.")
                 self.driver = self._load_driver_by_name('mock_wifi')
+            else:
+                raise HardwareNotFoundError("No supported Wi-Fi hardware detected")
 
     def _detect_hardware(self) -> Optional[str]:
         logger.info("Detecting Wi-Fi hardware...")
         
         # For non-Linux systems, don't attempt to use Linux-specific commands
         if not sys.platform.startswith('linux'):
-            logger.warning(f"Not running on Linux (detected {sys.platform}), using mock WiFi device")
-            return 'mock_wifi'
+            logger.info(f"Wi-Fi probing is unavailable on {sys.platform}")
+            return None
             
         try:
             result = subprocess.check_output(['ls', '/sys/class/net']).decode('utf-8')
@@ -67,7 +81,7 @@ class WiFi:
             return None
 
         hardware_map = {
-            'wlan0': 'onboard_wifi',
+            'wlan0': 'rpi5_onboard_wifi',
             'wlan1': 'usb_wifi_adapter',
         }
 
@@ -81,27 +95,9 @@ class WiFi:
         return None
 
     def _load_driver_by_name(self, driver_name: str) -> WiFiDeviceInterface:
-        try:
-            module_path = f"devices.wifi.drivers.{driver_name}"
-            module = importlib.import_module(module_path)
-            driver_class = getattr(module, 'Driver')
-            if not issubclass(driver_class, WiFiDeviceInterface):
-                raise TypeError(f"{driver_name} does not implement WiFiDeviceInterface")
-            logger.info(f"Loaded Wi-Fi driver: {driver_name}")
-            return driver_class()
-        except (ImportError, AttributeError, TypeError) as e:
-            logger.error(f"Error loading Wi-Fi driver '{driver_name}': {e}")
-            # If we can't load the requested driver, fall back to mock driver
-            if driver_name != 'mock_wifi':
-                logger.warning(f"Falling back to mock WiFi driver")
-                try:
-                    module_path = f"devices.wifi.drivers.mock_wifi"
-                    module = importlib.import_module(module_path)
-                    driver_class = getattr(module, 'Driver')
-                    return driver_class()
-                except (ImportError, AttributeError, TypeError) as fallback_error:
-                    logger.error(f"Error loading mock driver: {fallback_error}")
-            raise
+        driver = WIFI_DRIVERS.load(driver_name, allow_mock=self.allow_mock)
+        logger.info(f"Loaded Wi-Fi driver: {driver_name}")
+        return driver
 
     def initialize(self):
         self.driver.init()

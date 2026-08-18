@@ -3,8 +3,10 @@ from utils.logger import logger
 from typing import Optional
 
 class NetworkManager:
-    def __init__(self, driver_name: Optional[str] = None):
-        self.wifi_device = WiFi(driver_name)
+    def __init__(
+        self, driver_name: Optional[str] = None, *, allow_mock: bool = False
+    ):
+        self.wifi_device = WiFi(driver_name, allow_mock=allow_mock)
         self.wifi_device.initialize()
 
     def scan_networks(self) -> list:

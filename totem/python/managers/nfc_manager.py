@@ -2,8 +2,8 @@ from devices.nfc.nfc import NFC
 from utils.logger import logger
 
 class NFCManager:
-    def __init__(self, driver_name: str = None):
-        self.nfc_device = NFC(driver_name)
+    def __init__(self, driver_name: str = None, *, allow_mock: bool = False):
+        self.nfc_device = NFC(driver_name, allow_mock=allow_mock)
         self.nfc_device.initialize()
 
     def read_card(self) -> str:
