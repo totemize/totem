@@ -44,13 +44,17 @@ RFC 2119.
 - `references/fips` — FIPS (Free Internetworking Peering System): self-organizing
   encrypted mesh over Nostr identities, transport-agnostic (WiFi, Bluetooth,
   Ethernet, serial); usable as a local mesh or an overlay on the internet.
+  Upstream: <https://github.com/jmcorgan/fips>
 - `references/naps` — NAP registry and governance: capability contracts between
   napplets and runtimes, and the projections concept.
+  Upstream: <https://github.com/napplet/naps>
 - `references/web` — Kehto: web runtime for NIP-5D napplets (shell, runtime,
-  ACL, services, firewall packages).
+  ACL, services, firewall packages). Upstream: <https://github.com/kehto/web>
 - `references/negentropy.md` — NIP-77: negentropy-based set reconciliation for
   efficient event syncing, client-relay and relay-relay.
+  <https://github.com/nostr-protocol/nips/blob/master/77.md>
 - `references/strfry` — strfry: self-contained nostr relay (LMDB), NIP-77 sync,
   plugin interface for policy; our reference relay implementation.
+  Upstream: <https://github.com/hoytech/strfry>
 
-External: NIP-01, NIP-02, NIP-11, NIP-77 as cited per document.
+External: NIP-01, NIP-02, NIP-11, NIP-77, NIP-98 as cited per document.

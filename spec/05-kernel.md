@@ -66,8 +66,10 @@ question (`09-open-questions.md`).
 
 ## v1 scope vs. deferred
 
-For the demo milestone (`08-stories.md`), the kernel needs the minimum that
-lets the relay, web app, and net code run on the Pi Zero W profile: process
-composition, the bus, and the drivers that profile requires. The full happlet
-model and the complete IPC projection may land progressively — the spec
-should mark which parts are v1-blocking as the design matures.
+The **v1 kernel is the demo-minimal kernel**: process supervision, the device
+adapters the reference profile needs, and the control-plane backend for the
+web app. Nothing more is required for the demo milestone (`08-stories.md`).
+
+The **happlet model and the IPC projection are future directions**: kept in
+this document as design intent, specified when a use case demands them. The
+v1 kernel MUST NOT block on them.

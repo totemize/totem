@@ -2,10 +2,11 @@
 
 Status: Draft
 
-This is the normative registry of Totem's protocol conventions: everything a
-totem implementer MUST honor for interop. Values marked **TBD** are decided
-during this design phase; this document is their single home
-(see `README.md` rules).
+The single home for Totem's interop values: everything a totem implementer
+MUST honor that isn't already defined by the referenced NIPs. Behavioral
+requirements live in their own documents (relay: `04-relay.md`, net code:
+`03-network.md`); this file only pins values. Values marked **TBD** are
+decided during this design phase (see `README.md` rules).
 
 ## Port registry
 
@@ -27,31 +28,31 @@ A totem MUST serve both on the ports registered here, on every on-ramp.
 
 ## NIP-11 totem marker
 
-The relay's NIP-11 info document (served over HTTP at the standard relay
-port) MUST include:
+The relay's NIP-11 info document MUST include a **totem marker**: a
+namespaced object (field name **TBD**) carrying at minimum:
 
-- a **totem marker** field identifying the relay's host as a totem
-  (field name **TBD**);
-- the totem's **npub**, which MUST match the npub FIPS authenticates for the
-  node (`02-identity.md`).
+- `version` — the Totem spec version the totem implements;
+- capability fields as needed (e.g. supported optional behaviors).
 
-Clients use this document for recognition; a missing marker means "not a
-totem".
+The marker is the recognition *hint*; authentication is the challenge in
+`02-identity.md`. A missing marker means "not a totem".
 
-## Relay requirements
+## Key encoding
 
-- The relay MUST implement NIP-01 and NIP-77 (see `04-relay.md`).
-- Sync behavior: NIP-77 negentropy reconciliation over the relay websocket,
-  then REQ/EVENT transfers — identical for users and totems (flatness rule,
-  `06-interaction.md`).
+Public keys on the wire are **hex**, per NIP-01. Bech32 (`npub`/`nsec`) is
+the human-facing encoding and MUST NOT be required by wire formats.
 
-## Sync conventions
+## Transport
 
-- Sync filters, direction, and payload limits: **TBD** (`09-open-questions.md`).
-- Syncs SHOULD tolerate interruption and resume on the next encounter
-  (`03-network.md`).
+v1 uses plain `http://` and `ws://`. The AP network has no DNS to name
+certificates, and TLS/mixed-content restrictions would break real mobile
+clients. Transport confidentiality is provided by the fabric where it exists
+(FIPS links are encrypted) and by nostr's end-to-end event signatures; the
+content itself is public-by-design relay data.
 
-## Contacts convention
+## Sync
 
-Inter-totem relations are NIP-02 kind 3 events published to the totem's own
-relay; mutual follows = friends (`02-identity.md`). No extra protocol.
+Totem-to-totem sync is **plain NIP-77 negentropy** between relays, with event
+transfer over the same websocket. There is no Totem-specific sync profile —
+no totem-defined filters, direction rules, or limits. Relay requirements are
+defined in `04-relay.md`.

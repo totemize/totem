@@ -18,7 +18,8 @@ no extra protocol.
 Consequences that MUST hold:
 
 - Every claim a totem makes about itself can be a signed nostr event — self-
-  authentic and verifiable by any third party.
+  authentic and verifiable by any third party. Signed ≠ stored: publication
+  in a relay is optional, not part of the signature.
 - The npub identifies the totem *as an actor*, not the relay's contents: the
   relay serves events from many pubkeys. The spec's vocabulary keeps these
   separate.
@@ -32,44 +33,50 @@ device keypair, one identity.
 Problem: over any fabric, a totem must distinguish *another totem* from a
 regular user peer.
 
-### Declaration
+### Declaration (the hint)
 
-A totem declares itself in its relay's NIP-11 info document: a **totem
-marker** plus the totem's **npub** (see `07-conventions.md` for the field).
-The declaration rides an existing, standardized nostr discovery mechanism —
-no new endpoint.
+A totem advertises itself in its relay's NIP-11 info document: a **totem
+marker** — a namespaced object carrying the Totem spec version and capability
+fields (schema in `07-conventions.md`). This is an unsigned **hint**: a cheap
+pre-filter so peers only run the authentication challenge at things that look
+like totems. It authenticates nothing by itself.
 
 ### Recognition flow
 
-1. FIPS authenticates a new peer; the totem's net code learns
+1. FIPS authenticates a new peer; the net code learns
    *(peer npub, routable address)*.
-2. On each new authenticated peer, the net code probes the standardized relay
-   port with a NIP-11 request (`GET /` with `Accept: application/nostr+json`).
-3. Verdict:
-   - Connection refused / nothing listening → the peer is not a totem.
-     Ignore it.
-   - A valid NIP-11 document containing the totem marker → the peer is a
-     totem. The declared npub MUST match the npub FIPS authenticated; a
-     mismatch is a red flag and MUST be treated as "not a totem".
-4. On a positive verdict, the totem proceeds with totem behavior: open the
+2. The net code probes the standardized relay port with a NIP-11 request.
+   No marker → the peer is not a totem; ignore it.
+3. **Challenge.** The probing totem sends a nonce; the peer answers with a
+   NIP-98-style ephemeral signed event over the nonce (and its totem claim).
+   The response is verified and discarded — it is never stored in any relay.
+4. **Verdict.** Over FIPS, the signing npub MUST match the
+   transport-authenticated npub — recognition is fully bound to the mesh
+   identity, and no separate endpoint-binding proof is needed. Over the AP
+   path, the signature proves control of the claimed key — which is all
+   "I am totem npub X" can mean without a transport-authenticated key, and
+   impersonating a *specific* totem remains impossible without its key.
+5. On a positive verdict, the totem proceeds with totem behavior: open the
    relay websocket, run sync (`03-network.md`), and update its kind 3 contact
    list with the peer's npub.
 
-The same probe works on the WiFi AP path: any client reaching the standard
-relay port can read the NIP-11 document, and a totem joining another totem's
-AP as a station recognizes it identically.
+The same probe + challenge works on the WiFi AP path: a totem joining another
+totem's AP as a station recognizes it identically.
 
-Probe verdicts SHOULD be cached per npub so re-encounters skip the probe.
+Recognition verdicts are per-encounter; nothing is cached across encounters.
 
 ### Why not alternatives
 
-- A dedicated HTTP "hello" endpoint works but any phone could claim
-  totemhood; it needs authentication, and signed nostr events already are
-  that. NIP-11 + npub match gives the same result with no new surface.
-  Whether a liveness/capability endpoint is needed beyond NIP-11 remains an
-  open question (`09-open-questions.md`).
-- Piggybacking the marker on FIPS node metadata would couple totem logic to
-  FIPS internals and duplicate what NIP-11 already standardizes.
+- **A persistent declaration event** stored in the relay is verifiable but
+  wastes a permanent record just for authentication. The ephemeral challenge
+  gives the same proof with nothing stored (signed ≠ stored).
+- **A bare HTTP "hello" endpoint** — any phone could claim totemhood; it
+  needs authentication, and the challenge response already is that, reusing
+  standard nostr signing.
+- **Piggybacking the marker on FIPS node metadata** — couples totem logic to
+  FIPS internals and duplicates what NIP-11 + the challenge already do.
+- **Formally specifying FIPS endpoint binding** — unnecessary: the npub match
+  in step 4 does the binding.
 
 ## Contacts
 
@@ -81,6 +88,9 @@ Inter-totem relations use standard **NIP-02 kind 3** contact/follow lists:
 - This is deliberately plain nostr — flat, self-signed, stored in the relay
   like any other event. No contact-database format is invented; storage is
   the relay DB the totem already has.
+- All kind 3 updates are issued by the **net code — the totem's single
+  writer** — so follow-list updates are serialized read-modify-sign-write by
+  construction.
 
 ## Relations ride the sync pipeline
 

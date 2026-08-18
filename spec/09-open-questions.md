@@ -43,9 +43,12 @@ Status: Draft (living document — shrinks as we resolve)
 ### Relay / sync
 
 - Relay policy: what may guest users write? Should FIPS-authenticated peers
-  and anonymous AP guests be treated differently?
-- Sync semantics: direction, filters, payload limits — especially over
-  Bluetooth.
+  and anonymous AP guests be treated differently? If yes, **NIP-42 relay
+  auth** is the mechanism to bind connection identity at the relay — parked,
+  not a v1 promise.
+- Moderated content returning via sync: likely answer is that **NIP-09
+  deletion (kind 5) events** propagate through sync like ordinary events and
+  suppress what they reference. Post-demo validation.
 - Scale limits on constrained hardware: event volume, storage budget, sync
   duration during a brief encounter.
 

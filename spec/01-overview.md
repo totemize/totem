@@ -92,5 +92,6 @@ and peripherals is abstracted by the kernel.
 | **Owner** | The human administrator of a totem. |
 | **Guest** | Any non-owner user connecting to a totem. |
 | **Net code** | The totem software implementing the network layer behavior. |
+| **Pairing** | The full encounter sequence between totems: link → authenticate → recognize → befriend (`03-network.md`). |
 | **Kernel** | The layer abstracting hardware access. See `05-kernel.md`. |
 | **Happlet** | (Provisional name) a headless nostr applet. See `05-kernel.md`. |

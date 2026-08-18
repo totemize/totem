@@ -53,8 +53,8 @@ recognition probe is defined in `02-identity.md`):
 1. **Link.** Transports discover each other (FIPS beaconing / AP join).
    FIPS authenticates both sides; each learns the other's npub.
 2. **Recognize.** Each totem probes the other's standard relay port with a
-   NIP-11 request and checks the totem marker + npub match
-   (`02-identity.md`).
+   NIP-11 request and checks the totem marker, then runs the challenge to
+   authenticate the claim (`02-identity.md`).
 3. **Befriend.** Each totem publishes a kind 3 contact event following the
    other (`02-identity.md`).
 4. **Sync.** Both relays run NIP-77 negentropy reconciliation over the same
@@ -73,8 +73,8 @@ recognition probe is defined in `02-identity.md`):
 - **Resumability:** syncs SHOULD tolerate interruption (brief encounters);
   a next encounter resumes from the reconciled state.
 
-Direction, filters, and payload limits — especially over Bluetooth — are open
-questions (`09-open-questions.md`).
+Sync is plain NIP-77 (`references/negentropy.md`) — negentropy defines its
+own semantics; Totem adds no sync profile on top.
 
 ## AP-station fallback
 

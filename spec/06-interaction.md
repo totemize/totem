@@ -57,13 +57,22 @@ determines *which notes are in the DB* and *who can reach it*.
 
 | Role | What they do | How |
 |------|--------------|-----|
-| **Owner** | Sees and controls the state of the totem | The web app on the standard HTTP port |
+| **Owner** | Sees and controls the state of the totem | The web app on the standard HTTP port, authenticated with NIP-98 |
 | **Guest** | Reads notes, posts notes | Any nostr client pointed at the relay URL; the web app surfaces that URL |
 | **FIPS peer** | Same as guest, but authenticated | Reaches the standard ports over the mesh |
 
 Asymmetry to note: a FIPS-connected user arrives with a verified npub, while
 a WiFi guest is an anonymous IP. Relay policy may treat them differently
 later (`09-open-questions.md`).
+
+### Owner authentication
+
+Control-plane operations in the web app MUST require **NIP-98 HTTP
+authentication** — an ephemeral signed event in the `Authorization` header,
+the same mechanism totem recognition uses (`02-identity.md`). Unauthenticated
+requests receive read-only access (state and the relay URL, nothing else),
+so guests can never invoke control-plane operations. Initial provisioning
+and key recovery remain open questions (`09-open-questions.md`).
 
 ## Guest experience
 
