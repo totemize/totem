@@ -2,7 +2,6 @@ import asyncio
 import logging
 from typing import Dict, List, Set, Callable, Awaitable, Any, Optional
 from fastapi import WebSocket
-import json
 
 from service.models import DeviceEvent, DeviceId, DeviceType, EventType
 
@@ -33,14 +32,16 @@ class EventManager:
             for device_type in DeviceType
         }
         
-        # Create an event loop
-        self.loop = asyncio.get_event_loop()
-        
         # Event queue
         self.event_queue: asyncio.Queue[DeviceEvent] = asyncio.Queue()
         
-        # Start the event processor
-        self.processor_task = asyncio.create_task(self._process_events())
+        # Tasks are started explicitly from the application's lifespan.
+        self.processor_task: Optional[asyncio.Task] = None
+
+    async def start(self):
+        """Start event processing inside a running event loop."""
+        if self.processor_task is None or self.processor_task.done():
+            self.processor_task = asyncio.create_task(self._process_events())
         
     async def connect(self, websocket: WebSocket):
         """Register a new WebSocket connection"""
@@ -50,7 +51,7 @@ class EventManager:
     
     async def disconnect(self, websocket: WebSocket):
         """Remove a WebSocket connection"""
-        self.active_connections.remove(websocket)
+        self.active_connections.discard(websocket)
         logger.info(f"WebSocket client disconnected. Remaining connections: {len(self.active_connections)}")
     
     async def publish_event(self, event: DeviceEvent):
@@ -76,6 +77,8 @@ class EventManager:
                 
                 # Mark the task as done
                 self.event_queue.task_done()
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 logger.error(f"Error processing event: {e}")
     
@@ -96,7 +99,7 @@ class EventManager:
         
         # Remove dead connections
         for dead_connection in dead_connections:
-            self.active_connections.remove(dead_connection)
+            self.active_connections.discard(dead_connection)
     
     async def _notify_subscribers(self, event: DeviceEvent):
         """Notify registered callback functions for this device and event type"""
@@ -141,8 +144,14 @@ class EventManager:
         
         return unsubscribe
     
-    def shutdown(self):
+    async def shutdown(self):
         """Shut down the event manager"""
         if self.processor_task:
             self.processor_task.cancel()
-        logger.info("EventManager shut down") 
+            try:
+                await self.processor_task
+            except asyncio.CancelledError:
+                pass
+            self.processor_task = None
+        self.active_connections.clear()
+        logger.info("EventManager shut down")

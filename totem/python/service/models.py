@@ -22,6 +22,10 @@ class Status(BaseModel):
     message: str
 
 
+class StorageReadResponse(Status):
+    data_base64: str
+
+
 class DeviceState(BaseModel):
     device: DeviceId
     state: Dict[str, Any] = Field(default_factory=dict)
@@ -99,4 +103,4 @@ class NetworkConfigurationRequest(BaseModel):
     device_id: str = "default"
     ssid: str
     password: str
-    is_hotspot: bool = False 
+    is_hotspot: bool = False
