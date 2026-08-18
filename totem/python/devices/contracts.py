@@ -49,7 +49,17 @@ class DeviceDriver(ABC):
 
     @property
     def is_mock(self) -> bool:
-        return bool(self.IS_MOCK or getattr(self, "mock_mode", False))
+        implicit_transport = (
+            hasattr(self, "USE_HARDWARE") and not self.USE_HARDWARE
+        ) or (
+            hasattr(self, "hardware_available")
+            and not self.hardware_available
+        )
+        return bool(
+            self.IS_MOCK
+            or getattr(self, "mock_mode", False)
+            or implicit_transport
+        )
 
     def health(self) -> DriverHealth:
         initialized = bool(getattr(self, "initialized", False))

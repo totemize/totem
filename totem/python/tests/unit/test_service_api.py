@@ -2,9 +2,13 @@ import asyncio
 import base64
 
 from fastapi.testclient import TestClient
+import pytest
 
 from service.event_manager import EventManager
 from service.main import create_app
+
+
+pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
 
 
 class FakeDisplayManager:

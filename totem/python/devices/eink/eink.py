@@ -1,10 +1,14 @@
 from abc import abstractmethod
-import importlib
 import os
-import subprocess
 from typing import Optional
 from utils.logger import logger
 from devices.contracts import DeviceDriver
+from devices.registry import (
+    DriverRegistry,
+    DriverSpec,
+    HardwareNotFoundError,
+    MockDriverNotAllowedError,
+)
 
 # src/devices/eink/eink.py
 
@@ -30,16 +34,42 @@ class EInkDeviceInterface(DeviceDriver):
         pass
 
 
+EINK_DRIVERS = DriverRegistry(
+    EInkDeviceInterface,
+    (
+        DriverSpec("waveshare_2in13", "devices.eink.drivers.waveshare_2in13"),
+        DriverSpec(
+            "waveshare_2in13_pi5", "devices.eink.drivers.waveshare_2in13_pi5"
+        ),
+        DriverSpec(
+            "waveshare_2in13_pi5_sw_cs",
+            "devices.eink.drivers.waveshare_2in13_pi5_sw_cs",
+        ),
+        DriverSpec("waveshare_3in7", "devices.eink.drivers.waveshare_3in7"),
+        DriverSpec(
+            "waveshare_3in7_pi5", "devices.eink.drivers.waveshare_3in7_pi5"
+        ),
+        DriverSpec("mock_eink", "devices.eink.drivers.mock_eink", is_mock=True),
+    ),
+)
+
+
 class EInk:
-    def __init__(self, driver_name: Optional[str] = None):
+    def __init__(
+        self, driver_name: Optional[str] = None, *, allow_mock: bool = False
+    ):
+        self.allow_mock = allow_mock
         if driver_name:
             self.driver = self._load_driver_by_name(driver_name)
         else:
             detected_driver = self._detect_hardware()
             if detected_driver:
                 self.driver = self._load_driver_by_name(detected_driver)
+            elif allow_mock:
+                logger.warning("No hardware detected; explicit mock mode is enabled.")
+                self.driver = self._load_driver_by_name("mock_eink")
             else:
-                raise RuntimeError("No compatible E-Ink hardware detected.")
+                raise HardwareNotFoundError("No supported E-Ink hardware detected")
 
     def _detect_hardware(self) -> Optional[str]:
         logger.info("Detecting E-Ink hardware...")
@@ -95,20 +125,18 @@ class EInk:
         return None
 
     def _load_driver_by_name(self, driver_name: str) -> EInkDeviceInterface:
-        try:
-            module_path = f"devices.eink.drivers.{driver_name}"
-            module = importlib.import_module(module_path)
-            driver_class = getattr(module, 'Driver')
-            if not issubclass(driver_class, EInkDeviceInterface):
-                raise TypeError(f"{driver_name} does not implement EInkDeviceInterface")
-            logger.info(f"Loaded driver: {driver_name}")
-            return driver_class()
-        except (ImportError, AttributeError, TypeError) as e:
-            logger.error(f"Error loading driver '{driver_name}': {e}")
-            raise
+        driver = EINK_DRIVERS.load(driver_name, allow_mock=self.allow_mock)
+        logger.info(f"Loaded driver: {driver_name}")
+        return driver
 
-    def initialize(self):
-        self.driver.init()
+    def initialize(self, *args, **kwargs):
+        result = self.driver.init(*args, **kwargs)
+        if self.driver.is_mock and not self.allow_mock:
+            self.driver.close()
+            raise MockDriverNotAllowedError(
+                "E-Ink hardware initialization selected an implicit mock transport"
+            )
+        return result
 
     def clear_display(self):
         self.driver.clear()

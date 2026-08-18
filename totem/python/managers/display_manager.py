@@ -19,7 +19,9 @@ class DisplayManager:
     - Otherwise, direct hardware access is used
     """
     
-    def __init__(self, driver_name: Optional[str] = None):
+    def __init__(
+        self, driver_name: Optional[str] = None, *, allow_mock: bool = False
+    ):
         """
         Initialize the DisplayManager
         
@@ -41,15 +43,10 @@ class DisplayManager:
                 self.eink_device = None  # We don't need a direct device in client mode
             else:
                 logger.debug(f"Initializing DisplayManager in direct hardware mode with driver: {driver_name if driver_name else 'auto-detect'}")
-                self.eink_device = EInk(driver_name)
+                self.eink_device = EInk(driver_name, allow_mock=allow_mock)
                 self.eink_client = None
                 
-                # Initialize with parameters if it's the 3.7 inch display (like in manufacturer example)
-                if driver_name and ('3in7' in driver_name):
-                    logger.debug("Initializing 3.7 inch display with parameter 0")
-                    self.eink_device.driver.init(0)  # 3.7 inch display requires a parameter
-                else:
-                    self.eink_device.initialize()
+                self.eink_device.initialize()
                     
                 logger.info(f"Display dimensions: {self.eink_device.driver.width}x{self.eink_device.driver.height}")
         except Exception as e:

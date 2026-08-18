@@ -12,7 +12,11 @@ from devices.nvme.nvme import NVMEDeviceInterface
 from devices.wifi.wifi import WiFiDeviceInterface
 
 
+pytestmark = pytest.mark.unit
+
+
 DRIVERS = (
+    ("devices.eink.drivers.mock_eink", EInkDeviceInterface),
     ("devices.eink.drivers.waveshare_2in13", EInkDeviceInterface),
     ("devices.eink.drivers.waveshare_2in13_pi5", EInkDeviceInterface),
     ("devices.eink.drivers.waveshare_2in13_pi5_sw_cs", EInkDeviceInterface),
@@ -58,7 +62,11 @@ def test_driver_implements_declared_contract(module_name, interface):
 
 @pytest.mark.parametrize(
     "module_name",
-    ("devices.nfc.drivers.mock_nfc", "devices.wifi.drivers.mock_wifi"),
+    (
+        "devices.eink.drivers.mock_eink",
+        "devices.nfc.drivers.mock_nfc",
+        "devices.wifi.drivers.mock_wifi",
+    ),
 )
 def test_mock_driver_reports_mock_health(module_name):
     driver = importlib.import_module(module_name).Driver()

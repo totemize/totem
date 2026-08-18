@@ -572,6 +572,8 @@ class Driver(EInkDeviceInterface):
         
         # Create the underlying driver
         self.epd = WaveshareEPD3in7()
+        self.initialized = False
+        self.mock_mode = self.epd.mock_mode
         
         # Store dimensions for convenience
         self.width = self.epd.width
@@ -592,7 +594,10 @@ class Driver(EInkDeviceInterface):
         """Initialize the e-ink device."""
         print("Driver.init() called")
         # Always initialize in 4Gray mode (0) as in the manufacturer's example
-        self.epd.init(0)  # Initialize in 4Gray mode
+        result = self.epd.init(0)  # Initialize in 4Gray mode
+        self.initialized = True
+        self.mock_mode = self.epd.mock_mode
+        return result
     
     def clear(self):
         """Clear the e-ink display."""
@@ -648,4 +653,4 @@ class Driver(EInkDeviceInterface):
             resize: Whether to resize the image to fit the display (default: True)
         """
         print(f"Driver.display_file() called with: '{file_path}', resize={resize}")
-        self.epd.display_file(file_path, resize) 
+        self.epd.display_file(file_path, resize)

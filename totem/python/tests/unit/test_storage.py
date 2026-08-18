@@ -8,6 +8,9 @@ from devices.nvme.storage import StorageOptionsError, StoragePathError
 from managers.storage_manager import StorageManager
 
 
+pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
+
+
 @pytest.fixture(params=(FilesystemDriver, GenericNVMeDriver))
 def storage_driver(request, tmp_path):
     driver = request.param(root=tmp_path)

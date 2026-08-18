@@ -38,7 +38,7 @@ def _default_manager_factories() -> Dict[str, ManagerFactory]:
     def display():
         from managers.display_manager import DisplayManager
 
-        return DisplayManager()
+        return DisplayManager(allow_mock=allow_mock)
 
     def nfc():
         from managers.nfc_manager import NFCManager

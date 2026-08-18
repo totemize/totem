@@ -2,15 +2,24 @@ from unittest.mock import patch
 
 import pytest
 
+from devices.eink.eink import EINK_DRIVERS, EInk
 from devices.nfc.nfc import NFC, NFC_DRIVERS
 from devices.registry import HardwareNotFoundError, MockDriverNotAllowedError
 from devices.wifi.wifi import WIFI_DRIVERS, WiFi
+
+
+pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
 
 
 def test_nfc_registry_uses_case_safe_module_names():
     assert NFC_DRIVERS.names == ("acr122", "mock_nfc", "pn532")
     assert type(NFC("acr122").driver).__module__.endswith(".ACR122")
     assert type(NFC("pn532").driver).__module__.endswith(".PNC532")
+
+
+def test_eink_registry_exposes_only_supported_drivers():
+    assert "mock_eink" in EINK_DRIVERS.names
+    assert "waveshare_3in7_pi5" in EINK_DRIVERS.names
 
 
 def test_nfc_usb_detection_parses_lsusb_output():
@@ -41,7 +50,7 @@ def test_wifi_detection_resolves_onboard_driver():
 
 @pytest.mark.parametrize(
     ("factory", "mock_name"),
-    ((NFC, "mock_nfc"), (WiFi, "mock_wifi")),
+    ((EInk, "mock_eink"), (NFC, "mock_nfc"), (WiFi, "mock_wifi")),
 )
 def test_mock_drivers_require_explicit_permission(factory, mock_name):
     with pytest.raises(MockDriverNotAllowedError):
@@ -50,7 +59,7 @@ def test_mock_drivers_require_explicit_permission(factory, mock_name):
     assert factory(mock_name, allow_mock=True).driver.is_mock
 
 
-@pytest.mark.parametrize("factory", (NFC, WiFi))
+@pytest.mark.parametrize("factory", (EInk, NFC, WiFi))
 def test_detection_failure_does_not_fall_back_to_mock(factory):
     with patch.object(factory, "_detect_hardware", return_value=None):
         with pytest.raises(HardwareNotFoundError):
@@ -59,10 +68,22 @@ def test_detection_failure_does_not_fall_back_to_mock(factory):
 
 @pytest.mark.parametrize(
     ("factory", "expected_module"),
-    ((NFC, "mock_nfc"), (WiFi, "mock_wifi")),
+    (
+        (EInk, "mock_eink"),
+        (NFC, "mock_nfc"),
+        (WiFi, "mock_wifi"),
+    ),
 )
 def test_detection_failure_allows_explicit_mock(factory, expected_module):
     with patch.object(factory, "_detect_hardware", return_value=None):
         driver = factory(allow_mock=True).driver
     assert driver.is_mock
     assert driver.__class__.__module__.endswith("." + expected_module)
+
+
+def test_eink_rejects_driver_that_becomes_mock_during_initialization():
+    display = EInk("mock_eink", allow_mock=True)
+    display.allow_mock = False
+
+    with pytest.raises(MockDriverNotAllowedError):
+        display.initialize()

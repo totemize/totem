@@ -2,6 +2,32 @@
 
 This directory contains utilities for testing and using the EInk display.
 
+## Automated Test Suites
+
+The deterministic suite is isolated under `tests/unit` and uses drivers marked
+`mock_transport`; it is safe on ordinary Linux CI runners:
+
+```bash
+pytest -m "unit and not hardware"
+```
+
+Physical-device checks live under `tests/hardware`, carry the `hardware`
+marker, and are skipped unless the operator explicitly opts in:
+
+```bash
+pytest tests/hardware -m hardware --run-hardware
+```
+
+Set `TOTEM_HARDWARE_COMPONENTS` to a comma-separated subset of
+`display,nfc,wifi,nvme` when a runner has only some devices attached. Display
+hardware also requires `TOTEM_EINK_DRIVER`. The older modules elsewhere in
+this directory are interactive diagnostics and are not collected by the
+automated pytest configuration.
+
+Mock drivers used through managers or the API require an explicit
+`allow_mock=True` or `TOTEM_ALLOW_MOCK_DRIVERS=1`; absence of hardware no
+longer silently selects a mock transport.
+
 ## Test Structure
 
 All E-ink display tests have been consolidated into the `eink` subdirectory to reduce duplication and improve maintainability. The main entry point is now `system_test.py`, which can run any of the specialized tests as needed.
@@ -106,4 +132,4 @@ A shell script for testing the EInk display in NVME-compatible mode.
 ./run_eink_nvme_compatible.sh "Your message here"
 ```
 
-The script checks GPIO pin availability before attempting to use the display, and uses NVME-compatible pin settings 
+The script checks GPIO pin availability before attempting to use the display, and uses NVME-compatible pin settings
