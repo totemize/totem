@@ -1,13 +1,14 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import importlib
 import os
 import subprocess
 from typing import Optional
 from utils.logger import logger
+from devices.contracts import DeviceDriver
 
 # src/devices/eink/eink.py
 
-class EInkDeviceInterface(ABC):
+class EInkDeviceInterface(DeviceDriver):
     @abstractmethod
     def init(self):
         """Initialize the e-ink device."""

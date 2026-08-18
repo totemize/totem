@@ -1,12 +1,13 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import importlib
 import os
 import sys
 import subprocess
 from typing import Type, Optional
 from utils.logger import logger
+from devices.contracts import DeviceDriver
 
-class NFCDeviceInterface(ABC):
+class NFCDeviceInterface(DeviceDriver):
     @abstractmethod
     def init(self):
         """Initialize the NFC device."""

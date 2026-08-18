@@ -2,6 +2,8 @@ from devices.nfc.nfc import NFCDeviceInterface
 from utils.logger import logger
 
 class Driver(NFCDeviceInterface):
+    IS_MOCK = True
+
     def __init__(self):
         self.initialized = False
         self.stored_data = b"Mock NFC Card Data"
@@ -22,4 +24,4 @@ class Driver(NFCDeviceInterface):
             raise RuntimeError("Mock NFC driver not initialized.")
         logger.info(f"Writing data to Mock NFC card: {data}")
         self.stored_data = data
-        logger.info("Data written successfully to Mock NFC card.") 
+        logger.info("Data written successfully to Mock NFC card.")

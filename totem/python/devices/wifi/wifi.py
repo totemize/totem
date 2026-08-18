@@ -1,12 +1,13 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import importlib
 import os
 import subprocess
 import sys
 from typing import Optional
 from utils.logger import logger
+from devices.contracts import DeviceDriver
 
-class WiFiDeviceInterface(ABC):
+class WiFiDeviceInterface(DeviceDriver):
     @abstractmethod
     def init(self):
         """Initialize the Wi-Fi device."""

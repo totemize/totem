@@ -28,7 +28,7 @@ class Driver(NVMEDeviceInterface):
             logger.error(f"Error reading from {file_path}: {e}")
             raise
 
-    def write_file(self, file_path, data):
+    def write_file(self, file_path, data, options=None):
         """
         Write data to a file.
         
@@ -51,4 +51,4 @@ class Driver(NVMEDeviceInterface):
             return True
         except Exception as e:
             logger.error(f"Error writing to {file_path}: {e}")
-            return False 
+            return False

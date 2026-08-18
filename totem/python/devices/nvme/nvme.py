@@ -1,11 +1,12 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import importlib
 import os
 import subprocess
 from typing import Optional
 from utils.logger import logger
+from devices.contracts import DeviceDriver
 
-class NVMEDeviceInterface(ABC):
+class NVMEDeviceInterface(DeviceDriver):
     @abstractmethod
     def init(self):
         """Initialize the NVME device."""
@@ -73,4 +74,4 @@ class NVME:
         return self.driver.read_file(file_path)
 
     def write_file(self, file_path, data, options=None):
-        return self.driver.write_file(file_path, data, options) 
+        return self.driver.write_file(file_path, data, options)

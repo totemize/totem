@@ -4,6 +4,8 @@ import random
 import time
 
 class Driver(WiFiDeviceInterface):
+    IS_MOCK = True
+
     def __init__(self):
         self.initialized = False
         self.connected = False
@@ -84,4 +86,4 @@ class Driver(WiFiDeviceInterface):
             clients = random.randint(0, 5)
             return f"Hotspot {self.hotspot_ssid} active with {clients} client(s)"
         else:
-            return "Disconnected" 
+            return "Disconnected"
