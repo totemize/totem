@@ -28,14 +28,20 @@ A totem MUST serve both on the ports registered here, on every on-ramp.
 
 ## NIP-11 totem marker
 
-The relay's NIP-11 info document MUST include a **totem marker**: a
-namespaced object (field name **TBD**) carrying at minimum:
-
-- `version` — the Totem spec version the totem implements;
-- capability fields as needed (e.g. supported optional behaviors).
+The relay's NIP-11 info document MUST include a **totem marker**: a boolean
+field (name **TBD**) that is `true` when the host is a totem.
 
 The marker is the recognition *hint*; authentication is the challenge in
-`02-identity.md`. A missing marker means "not a totem".
+`02-identity.md`. A missing marker or `false` means "not a totem".
+
+## Challenge protocol
+
+Values for the recognition challenge (`02-identity.md`):
+
+- Endpoint path: **TBD** (placeholder `/totem/challenge`).
+- Challenge event kind: **TBD** — NIP-98's 27235 with an added `nonce` tag,
+  or a NIP-01 ephemeral kind (20000–29999).
+- Freshness window for `created_at`: **TBD**.
 
 ## Key encoding
 

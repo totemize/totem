@@ -36,10 +36,69 @@ regular user peer.
 ### Declaration (the hint)
 
 A totem advertises itself in its relay's NIP-11 info document: a **totem
-marker** — a namespaced object carrying the Totem spec version and capability
-fields (schema in `07-conventions.md`). This is an unsigned **hint**: a cheap
-pre-filter so peers only run the authentication challenge at things that look
-like totems. It authenticates nothing by itself.
+marker** — a boolean field (schema in `07-conventions.md`). This is an
+unsigned **hint**: a cheap pre-filter so peers only run the authentication
+challenge at things that look like totems. It authenticates nothing by
+itself.
+
+### Challenge (the proof)
+
+The NIP-11 marker is only a hint; recognition is proven by a challenge —
+the NIP-98/NIP-42 pattern (verifier issues a nonce, prover returns a fresh
+signed event bound to it) played over plain HTTP on the same server that
+serves NIP-11:
+
+```
+Totem A (prober)                         Totem B (peer)
+      │                                        │
+ 1.   │ GET /  (Accept: nostr+json)            │
+      │───────────────────────────────────────▶│
+ 2.   │ 200 NIP-11 doc with totem marker       │  ← unsigned hint
+      │◀───────────────────────────────────────│
+ 3.   │ A mints a nonce (16 random bytes hex)  │
+      │ GET /totem/challenge?nonce=9a3f..c1    │
+      │───────────────────────────────────────▶│
+ 4.   │ B signs an event over the nonce:       │
+      │ 200 { "event": {...} }                 │
+      │◀───────────────────────────────────────│
+ 5.   │ A verifies, then discards nonce+event  │
+```
+
+The signed event is never published or stored anywhere:
+
+```json
+{
+  "kind": 27235,
+  "pubkey": "<B's hex pubkey>",
+  "created_at": 1731974400,
+  "tags": [
+    ["nonce", "9a3f...c1"],
+    ["u", "http://[B-addr]:PORT/totem/challenge"],
+    ["method", "GET"]
+  ],
+  "content": "",
+  "sig": "<signature>"
+}
+```
+
+The prober's verification checklist:
+
+1. the signature is valid for `pubkey` (proof of key control);
+2. `pubkey` matches the expected npub — over FIPS the transport-authenticated
+   peer npub, over AP the npub claimed in the NIP-11 document;
+3. the `nonce` tag equals the nonce sent (binds response to this exchange);
+4. `created_at` is fresh (window **TBD**, `07-conventions.md`).
+
+Pass → totem. Anything else → not a totem; ignore.
+
+Properties: the challenge is one-way (mutual recognition is the symmetric
+exchange, both directions in parallel during pairing); stateless on both
+sides; replay-proof by construction (single-use nonce + freshness window);
+and it rides the HTTP server already required for NIP-11 — no new listener.
+
+Values to pin in `07-conventions.md` after the spike: the endpoint path, the
+kind number (NIP-98's 27235 with an added `nonce` tag, or a NIP-01
+ephemeral kind 20000–29999), and the freshness window.
 
 ### Recognition flow
 
@@ -47,15 +106,16 @@ like totems. It authenticates nothing by itself.
    *(peer npub, routable address)*.
 2. The net code probes the standardized relay port with a NIP-11 request.
    No marker → the peer is not a totem; ignore it.
-3. **Challenge.** The probing totem sends a nonce; the peer answers with a
-   NIP-98-style ephemeral signed event over the nonce (and its totem claim).
-   The response is verified and discarded — it is never stored in any relay.
+3. **Challenge.** The probing totem runs the challenge protocol above with
+   the peer. The response is verified and discarded — it is never stored in
+   any relay.
 4. **Verdict.** Over FIPS, the signing npub MUST match the
    transport-authenticated npub — recognition is fully bound to the mesh
    identity, and no separate endpoint-binding proof is needed. Over the AP
    path, the signature proves control of the claimed key — which is all
    "I am totem npub X" can mean without a transport-authenticated key, and
    impersonating a *specific* totem remains impossible without its key.
+   (Checklist step 2 above.)
 5. On a positive verdict, the totem proceeds with totem behavior: open the
    relay websocket, run sync (`03-network.md`), and update its kind 3 contact
    list with the peer's npub.
