@@ -62,9 +62,9 @@ Status: Draft (living document — shrinks as we resolve)
   the parties? Encounter records: wanted, and at what visibility? (An open
   contact graph publishes physical movement and social patterns.)
 - Key management: does the owner use the totem's npub or a separate admin
-  npub? What happens to contacts and mesh identity on key rotation?
-- Is any HTTP liveness/capability endpoint needed beyond NIP-11 and signed
-  events?
+  npub? What happens to contacts and mesh identity on key rotation? (v1
+  defaults to an admin npub allowlist on the control plane,
+  `10-control-plane.md`.)
 
 ### Guest experience
 
@@ -72,6 +72,6 @@ Status: Draft (living document — shrinks as we resolve)
 
 ### Conventions (values to pin)
 
-- Port numbers for relay and web app (`07-conventions.md`).
+- Port numbers for relay, web app, and loopback bus (`07-conventions.md`).
 - AP gateway address / ULA choice; captive portal yes/no.
-- NIP-11 marker field name (`07-conventions.md`).
+- Challenge `created_at` freshness window (`07-conventions.md`).

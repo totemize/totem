@@ -35,11 +35,14 @@ regular user peer.
 
 ### Declaration (the hint)
 
-A totem advertises itself in its relay's NIP-11 info document: a **totem
-marker** — a boolean field (schema in `07-conventions.md`). This is an
-unsigned **hint**: a cheap pre-filter so peers only run the authentication
-challenge at things that look like totems. It authenticates nothing by
-itself.
+A totem advertises itself in its relay's NIP-11 info document using
+**standard NIP-11 fields only** (`07-conventions.md`): the relay `name`
+carries the totem marker (a `!Totem` prefix), and `self` carries the device
+npub. This is an unsigned **hint**: a cheap pre-filter so peers only run the
+authentication challenge at things that look like totems. It authenticates
+nothing by itself — and because both fields are standard, any conforming
+relay whose operator can set them can declare totemhood: no relay fork, no
+proxy in front of the relay, no custom schema.
 
 ### Challenge (the proof)
 
@@ -51,15 +54,15 @@ serves NIP-11:
 ```
 Totem A (prober)                         Totem B (peer)
       │                                        │
- 1.   │ GET /  (Accept: nostr+json)            │
+ 1.   │ GET /  (Accept: nostr+json)            │  ← relay port
       │───────────────────────────────────────▶│
  2.   │ 200 NIP-11 doc with totem marker       │  ← unsigned hint
       │◀───────────────────────────────────────│
  3.   │ A mints a nonce (16 random bytes hex)  │
-      │ GET /totem/challenge?nonce=9a3f..c1    │
+      │ GET /totem/challenge?nonce=9a3f..c1    │  ← web port (totemd)
       │───────────────────────────────────────▶│
- 4.   │ B signs an event over the nonce:       │
-      │ 200 { "event": {...} }                 │
+ 4.   │ B's control plane signs an event over │
+      │ the nonce: 200 { "event": {...} }      │
       │◀───────────────────────────────────────│
  5.   │ A verifies, then discards nonce+event  │
 ```
@@ -94,11 +97,13 @@ Pass → totem. Anything else → not a totem; ignore.
 Properties: the challenge is one-way (mutual recognition is the symmetric
 exchange, both directions in parallel during pairing); stateless on both
 sides; replay-proof by construction (single-use nonce + freshness window);
-and it rides the HTTP server already required for NIP-11 — no new listener.
+and it rides the totem's web server (`10-control-plane.md`) — no listener
+beyond the web port a totem serves anyway, and no involvement of the relay
+server at all.
 
-Values to pin in `07-conventions.md` after the spike: the endpoint path, the
-kind number (NIP-98's 27235 with an added `nonce` tag, or a NIP-01
-ephemeral kind 20000–29999), and the freshness window.
+Values are pinned in `07-conventions.md`: the endpoint is `/totem/challenge`
+on the web-app port, and the event kind is 27235 (NIP-98's) with an added
+`nonce` tag. The freshness window is still TBD there.
 
 ### Recognition flow
 

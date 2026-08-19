@@ -29,4 +29,4 @@ working environment.
 
 | Date | Summary |
 |------|---------|
-| [2026-08-19](journal/2026-08-19.md) | FIPS bring-up triage on totem; metot onboarding; mesh detection checks (ping, DNS, NIP-11 both directions); LAN-vs-mesh benchmark; nak armv6 build + cross-relay NIP-77 sync (host & device-side); nostr-ops benchmark: publish + negentropy via nak vs `strfry sync` (14×/80×/11× — daemon will orchestrate strfry sync); spec: radio modes + `!Totem` AP conventions; AGENTS.md created |
+| [2026-08-19](journal/2026-08-19.md) | FIPS bring-up triage on totem; metot onboarding; mesh detection checks (ping, DNS, NIP-11 both directions); LAN-vs-mesh benchmark; nak armv6 build + cross-relay NIP-77 sync (host & device-side); nostr-ops benchmark: publish + negentropy via nak vs `strfry sync` (14×/80×/11× — daemon will orchestrate strfry sync); spec: radio modes + `!Totem` AP conventions; AGENTS.md created; repo reduced to Python hw stack (PR #9); totemd design session — control plane specced (`spec/10`): no relay proxy, marker via NIP-11 `name`/`self`, challenge on web port, NIP-5D bus over loopback HTTP/SSE, totemctl client |
