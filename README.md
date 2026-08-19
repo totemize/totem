@@ -41,8 +41,8 @@ Useful environment variables:
 
 - `TOTEM_ALLOW_MOCK_DRIVERS=1`: explicitly permit mock transports.
 - `TOTEM_STORAGE_ROOT=/var/lib/totem/storage`: confine filesystem storage.
-- `TOTEM_EINK_DRIVER=waveshare_3in7_pi5`: select a display in hardware tests.
-- `EINK_DISPLAY_TYPE=2in13|3in7`: guide display auto-detection.
+- `TOTEM_EINK_DRIVER=waveshare_2in13_v3`: select an exact display driver in hardware tests.
+- `EINK_DISPLAY_TYPE=2in13_v1|2in13_v2|2in13_v3|2in13_v4|3in7`: guide display auto-detection.
 - `TOTEM_HARDWARE_COMPONENTS=display,nfc,network,storage`: select hardware tests.
 
 ## Test

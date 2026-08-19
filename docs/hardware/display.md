@@ -4,19 +4,37 @@ Totem supports these registered display drivers:
 
 | Driver | Panel | Host |
 |---|---|---|
-| `waveshare_2in13` | Waveshare 2.13-inch | Raspberry Pi 4 and earlier |
+| `waveshare_2in13_v1` | Original Waveshare 2.13-inch | Raspberry Pi 4 and earlier |
+| `waveshare_2in13_v2` | Waveshare 2.13-inch V2 panel | Raspberry Pi 4 and earlier |
+| `waveshare_2in13_v3` | Waveshare 2.13-inch V3 | Raspberry Pi 4 and earlier |
+| `waveshare_2in13_v4` | Waveshare 2.13-inch V4 | Raspberry Pi 4 and earlier |
+| `waveshare_2in13` | Compatibility alias for `waveshare_2in13_v2` | Raspberry Pi 4 and earlier |
 | `waveshare_2in13_pi5` | Waveshare 2.13-inch | Raspberry Pi 5 |
 | `waveshare_2in13_pi5_sw_cs` | Waveshare 2.13-inch, software chip select | Raspberry Pi 5 |
 | `waveshare_3in7` | Waveshare 3.7-inch | Generic Raspberry Pi |
 | `waveshare_3in7_pi5` | Waveshare 3.7-inch | Raspberry Pi 5 |
 | `mock_eink` | In-memory test transport | Development and CI |
 
-Set `EINK_DISPLAY_TYPE` to `2in13` or `3in7` when using auto-detection. For
+Set `EINK_DISPLAY_TYPE` to `2in13_v1`, `2in13_v2`, `2in13_v3`,
+`2in13_v4`, or `3in7` when using
+auto-detection (`2in13` remains a V2 alias). For
 hardware smoke tests, set `TOTEM_EINK_DRIVER` to an exact registered name.
 
-The default pin assignments are inherited from the Waveshare reference
-drivers. They can be overridden with `EINK_RST_PIN`, `EINK_DC_PIN`,
-`EINK_CS_PIN`, and `EINK_BUSY_PIN`. Pi 5 drivers use `gpiod` and `spidev`.
+The versioned drivers use Waveshare's standard HAT assignments: reset GPIO17,
+data/command GPIO25, busy GPIO24, power GPIO18, and SPI0 CE0. Pi 5 drivers use
+`gpiod` and `spidev`.
+
+The `Rev 2.1` silkscreen identifies the HAT/level-shifter board revision, not
+the e-paper controller revision. Select V1/V2/V3/V4 from the label on the panel
+or flex cable; do not infer it from `Rev 2.1`.
+
+Render text through the manager with an explicit revision:
+
+```bash
+PYTHONPATH=src python examples/display_text.py \
+  --driver waveshare_2in13_v3 \
+  --text $'hello world\n<3 totem'
+```
 
 Mock behavior must be explicit:
 

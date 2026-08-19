@@ -29,4 +29,4 @@ working environment.
 
 | Date | Summary |
 |------|---------|
-| [2026-08-19](journal/2026-08-19.md) | FIPS bring-up triage on totem; metot onboarding; mesh detection checks (ping, DNS, NIP-11 both directions); LAN-vs-mesh benchmark; nak armv6 build + cross-relay NIP-77 sync (host & device-side); nostr-ops benchmark: publish + negentropy via nak vs `strfry sync` (14×/80×/11× — daemon will orchestrate strfry sync); spec: radio modes + `!Totem` AP conventions; AGENTS.md created |
+| [2026-08-19](journal/2026-08-19.md) | FIPS bring-up triage; metot onboarding; mesh and NIP-77 sync benchmarks; versioned E-ink drivers deployed to the Pi Zero; display blocked by electrically floating BUSY/FPC path |

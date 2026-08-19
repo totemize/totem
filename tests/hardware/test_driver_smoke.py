@@ -27,6 +27,9 @@ def test_display_driver_initializes():
     display = EInk(driver_name)
     display.initialize()
     assert display.driver.health().operational
+    # Initialization alone cannot distinguish a connected idle panel from a
+    # floating BUSY line. A refresh must assert and release BUSY.
+    display.clear()
 
 
 def test_nfc_driver_initializes():
