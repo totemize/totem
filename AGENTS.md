@@ -13,6 +13,15 @@ that provides the `fips0` overlay network our devices run on) and
 `references/strfry/`. These are reference checkouts: read them, don't
 refactor them.
 
+## Journal (.journey/)
+
+The project keeps a dated journal in `.journey/journal/YYYY-MM-DD.md` —
+what was done, findings (measurements, bugs, gotchas), decisions and
+rationale. Start new sessions by reading the latest entries; when a
+session closes, append to today's file (create it if absent) and add a row
+to the index in `.journey/README.md`. Durable rules graduate from the
+journal into this file or the specs; the journal keeps the story.
+
 ## The Devices
 
 ### totem (test unit #1)
