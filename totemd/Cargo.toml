@@ -1,0 +1,7 @@
+[package]
+name = "totemd"
+version = "0.1.0"
+edition = "2021"
+license = "Unlicense"
+description = "Totem control-plane daemon and net code (spec/10-control-plane.md)"
+publish = false

@@ -1,0 +1,23 @@
+name: totemd
+
+on:
+  push:
+    paths:
+      - "totemd/**"
+      - ".github/workflows/rust.yml"
+  pull_request:
+    paths:
+      - "totemd/**"
+      - ".github/workflows/rust.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Linux / cargo check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo check --manifest-path totemd/Cargo.toml
