@@ -78,3 +78,68 @@ ssh totem 'systemctl status fips' # daemon health
 - TUN threads can die silently shortly after a `systemctl restart fips`:
   state latches `degraded`, `fips0` vanishes, forwarding counters freeze,
   nothing is logged. Fix: restart again. Upstream fix pending in fips.
+
+## Gotchas
+
+Things that cost us debugging time. Check here first when something
+"mysteriously" fails.
+
+### `.fips` names don't resolve via the system resolver (by design)
+
+Nothing wires `.fips` into the device resolver, and fips deliberately
+  doesn't hijack system DNS (its responder binds `[::1]:5354`). Apps query
+  it directly — this is the documented embedder path and what our net code
+  should use:
+
+```bash
+ssh totem 'python3 -c "...udp query to (\"::1\",5354)..."'   # see below
+```
+
+One-liner resolver (any device, any user):
+
+```python
+import socket
+q=b"\xab\xcd\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+for l in "<npub>.fips".split("."): q+=bytes([len(l)])+l.encode()
+q+=b"\x00\x00\x1c\x00\x01"
+s=socket.socket(socket.AF_INET6,socket.SOCK_DGRAM); s.settimeout(3)
+s.sendto(q,("::1",5354)); r=s.recvfrom(512)[0]
+print(socket.inet_ntop(socket.AF_INET6, r[-16:]))
+```
+
+Don't install resolver plumbing per-device (NM dnsmasq plugin etc.) —
+tried on totem, reverted 2026-08-19; devices stay symmetric.
+
+### strfry must bind IPv6: `bind = "::"`
+
+The mesh is IPv6-only (`fd00::/8`). Stock strfry binds `0.0.0.0` →
+mesh SYNs get RST ("Connection refused") while LAN and pings work.
+Fixed on both devices 2026-08-19 (`/etc/strfry.conf` line 44). Re-check
+after any strfry reinstall/config reset.
+
+### Dev host also runs fips
+
+The workstation runs its own fips node, so `.fips` ssh works from the
+host even though devices can't system-resolve `.fips`. Don't take host-
+side `.fips` success as evidence of device-side wiring.
+
+### Journal timestamps: local (WEST) vs fips logs: UTC
+
+journalctl prints local time (UTC+1); fips log lines are UTC. Subtract
+1h from journal-stamped fips lines when correlating with the log text.
+
+### Running `/usr/local/bin/fips` by hand as `totem` fails — on purpose
+
+`fips.key` is root:root 0600 (by design). A manual run exits 1 with
+"Permission denied". Daemon is systemd-managed; use `fipsctl`, never
+the binary.
+
+### NIP-11 needs the Accept header
+
+`curl http://host:7777/` returns empty; strfry serves the info doc only
+with `-H "Accept: application/nostr+json"`.
+
+### Restarting NetworkManager drops your ssh session
+
+The remote command keeps running — reconnect and verify state instead of
+assuming failure.
