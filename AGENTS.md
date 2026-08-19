@@ -13,9 +13,12 @@ that provides the `fips0` overlay network our devices run on) and
 `references/strfry/`. These are reference checkouts: read them, don't
 refactor them.
 
-## The Device ("totem", the test unit)
+## The Devices
+
+### totem (test unit #1)
 
 - Raspberry Pi (armv6l, Raspbian 13) at `192.168.8.136`.
+- FIPS npub: `npub1eu0clm0nsxwavcsj07at3sy7v52tuwgw4qpeqsyxgkeqg7krc7ps77c20q`
 - Runs `fips.service` (FIPS mesh daemon, binary at `/usr/local/bin/fips`,
   config at `/etc/fips/fips.yaml`, identity key `/etc/fips/fips.key` —
   root:root 0600 by design; do not loosen).
@@ -34,6 +37,16 @@ Also reachable over the FIPS mesh itself, by its mesh address
 
 ```bash
 ssh npub1eu0clm0nsxwavcsj07at3sy7v52tuwgw4qpeqsyxgkeqg7krc7ps77c20q.fips
+```
+
+### metot (test unit #2)
+
+- Host `metot` at `192.168.8.239`, same image/user/pass scheme as totem.
+- FIPS npub: `npub1j0adney3t3tuvcaz6wv6eahpkhfrl8rwhry58n2u4njuxz0j04lsrudpf6`
+
+```bash
+ssh metot               # via LAN
+ssh metot.fips          # via FIPS mesh
 ```
 
 (`~/.ssh/config` has `Host *.fips` → `User totem`, so no user prefix needed.)
