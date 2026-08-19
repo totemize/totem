@@ -22,8 +22,21 @@ A totem MUST serve both on the ports registered here, on every on-ramp.
 
 ## AP network conventions
 
-- The totem MUST be reachable at its AP's **gateway address** (and/or an
-  fd00 ULA — **TBD**) so guests never guess where the totem is.
+- **SSID: `!Totem`**, the same on every totem, open security. Same SSID +
+  unique BSSIDs form one standard ESS: guests save the network once and
+  roam between all totems natively (the Freifunk model). The leading `!`
+  sorts the network to the top of alphabetically ordered pickers. Open
+  security is required for uniformity: clients key a saved network on SSID
+  *plus security type*, so one totem using a PSK would break roaming for
+  all. All real security is layered above: FIPS Noise IK authenticates
+  peer links, the challenge protocol (`02-identity.md`) authenticates
+  totem claims, and relay policy governs what guests may write.
+- A roaming totem seeing `!Totem` treats it as a totem beacon (hint only —
+  identity is proven by the handshake and challenge, never by the name).
+- **Identical AP subnet on every totem**, so a roaming client keeps its
+  DHCP lease across totems. The totem MUST be reachable at its AP's
+  **gateway address** (and/or an fd00 ULA — **TBD**) so guests never guess
+  where the totem is.
 - A captive portal landing on the web app is **TBD** (open question).
 
 ## NIP-11 totem marker

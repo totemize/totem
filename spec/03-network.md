@@ -33,7 +33,7 @@ Deployment modes relevant to Totem:
   it behind NAT without port forwarding — the "reach" on-ramp
   (`06-interaction.md`).
 
-## Radio usage
+## Radio usage and modes
 
 On a single-radio device (the Pi Zero W reference profile), the natural split:
 
@@ -44,6 +44,29 @@ On a single-radio device (the Pi Zero W reference profile), the natural split:
 Multi-radio devices SHOULD follow the same logical split (AP on one radio,
 mesh transports on the others) but MAY interleave as capacity allows. See
 `09-open-questions.md` for the coexistence question on constrained hardware.
+
+### Radio modes (single radio)
+
+One radio means the totem is always in exactly one of these modes. The modes
+are additive meeting paths — none precludes the others over the device's
+lifetime, and the AP conventions (`07-conventions.md`) apply **only** to
+AP-host mode:
+
+| Mode | Radio role | Totem-to-totem path | Guest on-ramp |
+|------|-----------|--------------------|---------------|
+| Infra-station | joined to infrastructure WiFi | FIPS over shared L2 (mDNS discovery) | none (guests are on the infrastructure network) |
+| AP-host | emitting the `!Totem` AP | other totems join as stations; FIPS over the AP L2 | yes (`06-interaction.md`) |
+| BLE (v1.5) | WiFi per either mode above | FIPS BLE transport, no WiFi needed | per WiFi mode |
+
+Notes:
+
+- Totem-to-totem connectivity works in **every** mode — a shared-router
+  deployment (two infra-stations) is the ordinary case and has no
+  limitations versus any other mode.
+- A totem in AP-host mode serves guests **and** acts as the meeting beacon
+  for other totems: one emission, two product stories.
+- Role switching between infra-station and AP-host is a policy question
+  (`09-open-questions.md`); v1 devices MAY fix the role in configuration.
 
 ## Discovery and pairing sequence
 

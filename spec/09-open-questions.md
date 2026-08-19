@@ -39,6 +39,10 @@ Status: Draft (living document — shrinks as we resolve)
   confirm feasibility and define multi-radio behavior.
 - Is a totem joining another totem's AP as a station a supported v1
   behavior, or only a fallback? It competes for airtime with guest service.
+- Should the infra-station ↔ AP-host role switch be automatic (e.g.
+  scan-when-idle, prefer infrastructure when known) or configuration-fixed?
+  v1 devices MAY fix the role in configuration; the automatic policy is the
+  open part.
 
 ### Relay / sync
 
