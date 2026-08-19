@@ -5,3 +5,13 @@ edition = "2021"
 license = "Unlicense"
 description = "Totem control-plane daemon and net code (spec/10-control-plane.md)"
 publish = false
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "signal"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# totemctl bus client only; sync + small
+ureq = { version = "2", features = ["json"] }

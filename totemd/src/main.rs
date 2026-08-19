@@ -5,27 +5,39 @@
 //! mode, selected by argv[0] or the first argument). Client mode talks to
 //! the daemon's loopback bus; it introduces no separate API.
 
+mod bus;
+mod cli;
+mod state;
+mod web;
+
 fn main() {
     let mut args = std::env::args();
     let argv0 = args.next().unwrap_or_default();
     let mode = if argv0.ends_with("totemctl") {
         "totemctl".to_string()
     } else {
-        args.next().unwrap_or_else(|| {
-            eprintln!("usage: totemd serve | totemctl <command>");
-            std::process::exit(2);
-        })
+        match args.next() {
+            Some(m) => m,
+            None => {
+                eprintln!("usage: totemd serve | totemctl <command>");
+                std::process::exit(2);
+            }
+        }
     };
+    let rest: Vec<String> = args.collect();
 
     match mode.as_str() {
         "serve" => {
-            eprintln!("totemd: not yet implemented (see spec/10-control-plane.md)");
-            std::process::exit(1);
+            tracing_subscriber::fmt()
+                .with_env_filter(
+                    tracing_subscriber::EnvFilter::from_default_env()
+                        .add_directive("info".parse().expect("directive")),
+                )
+                .init();
+            let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+            rt.block_on(web::serve());
         }
-        "totemctl" => {
-            eprintln!("totemctl: not yet implemented (bus client)");
-            std::process::exit(1);
-        }
+        "totemctl" => cli::run(&rest),
         other => {
             eprintln!("totemd: unknown mode '{other}' (expected: serve)");
             std::process::exit(2);
