@@ -1,0 +1,19 @@
+[Unit]
+Description=Totem hardware API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=totem
+Group=totem
+WorkingDirectory=/opt/totem
+EnvironmentFile=-/etc/totem/totem.env
+ExecStart=/opt/totem/.venv/bin/totem --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
