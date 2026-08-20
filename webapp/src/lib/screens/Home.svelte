@@ -30,10 +30,11 @@
     <h1>{node?.name ?? "…"}</h1>
   </div>
   <div class="activity center">
-    <div class="activity-title">recent activity</div>
+    <div class="activity-title dim">recent activity</div>
     {#each activity as event, i (i)}
-      <div class="tiny">{event.text}, {relativeTime(event.at)} ago</div>
+      <div class="tiny">{event.text}, ~{relativeTime(event.at).replace(/\s+/g, "")}</div>
     {/each}
+    <button class="see-all" style="align-self:center; padding:10px 0 0" onclick={() => store.show("encounters")}>view all ›</button>
   </div>
   <div class="pets center dim">no pets yet, soon™</div>
   <div class="quick-row">
