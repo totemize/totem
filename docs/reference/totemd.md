@@ -135,27 +135,36 @@ contacts writer is not implemented.
 
 ## Public web app and owner API
 
-`GET /` returns server-rendered HTML showing the signed/fallback profile,
-request-host relay URL, device npub, aggregate status, and policy. A small
-same-origin `/app.js` client polls briefly for late NIP-07 injection and uses
-the extension for claim and owner forms. The CSP permits Chrome/Firefox
-extension schemes required by providers such as nos2x. An early-development
-nsec escape hatch uses a pinned, embedded `nostr-tools` bundle: the secret
-stays in page memory, is never sent or persisted, and its byte array is cleared
-on logout/navigation. There are no external runtime assets.
+`GET /` returns the static Svelte application embedded in the totemd binary.
+Its HTML, CSS, and application JavaScript are built in `webapp/`; devices need
+no Node runtime or loose asset directory. The app loads aggregate state from a
+deliberately limited same-origin API and never connects to the generic bus.
+The CSP permits Chrome/Firefox extension schemes required by late-injected
+NIP-07 providers. Standard `window.nostr` providers work unchanged; when
+nos2x's manifest blocks its own provider resource on private-LAN HTTP origins,
+the app falls back to its already-injected content-script message bridge. An
+early-development nsec escape hatch lazily loads a pinned `nostr-tools` bundle:
+the secret stays in page memory, is never sent or persisted, and its byte array
+is cleared on logout/navigation. There are no external runtime assets.
 
 | Method | Path | Purpose |
 |---|---|---|
+| `GET` | `/api/status` | Public profile, request-host relay URL, effective policy, and aggregate daemon/FIPS status. |
+| `GET` | `/api/updates` | Public SSE invalidations with empty payloads; clients refetch `/api/status`. |
 | `POST` | `/api/auth/challenge` | Issue a one-use nonce bound to one supported target, method, and exact body hash. |
 | `GET` | `/api/owner` | Return only `claimed: true|false`. |
 | `POST` | `/api/owner/claim` | Atomically persist the first valid signer as owner. |
+| `GET` | `/api/owner/events` | Owner-signed current status, peer snapshot, and bounded history followed by future typed pushes. |
 | `GET`, `PUT` | `/api/metadata` | Read effective metadata or publish device-signed kind 0 with owner authorization. |
 | `GET`, `PUT` | `/api/config` | Read effective policy or persist owner policy overrides. |
 
-Mutation requests use `Authorization: Nostr <base64-event>`. Kind 27235 must
-contain exact `nonce`, `u`, `method`, and SHA-256 `payload` tags. Nonces expire
-after five minutes and are consumed once; `created_at` is not an acceptance
-clock. The initial first-signer claim assumes a trusted bootstrap network.
+Authorized requests use `Authorization: Nostr <base64-event>`. Kind 27235
+must contain exact `nonce`, `u`, `method`, and SHA-256 `payload` tags. Nonces
+expire after five minutes and are consumed once; `created_at` is not an
+acceptance clock. The owner event stream hashes an empty body and one signature
+authenticates only that connection; a reconnect requires another signature.
+There is no browser session or bearer token. The initial first-signer claim
+assumes a trusted bootstrap network.
 
 ## Bus transport
 

@@ -122,22 +122,24 @@ ssh motown.fips          # via FIPS mesh
   Public metadata is the latest own device-signed kind 0 in strfry.
 - Signed challenge build is deployed to all three bench units. Metot joined
   this baseline through the converged Ansible deployment on 2026-08-20.
-- The automatic sync supervisor is deployed only to totem + motown. Motown
-  runs the current five-minute periodic/history build with readable per-round
-  reconciliation summaries; totem retains the earlier encounter build.
+- The automatic sync supervisor is deployed only to totem + motown. Both run
+  the current five-minute periodic/history build with readable per-round
+  reconciliation summaries.
 - Challenge signing key on enabled units: source remains
   `/etc/fips/fips.key` root:root 0600; `totemd.service` passes it to `User=totem` with systemd `LoadCredential=`.
   Do not copy it, print it, or loosen its mode.
 - Relay CLI runner: `/usr/local/libexec/totem-strfry`; `totem` belongs to the
   `strfry` group and `/etc/strfry.conf` + `/var/lib/strfry` are group-scoped,
   never world-writable. `deploy/flash.sh` and Ansible maintain this integration.
-- Owner/profile build is deployed to motown only; it was successfully claimed
-  through the in-memory development nsec flow and published its first own kind
-  0. Totem and metot retain their prior builds. Motown's page uses
-  same-origin `/app.js` plus nonce-bound NIP-98 APIs for first-signer claim,
-  policy, and device-signed kind-0 metadata. It polls for late NIP-07 injection
-  and has a development-only in-memory nsec signer (never sent/stored; use a
-  dev key). `/bus` and `/bus/events` remain loopback-only.
+- Motown was successfully claimed through the in-memory development nsec flow
+  and published its first own kind 0. Totem runs static Svelte build `d180851`
+  and remains unclaimed; motown runs `106f5e9` with the nos2x LAN-HTTP fallback
+  and preserves its `motown-wow` profile; metot retains its prior web build.
+  The static app exposes aggregate public status and an owner-signed
+  peer/history/live-event stream while retaining nonce-bound NIP-98 claim,
+  policy, and device-signed kind-0 metadata. The development nsec signer stays
+  in browser memory only (never sent/stored; use a dev key). `/bus` and
+  `/bus/events` remain loopback-only.
 
 ```bash
 ssh totem 'totemctl status'  # fips health + effective policy + counters
@@ -232,6 +234,17 @@ the binary.
 
 `curl http://host:7777/` returns empty; strfry serves the info doc only
 with `-H "Accept: application/nostr+json"`.
+
+### nos2x blocks its provider script on private-LAN HTTP
+
+nos2x 2.4–2.5 injects a content script on all URLs, but its Chromium manifest
+makes `nostr-provider.js` web-accessible only to HTTPS and localhost/loopback
+HTTP. On `http://192.168.*:8080` or `http://*.local:8080`, Chrome logs a
+`web_accessible_resources` denial even though totemd's CSP already allows
+extension schemes. Do not weaken the CSP. Static web builds from `106f5e9`
+fall back to nos2x's still-running message bridge; standard `window.nostr`
+providers remain preferred. The denial may remain visible in the console while
+the fallback works.
 
 ### Restarting NetworkManager drops your ssh session
 

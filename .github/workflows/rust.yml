@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - "totemd/**"
+      - "webapp/**"
       - ".github/workflows/rust.yml"
   pull_request:
     paths:
       - "totemd/**"
+      - "webapp/**"
       - ".github/workflows/rust.yml"
 
 permissions:
@@ -20,5 +22,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+      - run: npm ci --prefix webapp
+      - run: npm run check --prefix webapp
+      - run: npm run build --prefix webapp
+      - run: git diff --exit-code -- totemd/web/static
       - run: cargo check --manifest-path totemd/Cargo.toml
       - run: cargo test --manifest-path totemd/Cargo.toml

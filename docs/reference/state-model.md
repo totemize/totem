@@ -460,8 +460,8 @@ include:
 | Nostr client connected/disconnected from the relay | Gap |
 | Guest read or posted a note | Gap; relay instrumentation needed |
 | Authenticated FIPS user reached the Totem | FIPS sees the peer, but Totem cannot currently distinguish human node from ordinary non-Totem node beyond the failed/negative Totem probe |
-| Owner authenticated to the web app | Planned NIP-98 owner controls, not implemented |
-| Owner changed policy or approved friendship | Planned, not implemented |
+| Owner authenticated to the web app | NIP-98 claim and owner-signed state streaming are implemented; opening owner mode has no dedicated push |
+| Owner changed policy or approved friendship | Policy changes are implemented and emit `totem.config.changed`; friendship approval remains a gap |
 | NFC card presented/read/written | Driver operations exist; no published event |
 
 These activities should be transient overlays, not device-wide lifecycle
@@ -479,6 +479,9 @@ The implemented `totemd` pushes are:
 | `totem.recognized` | Signed challenge passed for the current encounter |
 | `totem.sync.started` | Policy-permitted job was reserved |
 | `totem.sync.done` | Job succeeded, failed, timed out, or was cancelled |
+| `totem.owner.claimed` | The first valid signer became the durable owner |
+| `totem.metadata.changed` | A device-signed kind-0 profile was imported |
+| `totem.config.changed` | Owner policy overrides were persisted and applied |
 
 The spec additionally reserves `totem.befriended`. The Python device-event
 channel reserves generic hardware events but currently publishes none.
