@@ -34,7 +34,12 @@ export interface State {
   noteFilter: NoteFilter;
   settings: Settings | null;
   /** First-run claim flow; null once the totem is claimed. */
-  setup: { step: SetupStep; ownerNpub: string; error: string | null } | null;
+  setup: {
+    step: SetupStep;
+    ownerNpub: string;
+    error: string | null;
+    method: "bunker" | "extension" | "demo" | null;
+  } | null;
   encounterLog: EncounterLogEntry[];
   friendFilter: "all" | "active" | "requests";
   /** Note composer open on the Notes screen. */
@@ -89,7 +94,7 @@ export class Store {
     ]);
     Object.assign(this.state, { node, status, peers, notes, settings, encounterLog });
     if (!status.claimed && !this.state.setup) {
-      this.state.setup = { step: "welcome", ownerNpub: "", error: null };
+      this.state.setup = { step: "welcome", ownerNpub: "", error: null, method: null };
     }
   }
 
@@ -228,6 +233,7 @@ export class Store {
     const setup = this.state.setup;
     if (!setup) return;
     setup.error = null;
+    setup.method = method;
     try {
       if (method === "extension") {
         const { pubkey, signer } = await claimWithExtension();

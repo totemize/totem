@@ -47,8 +47,12 @@
   <div class="screen setup center">
     <h1>Prove you're there</h1>
     <p class="dim">Press the button on the totem<br>(or tap it with your phone).</p>
-    <!-- dev shortcut: clicking the pulse simulates the device button -->
-    <button class="presence-pulse" aria-label="simulate device press" onclick={() => (window as unknown as { mockPress?: () => void }).mockPress?.()}></button>
+    {#if setup.method === "demo"}
+      <!-- demo shortcut: clicking the pulse simulates the device button -->
+      <button class="presence-pulse" aria-label="simulate device press" onclick={() => (window as unknown as { mockPress?: () => void }).mockPress?.()}></button>
+    {:else}
+      <div class="presence-pulse" style="cursor:default"></div>
+    {/if}
     <p class="tiny">waiting for the device…</p>
   </div>
 {:else if setup.step === "name"}
