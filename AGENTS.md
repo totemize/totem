@@ -122,22 +122,23 @@ ssh motown.fips          # via FIPS mesh
   Public metadata is the latest own device-signed kind 0 in strfry.
 - Signed challenge build is deployed to all three bench units. Metot joined
   this baseline through the converged Ansible deployment on 2026-08-20.
-- The automatic sync supervisor is deployed only to totem + motown. Motown
-  runs the current five-minute periodic/history build with readable per-round
-  reconciliation summaries; totem retains the earlier encounter build.
+- The automatic sync supervisor is deployed only to totem + motown. Both run
+  the current five-minute periodic/history build with readable per-round
+  reconciliation summaries.
 - Challenge signing key on enabled units: source remains
   `/etc/fips/fips.key` root:root 0600; `totemd.service` passes it to `User=totem` with systemd `LoadCredential=`.
   Do not copy it, print it, or loosen its mode.
 - Relay CLI runner: `/usr/local/libexec/totem-strfry`; `totem` belongs to the
   `strfry` group and `/etc/strfry.conf` + `/var/lib/strfry` are group-scoped,
   never world-writable. `deploy/flash.sh` and Ansible maintain this integration.
-- Owner/profile build is deployed to motown only; it was successfully claimed
-  through the in-memory development nsec flow and published its first own kind
-  0. Totem and metot retain their prior builds. Motown's page uses
-  same-origin `/app.js` plus nonce-bound NIP-98 APIs for first-signer claim,
-  policy, and device-signed kind-0 metadata. It polls for late NIP-07 injection
-  and has a development-only in-memory nsec signer (never sent/stored; use a
-  dev key). `/bus` and `/bus/events` remain loopback-only.
+- Motown was successfully claimed through the in-memory development nsec flow
+  and published its first own kind 0. Totem now runs the static Svelte web
+  build from `d180851` and remains unclaimed; metot retains its prior web
+  build. Totem's page exposes aggregate public status and an owner-signed
+  peer/history/live-event stream while retaining nonce-bound NIP-98 claim,
+  policy, and device-signed kind-0 metadata. The development nsec signer stays
+  in browser memory only (never sent/stored; use a dev key). `/bus` and
+  `/bus/events` remain loopback-only.
 
 ```bash
 ssh totem 'totemctl status'  # fips health + effective policy + counters
