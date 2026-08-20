@@ -324,6 +324,10 @@ as notification only and reconcile by calling `totem.status.get` and
 The spec additionally reserves `totem.befriended`; this revision does not
 emit it.
 
+For a display-oriented view of how these events combine with system,
+hardware, power, mesh, and relationship state, see the
+[Totem state catalog](/reference/state-model).
+
 ## FIPS watcher behavior
 
 Each poll opens a fresh Unix-socket connection, sends one newline-delimited
