@@ -58,7 +58,7 @@ defaults. Use `totem` when command-line bind or logging options are needed.
 | `TOTEM_ALLOW_MOCK_DRIVERS` | false | Accepts `1`, `true`, `yes`, or `on` (case-insensitive) to permit explicit mock display, NFC, and Wi-Fi transports. |
 | `TOTEM_STORAGE_ROOT` | driver default | Confines storage reads and writes below one directory. The Ansible deployment sets `/var/lib/totem/storage`. |
 | `TOTEM_EINK_DRIVER` | empty | Exact display driver selected when `DisplayManager` receives no explicit name. An explicit constructor argument still wins. |
-| `TOTEM_UPS_DRIVER` | auto-detect | Exact UPS driver selected when `UPSManager` receives no explicit name. Metot is pinned to `pisugar2`. |
+| `TOTEM_UPS_DRIVER` | PiSugar2 fallback | Exact UPS driver selected when `UPSManager` receives no explicit name. Metot is pinned to `pisugar2`; set `waveshare_ups_hat_c` for a Waveshare UPS HAT (C). |
 | `TOTEM_I2C_BUS` | `1` | Linux I2C bus used by UPS drivers. |
 | `EINK_DISPLAY_TYPE` | empty | Guides display auto-detection: `2in13` or `3in7`. Without it, detected Raspberry Pi displays default to the 3.7-inch driver family. |
 
@@ -180,6 +180,8 @@ telemetry:
 Current preserves the IP5209's signed reading. Battery percentage is an
 estimate interpolated from PiSugar's published IP5209 voltage curve.
 The driver does not change charging, shutdown, or GPIO policy.
+Drivers without a direct external-power signal return `null` for
+`power_plugged`.
 
 ### Error mapping
 
@@ -274,11 +276,16 @@ the configured root to expose arbitrary block-device paths.
 | Name | Selection |
 |---|---|
 | `pisugar2` | PiSugar 2/IP5209 at I2C address `0x75`; configured for metot. |
+| `waveshare_ups_hat_c` | Waveshare UPS HAT (C)/INA219 at I2C address `0x43`; select explicitly with `TOTEM_UPS_DRIVER`. |
 
 Automatic selection requires `/dev/i2c-<TOTEM_I2C_BUS>` to exist;
 initialization confirms that the device returns a plausible battery voltage.
 Install `smbus2` through the `raspberry-pi` extra or provide the Debian
 `python3-smbus` package. The Ansible deployment uses the Debian package.
+The Waveshare driver initializes the INA219 with the calibration and sampling
+configuration from the [Waveshare UPS HAT (C) reference implementation](https://www.waveshare.com/wiki/UPS_HAT_%28C%29).
+These writes affect only the monitor; the driver does not configure the charger
+or power path.
 
 ## Python manager reference
 
