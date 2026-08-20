@@ -5,7 +5,7 @@
 # (default: totem metot motown; unreachable devices are skipped)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-command -v clang >/dev/null || { echo "clang is required for static nostr/secp256k1 cross builds" >&2; exit 1; }
+command -v zig >/dev/null || { echo "zig is required for static nostr/secp256k1 cross builds" >&2; exit 1; }
 
 declare -A ARCH=(
   [totem]=arm-unknown-linux-musleabihf
@@ -24,9 +24,10 @@ for d in "${devs[@]}"; do
   (cd totemd && cargo build --release --quiet --target "$t")
   scp -q "totemd/target/$t/release/totemd" "$d:/tmp/totemd.new"
   scp -q deploy/totemd.toml "$d:/tmp/totemd.toml"
-  scp -q deploy/totem-strfry deploy/systemd/strfry-sync.conf "$d:/tmp/"
-  ssh "$d" 'sudo install -m755 /tmp/totemd.new /usr/local/bin/totemd && sudo ln -sf /usr/local/bin/totemd /usr/local/bin/totemctl && sudo install -d -m755 /etc/totemd /usr/local/libexec /etc/systemd/system/strfry.service.d && { test -e /etc/totemd/config.toml || sudo install -m644 /tmp/totemd.toml /etc/totemd/config.toml; } && sudo install -m755 /tmp/totem-strfry /usr/local/libexec/totem-strfry && sudo install -m644 /tmp/strfry-sync.conf /etc/systemd/system/strfry.service.d/totemd-sync.conf && sudo usermod -aG strfry totem && sudo chgrp strfry /etc/strfry.conf /var/lib/strfry && sudo chmod 640 /etc/strfry.conf && sudo chmod 2770 /var/lib/strfry && sudo find /var/lib/strfry -maxdepth 1 -type f -exec chgrp strfry {} + -exec chmod 660 {} +'
-  ssh "$d" 'cat > /tmp/totemd.service && sudo install -m644 /tmp/totemd.service /etc/systemd/system/totemd.service && sudo systemctl daemon-reload && sudo systemctl enable totemd && sudo systemctl restart totemd' < deploy/systemd/totemd.service
+  scp -q deploy/totem-strfry deploy/systemd/strfry-sync.conf deploy/systemd/strfry-nip11-name.{path,service} "$d:/tmp/"
+  ssh "$d" 'sudo install -m755 /tmp/totemd.new /usr/local/bin/totemd && sudo ln -sf /usr/local/bin/totemd /usr/local/bin/totemctl && sudo install -d -m755 /etc/totemd /usr/local/libexec /etc/systemd/system/strfry.service.d && sudo install -d -o totem -g totem -m755 /var/lib/totemd && { test -e /etc/totemd/config.toml || sudo install -m644 /tmp/totemd.toml /etc/totemd/config.toml; } && { test -e /var/lib/totemd/nip11-name || { printf %s "!Totem" > /tmp/nip11-name && sudo install -o totem -g totem -m644 /tmp/nip11-name /var/lib/totemd/nip11-name; }; } && sudo install -m755 /tmp/totem-strfry /usr/local/libexec/totem-strfry && sudo install -m644 /tmp/strfry-sync.conf /etc/systemd/system/strfry.service.d/totemd-sync.conf && sudo install -m644 /tmp/strfry-nip11-name.path /tmp/strfry-nip11-name.service /etc/systemd/system/ && sudo usermod -aG strfry totem && sudo chgrp strfry /etc/strfry.conf /var/lib/strfry && sudo chmod 640 /etc/strfry.conf && sudo chmod 2770 /var/lib/strfry && sudo find /var/lib/strfry -maxdepth 1 -type f -exec chgrp strfry {} + -exec chmod 660 {} + && sudo sed -i "s|^[[:space:]]*name[[:space:]]*=.*|        name = (string (read \"/var/lib/totemd/nip11-name\"))|" /etc/strfry.conf'
+  ssh "$d" "grep -q '^\\[device\\]' /etc/totemd/config.toml || printf '\\n[device]\\nname = \"%s\"\\n' '$d' | sudo tee -a /etc/totemd/config.toml >/dev/null"
+  ssh "$d" 'cat > /tmp/totemd.service && sudo install -m644 /tmp/totemd.service /etc/systemd/system/totemd.service && sudo systemctl daemon-reload && sudo systemctl enable --now strfry-nip11-name.path && sudo systemctl enable totemd && sudo systemctl restart totemd' < deploy/systemd/totemd.service
   sleep 2
   ssh "$d" 'systemctl is-active totemd; totemctl status'
 done

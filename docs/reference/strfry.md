@@ -77,7 +77,7 @@ relay {
     realIpHeader = ""
 
     info {
-        name = "!Totem <inventory-hostname>"
+        name = (string (read "/var/lib/totemd/nip11-name"))
         description = "This is a strfry instance."
         pubkey = "<inventory-host-public-key-hex>"
         contact = ""
@@ -116,9 +116,11 @@ relay {
 ```
 
 Ansible writes the full template only if `/etc/strfry.conf` is absent. On
-every run it surgically reconciles the load-bearing `bind`, `info.name`, and
-`info.pubkey` lines. Other operator limits, plugins, and database paths are
-preserved.
+every run it surgically reconciles the load-bearing `bind`, dynamic
+`info.name`, and `info.pubkey` lines. `totemd` atomically updates the public
+name value file; a systemd path unit touches the root-owned config so strfry
+hot-reloads it without restart or connection churn. Other operator limits,
+plugins, and database paths are preserved.
 
 ## Configuration guide
 
@@ -148,11 +150,13 @@ Ansible deployment.
 
 ### NIP-11 identity
 
-The name prefix `!Totem` is the recognition hint specified by Totem. The bare
-template fills `relay.info.pubkey` from the inventory host's public FIPS
-identity. `totemd` treats the document only as a cheap prefilter: the marker
-and key must match, then a per-encounter signed challenge proves the claim.
-Ansible inventory contains no private identity material.
+The name prefix `!Totem` is the recognition hint specified by Totem. Its
+suffix comes from the latest valid device-authored kind-0 name, with deployment
+configuration as fallback. The template fills `relay.info.pubkey` from the
+inventory host's public FIPS identity. `totemd` treats the document only as a
+cheap prefilter: the marker and key must match, then a per-encounter signed
+challenge proves the claim. Ansible inventory contains no private identity
+material.
 
 Retrieve NIP-11 with the required media type:
 
@@ -166,9 +170,9 @@ A plain `curl http://127.0.0.1:7777/` may return an empty body; that is not a
 valid NIP-11 health check.
 
 The Ansible verification role requires `negentropy` to equal `1`,
-`supported_nips` to contain `77`, and `name`/`pubkey` to equal the selected
-inventory host's identity. It then checks the same key against totemd's signed
-challenge.
+`supported_nips` to contain `77`, the NIP-11 name to equal the derived value
+file and retain its `!Totem` prefix, and `pubkey` to equal the inventory host's
+identity. It then checks the same key against totemd's signed challenge.
 
 ### Event limits
 

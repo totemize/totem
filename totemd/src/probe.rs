@@ -148,10 +148,11 @@ pub async fn on_seen(st: std::sync::Arc<AppState>, npub: &str, ip: &str) {
 }
 
 async fn on_seen_port(st: &AppState, npub: &str, ip: &str, port: u16) -> Option<ProbeVerdict> {
-    if !st.config.probe {
+    let config = st.config();
+    if !config.probe {
         return None;
     }
-    if let Some(v) = st.verdicts.get(npub, st.config.verdict_ttl_hours) {
+    if let Some(v) = st.verdicts.get(npub, config.verdict_ttl_hours) {
         if v == ProbeVerdict::Candidate {
             push_candidate(st, npub);
         }

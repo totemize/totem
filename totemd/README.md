@@ -12,24 +12,30 @@ TOTEMD_KEY_PATH=/path/to/test-nsec cargo run -- serve
 #   TOTEMD_BUS_ADDR=127.0.0.1:8081 loopback bus (never exposed)
 #   TOTEMD_SYNC_TIMEOUT_SECS=300      maximum runtime per encounter sync
 # Logging: RUST_LOG (default info); stdout → journald under systemd.
-# Config: /etc/totemd/config.toml (override path with TOTEMD_CONFIG).
+# Fallback config: /etc/totemd/config.toml (TOTEMD_CONFIG).
+# Owner state: /var/lib/totemd/state.toml (TOTEMD_STATE).
 ```
 
 Production does not copy or loosen the root-only FIPS key: systemd
 `LoadCredential=` supplies it privately to `User=totem`. Relay commands use
 root-owned `/usr/local/libexec/totem-strfry`; group-scoped config/LMDB access
-keeps the daemon unprivileged. `GET /` is a no-script, server-rendered,
-read-only landing page with the relay URL and aggregate status.
+keeps the daemon unprivileged. `GET /` is server-rendered, while a tiny
+same-origin client handles first-signer claim, metadata, and policy mutations.
+It polls for late NIP-07 injection and offers a development-only, browser-memory
+nsec signer; secrets never cross HTTP or enter persistent browser storage.
 
 ## Configuration
 
-Operator policy lives in `/etc/totemd/config.toml`; see
-[`deploy/totemd.toml`](../deploy/totemd.toml). Missing file uses those
-defaults; a malformed file fails startup rather than silently running the
-wrong policy. Restart `totemd` after edits. FIPS rendezvous/transport remains
-in `/etc/fips/fips.yaml`.
+Deployment fallback lives in root-owned `/etc/totemd/config.toml`; see
+[`deploy/totemd.toml`](../deploy/totemd.toml). Missing file uses defaults and
+a malformed file fails startup. Owner and policy overrides are atomically
+stored in `/var/lib/totemd/state.toml`; public metadata remains a device-signed
+kind-0 event in the local relay. FIPS rendezvous/transport remains in
+`/etc/fips/fips.yaml`.
 
-`probe = true` runs the cheap NIP-11 prefilter. Candidates are cached for
+`device.name` is the fallback until a valid own kind 0 exists; the effective
+name is mirrored into NIP-11 without restarting strfry. `probe = true` runs
+the cheap NIP-11 prefilter. Candidates are cached for
 the daemon lifetime; negative/unreachable results use
 `verdict_ttl_hours`. Candidate rows retain the bounded unsigned NIP-11 name
 as `nip11_name`; npub remains the authenticated identity. `policy.befriend`
@@ -51,6 +57,13 @@ cargo run -- totemctl help
 cargo run -- totemctl call totem.peers.get
 ```
 
+The embedded nsec signer is generated from pinned `nostr-tools`/esbuild
+versions; rebuild it only when its source changes:
+
+```bash
+totemd/web/build-nsec-signer.sh
+```
+
 ## Test
 
 ```bash
@@ -69,5 +82,6 @@ or target sysroot is required.
 Skeleton: bus + SSE + totemctl. Landed: fips control-socket watcher;
 operator config; cached NIP-11 prefilter; signed per-encounter challenge
 (responder + prover); supervised bidirectional relay sync with live peer state;
-server-rendered read-only HTML; armv6 + aarch64 musl cross builds. Next: kind 3
-friendship state/actions, then NIP-98-protected owner controls.
+server-rendered owner web app with nonce-bound NIP-98, durable claim/policy
+state, device-signed kind-0 profiles, dynamic NIP-11 naming, and armv6 +
+aarch64 musl cross builds. Next: kind-3 friendship state/actions.

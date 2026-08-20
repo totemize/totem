@@ -5,19 +5,29 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::Mutex,
+    path::PathBuf,
+    sync::{Mutex, RwLock},
     time::Instant,
 };
 
 use serde_json::Value;
 use tokio::sync::broadcast;
 
-use crate::{config::Config, fips::PeerInfo, probe::ProbeVerdicts, sync::SyncSupervisor};
+use crate::{
+    auth,
+    config::{Befriend, Config},
+    fips::PeerInfo,
+    owner,
+    probe::ProbeVerdicts,
+    sync::SyncSupervisor,
+};
 
 pub struct AppState {
     pub started: Instant,
-    /// Effective operator policy (`10-control-plane.md`); read-only.
-    pub config: Config,
+    /// Effective policy: static defaults plus durable owner overrides.
+    config: RwLock<Config>,
+    pub owner: owner::Store,
+    pub auth: auth::Nonces,
     /// NIP-11 probe verdicts per peer npub.
     pub verdicts: ProbeVerdicts,
     /// Fan-out for unsolicited `totem.*` pushes; SSE subscribers tap in.
@@ -48,11 +58,22 @@ struct FipsHealth {
 }
 
 impl AppState {
+    #[cfg(test)]
     pub fn new(config: Config) -> Self {
+        Self::with_owner(owner::Store::memory(config))
+    }
+
+    pub fn load(config: Config, path: PathBuf) -> Result<Self, String> {
+        Ok(Self::with_owner(owner::Store::load(config, path)?))
+    }
+
+    fn with_owner(owner: owner::Store) -> Self {
         let (tx, _) = broadcast::channel(256);
         Self {
             started: Instant::now(),
-            config,
+            config: RwLock::new(owner.effective_config()),
+            owner,
+            auth: auth::Nonces::default(),
             verdicts: ProbeVerdicts::default(),
             tx,
             counters: Mutex::new(HashMap::new()),
@@ -62,6 +83,20 @@ impl AppState {
             mesh: Mutex::new(MeshInfo::default()),
             fips: Mutex::new(FipsHealth::default()),
         }
+    }
+
+    pub fn config(&self) -> Config {
+        self.config.read().unwrap().clone()
+    }
+
+    pub fn update_policy(&self, sync: bool, befriend: Befriend) -> Result<Config, String> {
+        let config = self.owner.update_policy(sync, befriend)?;
+        *self.config.write().unwrap() = config.clone();
+        self.push(serde_json::json!({
+            "type": "totem.config.changed",
+            "config": config,
+        }));
+        Ok(config)
     }
 
     /// Publish an unsolicited push; silently dropped when no subscriber.

@@ -253,7 +253,7 @@ See [FIPS configuration and implementation](/reference/fips).
 - requires a checksum-addressed runtime archive and expected musl loader;
 - creates the `strfry` service account and durable LMDB directory;
 - preserves an existing database and operator limits while reconciling the
-  IPv6 bind plus the inventory host's `!Totem` name/public identity;
+  IPv6 bind, dynamic `!Totem` name value, and public identity;
 - installs `/usr/local/libexec/totem-strfry`, grants `totem` group-scoped
   config/LMDB access, and preserves group writes with setgid plus
   `UMask=0007`;
@@ -308,8 +308,8 @@ The final role checks the enabled scope:
 3. core units, plus optional `totem.service`, are enabled and running;
 4. `fipsctl show status` reports running state, active TUN, and the exact
    persistent inventory npub;
-5. NIP-11 reports negentropy, supported NIP `77`, the exact `!Totem` name, and
-   the inventory public key;
+5. NIP-11 reports negentropy, supported NIP `77`, a name matching the derived
+   `!Totem` value file, and the inventory public key;
 6. the root-owned runner opens the relay LMDB successfully as unprivileged
    user `totem`, whose access remains group-scoped;
 7. `/totem/challenge` returns a no-store kind-27235 event signed by that same

@@ -4,12 +4,16 @@ Status: Draft
 
 ## One identity everywhere
 
-A totem has a single Nostr keypair. The same npub is:
+A totem has a single **device** Nostr keypair. The same npub is:
 
-- its **internal (device) identity** — the actor that signs events, owns the
-  contact list, and is granted administrative meaning, and
-- its **FIPS network identity** — the keypair FIPS uses to authenticate the
-  node on the mesh.
+- its internal identity — the actor that signs its public profile and contact
+  list, and
+- its FIPS network identity — the keypair FIPS uses to authenticate the node
+  on the mesh.
+
+Ownership is separate: one user npub authorizes control-plane mutations, while
+the device key never leaves the totem. The owner authorizes an action; the
+device signs the resulting device event.
 
 FIPS nodes authenticate each other with nostr keypairs, so when two totems
 meet over the mesh they each already know the other's npub — authenticated,
@@ -24,9 +28,17 @@ Consequences that MUST hold:
   relay serves events from many pubkeys. The spec's vocabulary keeps these
   separate.
 
-Key management (owner key vs. device key, rotation) is an open question — see
-`09-open-questions.md`. Until resolved, the assumption above stands: one
-device keypair, one identity.
+Device-key rotation and lost-owner recovery remain open questions
+(`09-open-questions.md`); they do not merge the two identities.
+
+## Public profile
+
+A totem's public name and metadata are its latest valid NIP-01 kind-0 event,
+authored by the device npub. `totemd` is the device-event writer: an owner may
+authorize a metadata change, but only the device key signs and imports it into
+the local relay. In the absence of kind 0, deployment configuration supplies
+the fallback name. The effective short name is mirrored into the relay's
+unsigned NIP-11 marker; kind 0 remains the canonical signed profile.
 
 ## Totem recognition
 

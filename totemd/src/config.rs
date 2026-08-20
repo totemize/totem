@@ -1,13 +1,13 @@
-//! `/etc/totemd/config.toml` — operator *intent*, never mechanism.
+//! `/etc/totemd/config.toml` — deployment fallback, never mechanism.
 //!
-//! Missing file → defaults. Present but invalid → fail fast at startup
-//! (a daemon silently running the wrong policy is worse than no daemon).
+//! Missing file → defaults. Present but invalid → fail fast at startup.
+//! Durable owner overrides live separately under `/var/lib/totemd`.
 //! Auto-connect/rendezvous is fips's config (`/etc/fips/fips.yaml`), not
 //! ours — these keys govern the engagement ladder only (`10-control-plane.md`).
 
 use std::path::Path;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Befriend {
     Auto,
@@ -17,6 +17,7 @@ pub enum Befriend {
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct Config {
+    pub device_name: String,
     pub probe: bool,
     pub verdict_ttl_hours: u64,
     pub befriend: Befriend,
@@ -26,6 +27,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            device_name: "Totem".into(),
             probe: true,
             verdict_ttl_hours: 24,
             befriend: Befriend::Ask,
@@ -38,9 +40,17 @@ impl Default for Config {
 #[serde(deny_unknown_fields)]
 struct Raw {
     #[serde(default)]
+    device: Device,
+    #[serde(default)]
     net: Net,
     #[serde(default)]
     policy: Policy,
+}
+
+#[derive(serde::Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct Device {
+    name: Option<String>,
 }
 
 #[derive(serde::Deserialize, Default)]
@@ -53,7 +63,7 @@ struct Net {
 #[derive(serde::Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 struct Policy {
-    befriend: Option<String>,
+    befriend: Option<Befriend>,
     sync: Option<bool>,
 }
 
@@ -63,6 +73,13 @@ impl Config {
     pub fn parse(s: &str) -> Result<Self, String> {
         let raw: Raw = toml::from_str(s).map_err(|e| format!("parse config: {e}"))?;
         let mut c = Config::default();
+        if let Some(v) = raw.device.name {
+            let v = v.trim();
+            if v.is_empty() || v.chars().any(char::is_control) || v.chars().count() > 64 {
+                return Err("device.name must be 1-64 characters without controls".into());
+            }
+            c.device_name = v.into();
+        }
         if let Some(v) = raw.net.probe {
             c.probe = v;
         }
@@ -72,13 +89,8 @@ impl Config {
         if let Some(v) = raw.policy.sync {
             c.sync = v;
         }
-        if let Some(v) = &raw.policy.befriend {
-            c.befriend = match v.as_str() {
-                "auto" => Befriend::Auto,
-                "ask" => Befriend::Ask,
-                "never" => Befriend::Never,
-                other => return Err(format!("policy.befriend: '{other}' (want auto|ask|never)")),
-            };
+        if let Some(v) = raw.policy.befriend {
+            c.befriend = v;
         }
         Ok(c)
     }
@@ -114,10 +126,12 @@ mod tests {
     #[test]
     fn parses_all_keys() {
         let c = Config::parse(
-            "[net]\nprobe = false\nverdict_ttl_hours = 8\n\
+            "[device]\nname = \"motown\"\n\
+             [net]\nprobe = false\nverdict_ttl_hours = 8\n\
              [policy]\nbefriend = \"auto\"\nsync = false\n",
         )
         .unwrap();
+        assert_eq!(c.device_name, "motown");
         assert!(!c.probe && !c.sync);
         assert_eq!(c.verdict_ttl_hours, 8);
         assert_eq!(c.befriend, Befriend::Auto);
@@ -133,6 +147,8 @@ mod tests {
     #[test]
     fn bad_value_unknown_key_or_bad_toml_fails_fast() {
         assert!(Config::parse("[policy]\nbefriend = \"sometimes\"\n").is_err());
+        assert!(Config::parse("[device]\nname = \"\"\n").is_err());
+        assert!(Config::parse("[device]\nname = \"bad\\nname\"\n").is_err());
         assert!(Config::parse("[net]\nproeb = false\n").is_err());
         assert!(Config::parse("[net\nbroken\n").is_err());
     }

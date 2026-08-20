@@ -2,11 +2,15 @@
 //! owner app / challenge endpoint) and the loopback-only bus. Ports are
 //! pinned in `07-conventions.md`; bind addresses remain env-overridable.
 
-use std::{convert::Infallible, net::SocketAddr, sync::Arc};
+use std::{
+    convert::Infallible,
+    net::SocketAddr,
+    sync::{Arc, RwLock},
+};
 
 use axum::{
-    extract::State,
-    http::{header, uri::Authority, HeaderMap},
+    extract::{DefaultBodyLimit, State},
+    http::{header, uri::Authority, HeaderMap, StatusCode},
     response::{
         sse::{Event, KeepAlive, Sse},
         Html, IntoResponse, Response,
@@ -17,7 +21,20 @@ use axum::{
 use serde_json::{json, Value};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
-use crate::{bus, challenge, config, fips, state::AppState, sync};
+use crate::{
+    auth, bus, challenge,
+    config::{self, Befriend},
+    fips, owner, profile,
+    state::AppState,
+    sync,
+};
+
+#[derive(Clone)]
+struct ControlState {
+    app: Arc<AppState>,
+    signer: Arc<challenge::Signer>,
+    profile: Arc<RwLock<profile::Profile>>,
+}
 
 fn addr_from_env(var: &str, default: &str) -> SocketAddr {
     let value = std::env::var_os(var).unwrap_or_else(|| default.into());
@@ -37,11 +54,21 @@ pub async fn serve() {
             std::process::exit(2);
         }
     };
+    let st = match AppState::load(cfg, owner::path()) {
+        Ok(state) => Arc::new(state),
+        Err(e) => {
+            eprintln!("totemd: {e}");
+            std::process::exit(2);
+        }
+    };
+    let cfg = st.config();
     tracing::info!(
+        device_name = cfg.device_name,
         probe = cfg.probe,
         befriend = ?cfg.befriend,
         sync = cfg.sync,
         verdict_ttl_hours = cfg.verdict_ttl_hours,
+        claimed = st.owner.owner().is_some(),
         "effective config"
     );
     let signer = match challenge::Signer::load(&challenge::key_path()) {
@@ -52,17 +79,30 @@ pub async fn serve() {
         }
     };
     tracing::info!(pubkey = %signer.public_key().to_hex(), "device signing key loaded");
-    let st = Arc::new(AppState::new(cfg));
+    let profile = Arc::new(RwLock::new(profile::reconcile(&cfg, signer.public_key())));
+    let control = ControlState {
+        app: st.clone(),
+        signer: signer.clone(),
+        profile,
+    };
 
     // Loopback only: the bus is kernel-internal by construction.
     let bus_router = Router::new()
         .route("/bus", post(bus_post))
         .route("/bus/events", get(bus_events))
         .with_state(st.clone());
-    // Public: guest page + the signed challenge responder.
+    // Public: guest page, owner API, and the signed challenge responder.
     let web_router = Router::new()
         .route("/", get(root))
-        .with_state(st.clone())
+        .route("/app.js", get(app_js))
+        .route("/nsec-signer.js", get(nsec_signer_js))
+        .route("/api/auth/challenge", post(auth_challenge))
+        .route("/api/owner", get(owner_status))
+        .route("/api/owner/claim", post(owner_claim))
+        .route("/api/metadata", get(metadata_get).put(metadata_put))
+        .route("/api/config", get(config_get).put(config_put))
+        .layer(DefaultBodyLimit::max(64 * 1024))
+        .with_state(control)
         .merge(challenge::router(signer));
 
     let web_addr = addr_from_env("TOTEMD_WEB_ADDR", "[::]:8080");
@@ -123,6 +163,216 @@ async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
 }
 
+type ApiFailure = (StatusCode, String);
+
+fn base_url(headers: &HeaderMap) -> Result<String, ApiFailure> {
+    let host = headers
+        .get(header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "missing Host header".into()))?;
+    let authority = host
+        .parse::<Authority>()
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid Host header".into()))?;
+    Ok(format!("http://{authority}"))
+}
+
+fn api_json<T: serde::Serialize>(value: T) -> Response {
+    ([(header::CACHE_CONTROL, "no-store")], Json(value)).into_response()
+}
+
+fn api_error(status: StatusCode, error: &str) -> Response {
+    (
+        status,
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(json!({ "ok": false, "error": error })),
+    )
+        .into_response()
+}
+
+async fn auth_challenge(
+    State(control): State<ControlState>,
+    headers: HeaderMap,
+    body: String,
+) -> Response {
+    let request: auth::ChallengeRequest = match serde_json::from_str(&body) {
+        Ok(request) => request,
+        Err(_) => return api_error(StatusCode::BAD_REQUEST, "invalid challenge request"),
+    };
+    let base = match base_url(&headers) {
+        Ok(base) => base,
+        Err((status, error)) => return api_error(status, &error),
+    };
+    match control.app.auth.issue(&base, request) {
+        Ok(challenge) => api_json(challenge),
+        Err(error) => api_error(StatusCode::BAD_REQUEST, &error),
+    }
+}
+
+fn authorize(
+    control: &ControlState,
+    headers: &HeaderMap,
+    path: &str,
+    method: &str,
+    body: &[u8],
+) -> Result<nostr::prelude::PublicKey, ApiFailure> {
+    let authorization = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| {
+            (
+                StatusCode::UNAUTHORIZED,
+                "Nostr authorization required".into(),
+            )
+        })?;
+    let url = format!("{}{path}", base_url(headers)?);
+    control
+        .app
+        .auth
+        .verify(authorization, &url, method, body)
+        .map_err(|error| (StatusCode::UNAUTHORIZED, error))
+}
+
+fn authorize_owner(
+    control: &ControlState,
+    headers: &HeaderMap,
+    path: &str,
+    method: &str,
+    body: &[u8],
+) -> Result<(), ApiFailure> {
+    let signer = authorize(control, headers, path, method, body)?;
+    if control.app.owner.owner() == Some(signer) {
+        Ok(())
+    } else {
+        Err((StatusCode::FORBIDDEN, "owner signature required".into()))
+    }
+}
+
+async fn owner_status(State(control): State<ControlState>) -> Response {
+    api_json(json!({ "claimed": control.app.owner.owner().is_some() }))
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EmptyRequest {}
+
+async fn owner_claim(
+    State(control): State<ControlState>,
+    headers: HeaderMap,
+    body: String,
+) -> Response {
+    if control.app.owner.owner().is_some() {
+        return api_error(StatusCode::CONFLICT, "totem is already claimed");
+    }
+    let signer = match authorize(
+        &control,
+        &headers,
+        "/api/owner/claim",
+        "POST",
+        body.as_bytes(),
+    ) {
+        Ok(signer) => signer,
+        Err((status, error)) => return api_error(status, &error),
+    };
+    if serde_json::from_str::<EmptyRequest>(&body).is_err() {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "claim body must be an empty object",
+        );
+    }
+    match control.app.owner.claim(signer) {
+        Ok(true) => {
+            tracing::info!(owner = %signer.to_hex(), "totem claimed");
+            control.app.push(json!({ "type": "totem.owner.claimed" }));
+            api_json(json!({ "ok": true, "claimed": true }))
+        }
+        Ok(false) => api_error(StatusCode::CONFLICT, "totem is already claimed"),
+        Err(error) => {
+            tracing::error!(%error, "persisting owner claim failed");
+            api_error(StatusCode::INTERNAL_SERVER_ERROR, "owner claim failed")
+        }
+    }
+}
+
+async fn metadata_get(State(control): State<ControlState>) -> Response {
+    api_json(control.profile.read().unwrap().clone())
+}
+
+async fn metadata_put(
+    State(control): State<ControlState>,
+    headers: HeaderMap,
+    body: String,
+) -> Response {
+    if let Err((status, error)) =
+        authorize_owner(&control, &headers, "/api/metadata", "PUT", body.as_bytes())
+    {
+        return api_error(status, &error);
+    }
+    let metadata = match serde_json::from_str(&body)
+        .map_err(|_| "invalid metadata".to_string())
+        .and_then(profile::validate)
+    {
+        Ok(metadata) => metadata,
+        Err(error) => return api_error(StatusCode::BAD_REQUEST, &error),
+    };
+    let signer = control.signer.clone();
+    let result = tokio::task::spawn_blocking(move || profile::publish(&signer, metadata)).await;
+    let (profile, event) = match result {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => {
+            tracing::error!(%error, "publishing device metadata failed");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, "metadata publish failed");
+        }
+        Err(error) => {
+            tracing::error!(%error, "metadata task failed");
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, "metadata publish failed");
+        }
+    };
+    *control.profile.write().unwrap() = profile.clone();
+    control.app.push(json!({
+        "type": "totem.metadata.changed",
+        "event_id": event.id.to_hex(),
+        "name": profile.metadata.name,
+    }));
+    api_json(json!({ "ok": true, "profile": profile, "event_id": event.id.to_hex() }))
+}
+
+async fn config_get(State(control): State<ControlState>) -> Response {
+    api_json(control.app.config())
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConfigUpdate {
+    sync: bool,
+    befriend: Befriend,
+}
+
+async fn config_put(
+    State(control): State<ControlState>,
+    headers: HeaderMap,
+    body: String,
+) -> Response {
+    if let Err((status, error)) =
+        authorize_owner(&control, &headers, "/api/config", "PUT", body.as_bytes())
+    {
+        return api_error(status, &error);
+    }
+    let update: ConfigUpdate = match serde_json::from_str(&body) {
+        Ok(update) => update,
+        Err(_) => return api_error(StatusCode::BAD_REQUEST, "invalid configuration"),
+    };
+    match control.app.update_policy(update.sync, update.befriend) {
+        Ok(config) => api_json(json!({ "ok": true, "config": config })),
+        Err(error) => {
+            tracing::error!(%error, "persisting owner configuration failed");
+            api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "configuration update failed",
+            )
+        }
+    }
+}
+
 const STYLE: &str = r#"
 :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }
 * { box-sizing: border-box; }
@@ -142,6 +392,22 @@ code { display: block; overflow-wrap: anywhere; padding: .75rem; border-radius: 
 dt { color: #5c6758; font-size: .9rem; }
 dd { margin: .2rem 0 0; font-size: 1.35rem; font-weight: 700; overflow-wrap: anywhere; }
 a { color: #245c96; }
+[hidden] { display: none !important; }
+form { display: grid; gap: .8rem; margin-top: 1rem; }
+label { display: grid; gap: .3rem; font-weight: 700; }
+input, textarea, select, button { font: inherit; }
+input, textarea, select { width: 100%; padding: .65rem; border: 1px solid #a9a18f; border-radius: .4rem; background: transparent; color: inherit; }
+textarea { min-height: 5rem; resize: vertical; }
+.check { display: flex; align-items: center; gap: .5rem; }
+.check input { width: auto; }
+button { width: fit-content; padding: .65rem 1rem; border: 0; border-radius: .4rem; background: #245c96; color: white; font-weight: 700; cursor: pointer; }
+button:disabled { opacity: .55; cursor: wait; }
+.signer { padding: .8rem; border: 1px solid #d5cdbc; border-radius: .5rem; }
+.signer-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+details { margin-top: .8rem; }
+summary { cursor: pointer; font-weight: 700; }
+.warning { color: #8b3a2b; font-size: .9rem; }
+.message { min-height: 1.5em; }
 footer { margin-top: 2rem; color: #5c6758; font-size: .9rem; }
 @media (prefers-color-scheme: dark) {
   body { background: #171a17; color: #edf1ea; }
@@ -175,7 +441,7 @@ fn relay_url(host: &str) -> Option<String> {
         .map(|authority| format!("ws://{}:7777", authority.host()))
 }
 
-fn render_home(status: &Value, relay: &str) -> String {
+fn render_home(status: &Value, profile: &profile::Profile, relay: &str) -> String {
     let connected = status["fips"]["connected"].as_bool().unwrap_or(false);
     let connection = if connected {
         "Connected"
@@ -184,6 +450,14 @@ fn render_home(status: &Value, relay: &str) -> String {
     };
     let connection_class = if connected { "online" } else { "offline" };
     let npub = escape_html(status["fips"]["npub"].as_str().unwrap_or("Starting…"));
+    let name = escape_html(&profile.metadata.name);
+    let about = profile
+        .metadata
+        .about
+        .as_deref()
+        .map(escape_html)
+        .map(|about| format!("<p>{about}</p>"))
+        .unwrap_or_default();
     let relay = escape_html(relay);
     let version = escape_html(status["version"].as_str().unwrap_or("unknown"));
     let befriend = escape_html(status["config"]["befriend"].as_str().unwrap_or("unknown"));
@@ -203,15 +477,18 @@ fn render_home(status: &Value, relay: &str) -> String {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Totem</title>
+<title>{name} · Totem</title>
 <style>{STYLE}</style>
+<script src="/nsec-signer.js" defer></script>
+<script src="/app.js" defer></script>
 </head>
 <body>
 <main>
 <header>
 <p class="eyebrow">Carry the network</p>
-<h1>Totem</h1>
+<h1 id="device-name">{name}</h1>
 <span class="status {connection_class}"><span aria-hidden="true">●</span> {connection}</span>
+{about}
 </header>
 <section aria-labelledby="relay-heading">
 <h2 id="relay-heading">Local relay</h2>
@@ -238,31 +515,101 @@ fn render_home(status: &Value, relay: &str) -> String {
 <div><dt>Friendship</dt><dd>{befriend}</dd></div>
 </dl>
 </section>
+<section id="owner-controls" aria-labelledby="owner-heading">
+<h2 id="owner-heading">Owner controls</h2>
+<p id="owner-state">Loading claim state…</p>
+<div class="signer" aria-labelledby="signer-heading">
+<h3 id="signer-heading">Signer</h3>
+<p id="signer-state">Looking for a NIP-07 extension…</p>
+<div class="signer-actions">
+<button id="use-extension" type="button">Use browser extension</button>
+<button id="signer-logout" type="button" hidden>Forget signer</button>
+</div>
+<details>
+<summary>Development escape hatch: use nsec</summary>
+<p class="warning">The nsec stays in this page's memory and is cleared on logout or navigation. Use a development key only.</p>
+<form id="nsec-form">
+<label>nsec <input id="nsec" type="password" autocomplete="new-password" spellcheck="false" required></label>
+<button type="submit">Use nsec locally</button>
+</form>
+</details>
+</div>
+<button id="claim" type="button" hidden>Claim this Totem</button>
+<div id="settings" hidden>
+<form id="metadata-form">
+<h3>Public profile</h3>
+<label>Name <input id="metadata-name" maxlength="64" required></label>
+<label>Display name <input id="metadata-display-name" maxlength="128"></label>
+<label>About <textarea id="metadata-about" maxlength="1024"></textarea></label>
+<label>Picture URL <input id="metadata-picture" type="url" maxlength="2048"></label>
+<label>Website <input id="metadata-website" type="url" maxlength="2048"></label>
+<button type="submit">Publish profile</button>
+</form>
+<form id="config-form">
+<h3>Engagement policy</h3>
+<label class="check"><input id="config-sync" type="checkbox"> Sync every recognized Totem</label>
+<label>Friendship
+<select id="config-befriend">
+<option value="ask">Ask</option>
+<option value="auto">Automatic</option>
+<option value="never">Never</option>
+</select>
+</label>
+<button type="submit">Save policy</button>
+</form>
+</div>
+<p id="owner-message" class="message" role="status" aria-live="polite"></p>
+<noscript>Owner controls require JavaScript and a NIP-07 or nsec signer.</noscript>
+</section>
 <p><a href="/">Refresh status</a></p>
-<footer>totemd {version} · Read-only status</footer>
+<footer>totemd {version}</footer>
 </main>
 </body>
 </html>"#
     )
 }
 
-async fn root(State(st): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+const APP_JS: &str = include_str!("../web/app.js");
+const NSEC_SIGNER_JS: &str = include_str!("../web/nsec-signer.js");
+
+fn javascript(source: &'static str) -> Response {
+    (
+        [
+            (header::CACHE_CONTROL, "no-store"),
+            (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        ],
+        source,
+    )
+        .into_response()
+}
+
+async fn app_js() -> Response {
+    javascript(APP_JS)
+}
+
+async fn nsec_signer_js() -> Response {
+    javascript(NSEC_SIGNER_JS)
+}
+
+async fn root(State(control): State<ControlState>, headers: HeaderMap) -> Response {
     let host = headers
         .get(header::HOST)
         .and_then(|value| value.to_str().ok())
         .and_then(relay_url)
         .unwrap_or_else(|| "ws://this-totem:7777".into());
-    let status = bus::handle(json!({"type": "totem.status.get"}), &st);
+    let status = bus::handle(json!({"type": "totem.status.get"}), &control.app);
+    let profile = control.profile.read().unwrap().clone();
     (
         [
             (header::CACHE_CONTROL, "no-store"),
             (
                 header::CONTENT_SECURITY_POLICY,
-                "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+                "default-src 'none'; script-src 'self' chrome-extension: moz-extension:; connect-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
             ),
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
         ],
-        Html(render_home(&status["status"], &host)),
+        Html(render_home(&status["status"], &profile, &host)),
     )
         .into_response()
 }
@@ -318,12 +665,26 @@ mod tests {
             "recognized": 1,
             "events": {"totem.sync.done": 4},
         });
-        let html = render_home(&status, "ws://totem.invalid:7777/?x=<bad>&y=1");
+        let profile = profile::Profile {
+            metadata: profile::DeviceMetadata {
+                name: "name<script>".into(),
+                display_name: None,
+                about: Some("about<&".into()),
+                picture: None,
+                website: None,
+            },
+            source: "kind0",
+            nip11_name: "!Totem name".into(),
+        };
+        let html = render_home(&status, &profile, "ws://totem.invalid:7777/?x=<bad>&y=1");
         assert!(html.starts_with("<!doctype html>"));
+        assert!(html.contains("name&lt;script&gt;"));
+        assert!(html.contains("about&lt;&amp;"));
         assert!(html.contains("npub&lt;&amp;&quot;&#39;"));
         assert!(html.contains("ask&lt;script&gt;"));
         assert!(html.contains("?x=&lt;bad&gt;&amp;y=1"));
         assert!(html.contains("Every recognized Totem"));
-        assert!(!html.contains("<script>"));
+        assert!(html.contains("<script src=\"/nsec-signer.js\" defer></script>"));
+        assert!(!html.contains("name<script>"));
     }
 }

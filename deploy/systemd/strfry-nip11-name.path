@@ -1,0 +1,8 @@
+[Unit]
+Description=Watch Totem's derived NIP-11 name
+
+[Path]
+PathChanged=/var/lib/totemd/nip11-name
+
+[Install]
+WantedBy=multi-user.target

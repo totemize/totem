@@ -105,18 +105,21 @@ ssh motown.fips          # via FIPS mesh
   `router`-branch build was replaced after live wire testing proved its
   pre-standard negentropy format incompatible despite the same `sync` CLI;
   Ansible verification fails closed on this contract.
-- NIP-11 markers per 07 conventions (2026-08-20): `info.name =
-  "!Totem motown"`, `info.pubkey` and `info.self` = hex npub
-  `19bd90fd…2008d`; NIP 77 and `negentropy = 1` render over the mesh.
-  Footgun: golpe takes the LAST duplicate key — set the stock `pubkey = ""`
-  line, don't add a second one.
+- NIP-11 markers per 07 conventions (2026-08-20): `info.name` reads the
+  atomically generated `/var/lib/totemd/nip11-name` and hot-reloads without a
+  relay restart; current device-signed kind-0 value is `!Totem motown-wow`.
+  `info.pubkey` and
+  `info.self` = hex npub `19bd90fd…2008d`; NIP 77 and `negentropy = 1` render
+  over the mesh. Footgun: golpe takes the LAST duplicate key — set the stock
+  `pubkey = ""` line, don't add a second one.
 
 ### totemd (all three bench units)
 
 - Standing install: `/usr/local/bin/totemd`, `totemctl` symlink,
   `totemd.service` enabled; deploy/update with `deploy/flash.sh [devices]`.
-- Operator policy: `/etc/totemd/config.toml` (created only when absent —
-  flash never clobbers edits); restart totemd after changes.
+- Deployment fallback: `/etc/totemd/config.toml` (created only when absent).
+  Owner + mutable policy state: `/var/lib/totemd/state.toml` (0600, atomic).
+  Public metadata is the latest own device-signed kind 0 in strfry.
 - Signed challenge build is deployed to all three bench units. Metot joined
   this baseline through the converged Ansible deployment on 2026-08-20.
 - The sync-supervisor build is deployed only to totem + motown.
@@ -126,9 +129,13 @@ ssh motown.fips          # via FIPS mesh
 - Relay CLI runner: `/usr/local/libexec/totem-strfry`; `totem` belongs to the
   `strfry` group and `/etc/strfry.conf` + `/var/lib/strfry` are group-scoped,
   never world-writable. `deploy/flash.sh` and Ansible maintain this integration.
-- Public `GET /` on port 8080 is server-rendered, read-only HTML: relay URL,
-  local identity, and aggregate status only. It has no JavaScript or public
-  control endpoint; `/bus` and `/bus/events` remain loopback-only.
+- Owner/profile build is deployed to motown only; it was successfully claimed
+  through the in-memory development nsec flow and published its first own kind
+  0. Totem and metot retain their prior builds. Motown's page uses
+  same-origin `/app.js` plus nonce-bound NIP-98 APIs for first-signer claim,
+  policy, and device-signed kind-0 metadata. It polls for late NIP-07 injection
+  and has a development-only in-memory nsec signer (never sent/stored; use a
+  dev key). `/bus` and `/bus/events` remain loopback-only.
 
 ```bash
 ssh totem 'totemctl status'  # fips health + effective policy + counters

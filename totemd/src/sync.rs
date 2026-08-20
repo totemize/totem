@@ -224,7 +224,7 @@ fn start_with(
     runner: PathBuf,
     timeout: Duration,
 ) {
-    if !(st.config.sync || is_friend)
+    if !(st.config().sync || is_friend)
         || !st.is_recognized(&npub)
         || st.peer_encounter(&npub) != Some(encounter)
     {

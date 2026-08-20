@@ -87,8 +87,9 @@ Run the selected deployment a second time. A converged deployment must report
 `changed=0`, and the verification role checks the core services plus any
 host-enabled screen service, FIPS TUN health, strfry NIP-77 support, an LMDB
 scan through the unprivileged runner, `totemd`, the Python health endpoint, and
-the migration chain. The verification also requires the `!Totem metot` NIP-11
-identity and a kind-27235 challenge signed by metot's FIPS key.
+the migration chain. Verification also requires the dynamically derived
+`!Totem` NIP-11 identity and a kind-27235 challenge signed by the inventory
+host's FIPS key.
 
 For an operational no-restart window, keep enforcing files and state while
 suppressing all service restart handlers:

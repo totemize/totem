@@ -82,12 +82,18 @@
     use_proxy: false
   register: strfry_nip11
 
+- name: Read the derived NIP-11 name
+  ansible.builtin.slurp:
+    path: /var/lib/totemd/nip11-name
+  register: strfry_nip11_name
+
 - name: Validate the strfry relay contract
   ansible.builtin.assert:
     that:
       - strfry_nip11.json.negentropy | int == 1
       - 77 in strfry_nip11.json.supported_nips
-      - strfry_nip11.json.name == '!Totem ' ~ inventory_hostname
+      - "strfry_nip11.json.name is match('^!Totem(?: |$)')"
+      - strfry_nip11.json.name == (strfry_nip11_name.content | b64decode)
       - strfry_nip11.json.pubkey == totem_npub_hex
 
 - name: Exercise an LMDB scan as the unprivileged control-plane user

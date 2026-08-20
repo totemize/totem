@@ -70,6 +70,28 @@
     force: false
   notify: Restart totemd
 
+- name: Check for a configured device-name fallback
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/grep
+      - -q
+      - '^\[device\]'
+      - /etc/totemd/config.toml
+  register: totemd_device_name
+  changed_when: false
+  failed_when: false
+
+- name: Add the inventory name as fallback on existing configurations
+  ansible.builtin.blockinfile:
+    path: /etc/totemd/config.toml
+    insertbefore: BOF
+    marker: "# {mark} ANSIBLE MANAGED DEVICE NAME"
+    block: |
+      [device]
+      name = "{{ inventory_hostname }}"
+  when: totemd_device_name.rc != 0
+  notify: Restart totemd
+
 - name: Install totemd
   ansible.builtin.copy:
     src: >-

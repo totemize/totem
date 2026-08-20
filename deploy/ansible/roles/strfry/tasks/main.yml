@@ -44,6 +44,16 @@
     - {path: /usr/local/libexec, owner: root, group: root, mode: "0755"}
     - {path: /etc/systemd/system/strfry.service.d, owner: root, group: root, mode: "0755"}
     - {path: /var/lib/strfry, owner: strfry, group: strfry, mode: "2770"}
+    - {path: /var/lib/totemd, owner: totem, group: totem, mode: "0755"}
+
+- name: Seed the public derived NIP-11 name
+  ansible.builtin.copy:
+    dest: /var/lib/totemd/nip11-name
+    owner: totem
+    group: totem
+    mode: "0644"
+    content: "!Totem {{ inventory_hostname }}"
+    force: false
 
 - name: Seed an IPv6-capable strfry configuration on bare devices
   ansible.builtin.template:
@@ -62,12 +72,12 @@
     line: '    bind = "::"'
   notify: Restart strfry
 
-- name: Reconcile the NIP-11 Totem name
+- name: Reconcile the dynamic NIP-11 Totem name
   ansible.builtin.lineinfile:
     path: /etc/strfry.conf
     regexp: '^\s*name\s*='
-    line: '        name = "!Totem {{ inventory_hostname }}"'
-  notify: Restart strfry
+    line: '        name = (string (read "/var/lib/totemd/nip11-name"))'
+  notify: Hot-reload strfry configuration
 
 - name: Reconcile the NIP-11 public identity
   ansible.builtin.lineinfile:
@@ -147,6 +157,24 @@
   notify:
     - Reload systemd for strfry
     - Restart strfry
+
+- name: Install NIP-11 name hot-reload units
+  ansible.builtin.copy:
+    src: "{{ totem_repo_root }}/deploy/systemd/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - strfry-nip11-name.path
+    - strfry-nip11-name.service
+
+- name: Enable the NIP-11 name watcher
+  ansible.builtin.systemd_service:
+    name: strfry-nip11-name.path
+    enabled: true
+    state: started
+    daemon_reload: true
 
 - name: Find existing top-level strfry database files
   ansible.builtin.find:

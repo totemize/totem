@@ -48,12 +48,15 @@ custom fields:
 
 - **`name` MUST start with `!Totem`** (e.g. `!Totem Mara`). The prefix is
   the totem marker — the same string as the AP SSID, one marker everywhere
-  a totem appears, and it renders in nostr clients' relay lists.
+  a totem appears, and it renders in nostr clients' relay lists. The suffix
+  is derived from the latest valid device-authored kind-0 `name`, falling
+  back to `device.name` configuration and finally `Totem`; strfry hot-reloads
+  the derived value without a relay restart.
 - **`pubkey` MUST be the device npub** (hex or bech32) — the identity
   claim the challenge verifies (`02-identity.md`). `pubkey` is NIP-11's
-  administrative-contact field, present in every strfry build; on a totem
-  the device npub *is* the administrative identity (one identity
-  everywhere, `02-identity.md`). A relay MAY additionally set `self` to
+  administrative-contact field, present in every strfry build; Totem uses it
+  as the relay/device identity claim, not as owner authorization
+  (`02-identity.md`). A relay MAY additionally set `self` to
   the same npub where supported — a prober MUST accept either field as
   the claim.
 
@@ -74,6 +77,23 @@ Values for the recognition challenge (`02-identity.md`):
 - The endpoint is guest-reachable and every request costs a signature:
   implementations MUST rate-limit it and SHOULD permit a small legitimate
   arrival burst.
+
+## Owner HTTP API
+
+The public web listener exposes these same-origin JSON endpoints:
+
+| Method | Path | Access |
+|--------|------|--------|
+| `POST` | `/api/auth/challenge` | Public; binds a one-use nonce to one supported mutation URL, method, and body hash |
+| `GET` | `/api/owner` | Public claimed/unclaimed boolean; never exposes the owner key |
+| `POST` | `/api/owner/claim` | Signed; first valid signer claims an unclaimed device |
+| `GET` / `PUT` | `/api/metadata` | Public read; owner-authenticated kind-0 publication |
+| `GET` / `PUT` | `/api/config` | Public effective-policy read; owner-authenticated policy override |
+
+Mutation authorization is kind 27235 with exact `nonce`, `u`, `method`, and
+`payload` tags. The nonce is single-use and replaces wall-clock freshness;
+the payload is SHA-256 of the exact request body. The event signer MUST equal
+the stored owner after claim.
 
 ## Totem bus
 
@@ -96,6 +116,9 @@ domain registry:
 | `totem.recognized` | push | signed challenge verdict passed (peer is a totem) |
 | `totem.befriended` | push | kind 3 published |
 | `totem.sync.started` / `totem.sync.done` | push | npub, encounter, direction; done adds outcome, duration, exit/error, and event counts when the relay runner exposes them reliably |
+| `totem.owner.claimed` | push | the previously unclaimed device persisted its owner |
+| `totem.metadata.changed` | push | device-signed kind-0 event ID and effective name |
+| `totem.config.changed` | push | newly persisted effective engagement policy |
 
 Pushes are lossy by design: consumers reconcile against `totem.status.get`
 on (re)connect. The CLI (`totemctl`) is a client of this bus and introduces

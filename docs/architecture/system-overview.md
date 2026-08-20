@@ -99,9 +99,10 @@ device-side resolver support from `.fips` resolution on a development host.
 - The Python API currently binds all interfaces, enables permissive CORS, and
   has no authentication layer. Treat port `8000` as a trusted-network or
   development surface until an explicit authorization boundary lands.
-- The `totemd` public bind serves a no-script, read-only HTML landing page at
-  `/` and the rate-limited signed responder at `/totem/challenge`. Owner
-  authentication and control operations are not implemented yet.
+- The `totemd` public bind serves server-rendered status, a same-origin NIP-07
+  owner client/API, and the rate-limited responder at `/totem/challenge`.
+  Owner mutations require nonce-bound NIP-98; the first valid signer claims an
+  unclaimed device.
 
 ## Control and data flows
 

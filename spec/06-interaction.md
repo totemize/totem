@@ -68,25 +68,30 @@ later (`09-open-questions.md`).
 ### Owner authentication
 
 Control-plane operations in the web app MUST require **NIP-98 HTTP
-authentication** — an ephemeral signed event in the `Authorization` header,
-the same mechanism totem recognition uses (`02-identity.md`). Unauthenticated
-requests receive read-only access (state and the relay URL, nothing else),
-so guests can never invoke control-plane operations. Initial provisioning
-and key recovery remain open questions (`09-open-questions.md`).
+authentication** — an ephemeral signed event in the `Authorization` header.
+Totem's profile adds a one-use server nonce and mandatory body hash, so replay
+protection does not depend on RTC/NTP. Unauthenticated requests retain
+read-only status, profile, policy, and relay access; they cannot mutate state.
 
-The web app — and the challenge endpoint, and the bus — are served by the
-control-plane daemon, **totemd** (`10-control-plane.md`); v1 owner identity
-is an administrator npub allowlist configured on the daemon. The relay
-remains a separate stock server on its own port: nothing about owner
-control flows through it.
+A fresh v1 device is claimed by the first valid signer. The signer npub is
+persisted locally as the single owner and all later mutations require that
+same key. This intentionally assumes a trusted bootstrap network; physical
+possession proof and lost-key recovery are deferred (`09-open-questions.md`).
+
+The web app, challenge endpoint, and APIs are served by **totemd**
+(`10-control-plane.md`). The relay remains a separate stock server on its own
+port: owner control never flows through it, and the device secret never enters
+the browser.
 
 ## Guest experience
 
-The v1 unauthenticated landing page is server-rendered, read-only, and usable
-without JavaScript. It surfaces the relay URL plus aggregate device/mesh/sync
-status; peer identities and control operations stay off the public page.
-Whether AP join opens it as a captive portal remains an open question
-(`09-open-questions.md`).
+The landing page's status, profile, and relay URL remain server-rendered and
+usable without JavaScript. A small same-origin client enables claim and owner
+forms through a NIP-07 browser signer. During early development it also offers
+an explicit nsec escape hatch that signs only in page memory, never transmits
+or persists the secret, and clears its key bytes on logout/navigation. Guests
+still receive only the public read surface. Whether AP join opens it as a
+captive portal remains an open question (`09-open-questions.md`).
 
 ## The ambassador property
 
