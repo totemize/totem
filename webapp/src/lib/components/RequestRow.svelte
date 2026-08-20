@@ -6,6 +6,7 @@
 </script>
 
 <div class="item clickable" onclick={() => store.openPeer(peer.info.pubkey)} role="button" tabindex="0" onkeydown={(e) => e.key === "Enter" && store.openPeer(peer.info.pubkey)}>
+  <div class="avatar"></div>
   <span class="label">{peer.info.name}</span>
   <span class="hint">wants to be friends</span>
   <button class="btn primary" onclick={(e) => { e.stopPropagation(); store.answerPeerRequest(peer.info.pubkey, true); }}>Yes</button>
