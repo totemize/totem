@@ -38,6 +38,26 @@ PYTHONPATH=src python examples/display_text.py \
   --text $'hello world\n<3 totem'
 ```
 
+Render a normal image file; Pillow handles decoding and the selected driver
+handles resizing and framebuffer conversion:
+
+```bash
+PYTHONPATH=src python examples/display_image.py \
+  --driver waveshare_2in13_v4 \
+  image.png
+```
+
+Render an already encoded, controller-native framebuffer:
+
+```bash
+PYTHONPATH=src python examples/display_bytes.py \
+  --driver waveshare_2in13_v4 \
+  frame.bin
+```
+
+Raw framebuffer dimensions and pixel layout are driver-specific. The
+Waveshare 2.13-inch V4 driver requires exactly 4,000 bytes.
+
 `metot` uses the checked-in [`deploy/devices/metot.env`](../../deploy/devices/metot.env)
 profile. Install that file as `/etc/totem/totem.env`; the systemd unit reads it
 on startup. SPI0 must also be enabled persistently in the Raspberry Pi boot
