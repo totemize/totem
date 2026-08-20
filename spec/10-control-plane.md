@@ -28,8 +28,9 @@ splits across the two servers; both ports are pinned in `07-conventions.md`.
   responses with the device identity (`02-identity.md`). A root-owned runner
   invokes strfry through its bundled musl loader; `totem` belongs to the
   `strfry` group and LMDB stays group-writable, so sync needs no root process.
-- Web assets are embedded in the binary; deployment is one binary plus one
-  systemd unit.
+- Web assets are embedded in the binary. A small systemd path/oneshot pair
+  touches strfry's root-owned config when the derived public name changes;
+  strfry performs its built-in hot reload without a restart.
 - Display presentation is a separate `totem-screen` process. `totemd` remains
   the state authority, while the Python device-manager API remains the only
   owner of display SPI/GPIO. The screen process consumes control-plane state
@@ -42,22 +43,27 @@ splits across the two servers; both ports are pinned in `07-conventions.md`.
 |-----------|--------------|
 | **Net-code loop** | Watches the fips control socket (`/run/fips/control.sock`, JSON-lines — a direct client, never a `fipsctl` shell-out) for authenticated peers; resolves `.fips` via the documented embedder path (UDP `[::1]:5354`); probes NIP-11; runs the challenge as prover; emits verdicts (`02-identity.md`) |
 | **Challenge responder** | `GET /totem/challenge` on the web port; signs kind 27235 with the device key; strict nonce/URL/method binding and a small-burst global signature limit |
+| **Profile writer** | Reads the latest own kind 0, signs owner-authorized metadata with the device key, imports it into the local relay, and mirrors its bounded name into NIP-11 |
+| **Owner state** | Atomically persists one owner npub and owner policy overrides under `/var/lib/totemd`; corrupt state locks startup rather than becoming unclaimed |
 | **Contacts writer** | Serialized read-modify-sign-write of kind 3 — the only writer; mutations from pairing, from the owner web app, and from `totemctl` all route through here |
-| **Sync supervisor** | Spawns and supervises `strfry sync ws://[peer]:PORT --dir=both` when recognition and policy permit; departure, shutdown, and a bounded runtime cancel the child, while negentropy makes the next encounter resumable |
+| **Sync supervisor** | Runs `strfry sync ws://[peer]:PORT --dir=both` immediately and every five minutes while recognition and policy permit; rounds never overlap per peer, and departure, shutdown, or a bounded per-round runtime cancels the child |
 | **Web server** | Two binds: the public web port (guest page + relay URL, owner app behind NIP-98, challenge endpoint) and a **loopback-only bind** for the bus |
 | **Device manager boundary** | Hardware actuation remains behind the local device-manager API (`src/totem/api` — display, NFC, storage, network). Presentation consumers such as `totem-screen` derive state from the bus/status surface and submit complete frames; device events are surfaced on the bus. |
 | **Encounter log** | Append-only JSONL of verdicts and syncs — the substrate for future encounter records (`09-open-questions.md`) and the source of stats |
 
 ## Configuration and engagement policy
 
-Operator policy is read at startup from `/etc/totemd/config.toml`. A missing
-file uses the defaults below; a present but malformed file is a startup error (silently
-running the wrong social policy is worse than no daemon). FIPS rendezvous and
-transport remain in `/etc/fips/fips.yaml`; totemd config controls only what
-happens after FIPS reports an authenticated peer.
+Deployment fallback is read at startup from root-owned
+`/etc/totemd/config.toml`. A missing file uses defaults; a malformed file is a
+startup error. Owner and mutable policy state is atomically persisted in
+`/var/lib/totemd/state.toml`; owner overrides win over fallback policy. Public
+metadata is not duplicated there: the latest valid device-authored kind 0 is
+canonical, with `device.name` as fallback. FIPS rendezvous and transport remain
+in `/etc/fips/fips.yaml`.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
+| `device.name` | `"Totem"` | Public-name fallback until a valid own kind 0 exists |
 | `net.probe` | `true` | Run the read-only NIP-11 prefilter on peers |
 | `net.verdict_ttl_hours` | `24` | Minimum delay before re-probing a non-totem or unreachable peer |
 | `policy.befriend` | `"ask"` | `auto`, `ask`, or `never` publish the peer in kind 3 |
@@ -79,17 +85,23 @@ escalating backoff are deferred until measurements justify them.
 
 ## Owner authentication
 
-NIP-98 (`06-interaction.md`) against an administrator npub allowlist in the
-daemon config. This defers the owner-key-vs-device-key question
-(`09-open-questions.md`) without blocking v1.
+A device begins unclaimed. In v1 the first valid nonce-bound NIP-98 signer is
+atomically persisted as its single owner; physical possession proof is
+deliberately deferred. Every later metadata or policy mutation requires that
+owner pubkey. Authorization binds an unpredictable one-use nonce, exact URL,
+method, and SHA-256 request-body hash; no wall-clock window is load-bearing.
+The owner signature authorizes the request, while the device key signs kind 0
+and kind 3 and never leaves systemd's credential boundary.
 
 ## The bus
 
 Messages use the NIP-5D wire shape; the `totem.*` domain registry lives in
 `07-conventions.md` (one home for the vocabulary). Pull via request/result
 on the loopback bind, push via SSE (`/bus/events`); pushes are lossy and
-consumers reconcile against `totem.status.get` on (re)connect. Diagnostics
-stay in journald — peripherals react to typed events, never to logs.
+consumers reconcile against `totem.status.get` on (re)connect. A bounded
+in-memory request exposes recent pushes to operators without changing those
+delivery semantics. Diagnostics stay in journald — peripherals react to typed
+events, never to logs.
 
 The boot-display POC uses the same boundary before typed display events exist:
 it checks the device-manager health endpoint, `fipsctl` status, the relay

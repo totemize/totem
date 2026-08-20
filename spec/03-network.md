@@ -83,7 +83,9 @@ recognition probe is defined in `02-identity.md`):
    (`10-control-plane.md`). With `policy.sync = true`, every recognized totem
    syncs; `false` restricts sync to existing friends.
 4. **Sync (if permitted).** Both relays run NIP-77 negentropy reconciliation
-   over the same connection and exchange the missing events (`04-relay.md`).
+   immediately and then periodically while the recognized encounter remains
+   connected, exchanging newly missing events without requiring a reconnect
+   (`04-relay.md`).
 5. **Befriend (if `auto`, or after owner approval).** The totem publishes a
    kind 3 event following the other (`02-identity.md`).
 6. **Part.** When the peers leave range, transports drop the link; sync state
@@ -94,9 +96,11 @@ recognition probe is defined in `02-identity.md`):
 - **Trigger:** a successful recognition verdict (step 2 above). With
   `policy.sync = true`, friendship is not a prerequisite; `false` permits
   only peers already present in the friendship state.
-- **Mechanism:** NIP-77 (`references/negentropy.md`) — negentropy set
-  reconciliation over the relay websocket, then event transfer via REQ/EVENT.
-  Relay-to-relay or client-style; see `04-relay.md` for the flatness rule.
+- **Mechanism:** NIP-77 (`references/negentropy.md`) — one reconciliation
+  immediately after recognition, then bounded periodic reconciliations for the
+  life of that encounter. Each round uses the relay websocket and transfers
+  events via REQ/EVENT. Relay-to-relay or client-style; see `04-relay.md` for
+  the flatness rule.
 - **Content:** everything the relays' sync filters admit — notes and the
   social graph (kind 3) alike.
 - **Resumability:** syncs SHOULD tolerate interruption (brief encounters);

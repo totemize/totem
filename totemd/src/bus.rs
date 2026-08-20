@@ -23,18 +23,22 @@ pub fn handle(msg: Value, st: &AppState) -> Value {
             out["status"] = json!({
                 "version": env!("CARGO_PKG_VERSION"),
                 "uptime_secs": st.started.elapsed().as_secs(),
-                "config": serde_json::to_value(&st.config).unwrap_or(Value::Null),
+                "config": serde_json::to_value(st.config()).unwrap_or(Value::Null),
                 "fips": st.fips_json(),
                 "peers": st.peers_snapshot().len(),
                 "recognized": st.recognized_count(),
+                "claimed": st.owner.owner().is_some(),
                 "events": st.counters(),
             });
         }
         "totem.config.get" => {
-            out["config"] = serde_json::to_value(&st.config).unwrap_or(Value::Null);
+            out["config"] = serde_json::to_value(st.config()).unwrap_or(Value::Null);
         }
         "totem.peers.get" => {
             out["peers"] = serde_json::to_value(st.peers_snapshot()).unwrap_or_else(|_| json!([]));
+        }
+        "totem.events.get" => {
+            out["events"] = Value::Array(st.event_history());
         }
         "totem.contacts.add" | "totem.contacts.remove" => {
             out["ok"] = json!(false);
@@ -63,6 +67,7 @@ mod tests {
         assert_eq!(r["ok"], true);
         assert_eq!(r["status"]["version"], env!("CARGO_PKG_VERSION"));
         assert_eq!(r["status"]["config"]["befriend"], "ask");
+        assert_eq!(r["status"]["claimed"], false);
     }
 
     #[test]
@@ -92,6 +97,19 @@ mod tests {
         let r = handle(json!({"type": "totem.status.get"}), &st);
         assert_eq!(r["status"]["events"]["totem.peer.seen"], 2);
         assert_eq!(r["status"]["events"]["totem.sync.done"], 1);
+    }
+
+    #[test]
+    fn events_get_is_bounded_and_oldest_first() {
+        let st = AppState::new(crate::config::Config::default());
+        for n in 0..257 {
+            st.push(json!({"type": "totem.test", "n": n}));
+        }
+        let r = handle(json!({"type": "totem.events.get", "id": "e1"}), &st);
+        assert_eq!(r["type"], "totem.events.get.result");
+        assert_eq!(r["events"].as_array().unwrap().len(), 256);
+        assert_eq!(r["events"][0]["n"], 1);
+        assert_eq!(r["events"][255]["n"], 256);
     }
 
     #[tokio::test]

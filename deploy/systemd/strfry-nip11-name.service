@@ -1,0 +1,10 @@
+[Unit]
+Description=Hot-reload strfry's derived NIP-11 name
+ConditionPathExists=/etc/strfry.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/touch -c /etc/strfry.conf
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/etc/strfry.conf

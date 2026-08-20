@@ -1,6 +1,10 @@
-# /etc/totemd/config.toml — operator policy.
+# /etc/totemd/config.toml — deployment fallback.
 # FIPS rendezvous/transports live in /etc/fips/fips.yaml; these switches
 # govern what totemd does after FIPS reports an authenticated peer.
+
+[device]
+# Fallback until this device has signed kind-0 metadata.
+name = "Totem"
 
 [net]
 probe = true

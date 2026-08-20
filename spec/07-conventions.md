@@ -48,12 +48,15 @@ custom fields:
 
 - **`name` MUST start with `!Totem`** (e.g. `!Totem Mara`). The prefix is
   the totem marker — the same string as the AP SSID, one marker everywhere
-  a totem appears, and it renders in nostr clients' relay lists.
+  a totem appears, and it renders in nostr clients' relay lists. The suffix
+  is derived from the latest valid device-authored kind-0 `name`, falling
+  back to `device.name` configuration and finally `Totem`; strfry hot-reloads
+  the derived value without a relay restart.
 - **`pubkey` MUST be the device npub** (hex or bech32) — the identity
   claim the challenge verifies (`02-identity.md`). `pubkey` is NIP-11's
-  administrative-contact field, present in every strfry build; on a totem
-  the device npub *is* the administrative identity (one identity
-  everywhere, `02-identity.md`). A relay MAY additionally set `self` to
+  administrative-contact field, present in every strfry build; Totem uses it
+  as the relay/device identity claim, not as owner authorization
+  (`02-identity.md`). A relay MAY additionally set `self` to
   the same npub where supported — a prober MUST accept either field as
   the claim.
 
@@ -75,6 +78,23 @@ Values for the recognition challenge (`02-identity.md`):
   implementations MUST rate-limit it and SHOULD permit a small legitimate
   arrival burst.
 
+## Owner HTTP API
+
+The public web listener exposes these same-origin JSON endpoints:
+
+| Method | Path | Access |
+|--------|------|--------|
+| `POST` | `/api/auth/challenge` | Public; binds a one-use nonce to one supported mutation URL, method, and body hash |
+| `GET` | `/api/owner` | Public claimed/unclaimed boolean; never exposes the owner key |
+| `POST` | `/api/owner/claim` | Signed; first valid signer claims an unclaimed device |
+| `GET` / `PUT` | `/api/metadata` | Public read; owner-authenticated kind-0 publication |
+| `GET` / `PUT` | `/api/config` | Public effective-policy read; owner-authenticated policy override |
+
+Mutation authorization is kind 27235 with exact `nonce`, `u`, `method`, and
+`payload` tags. The nonce is single-use and replaces wall-clock freshness;
+the payload is SHA-256 of the exact request body. The event signer MUST equal
+the stored owner after claim.
+
 ## Totem bus
 
 The control plane (`10-control-plane.md`) exposes a message bus for
@@ -89,16 +109,22 @@ domain registry:
 | `totem.status.get` | request | mesh state, peers, contacts, totems met, relay event count, storage |
 | `totem.config.get` | request | effective operator engagement policy (read-only in v1) |
 | `totem.peers.get` | request | current mesh peers plus cached probe grade, candidate's unsigned `nip11_name` hint, and per-encounter recognition |
+| `totem.events.get` | request | oldest-first bounded history of pushes from the current daemon run |
 | `totem.contacts.add` / `totem.contacts.remove` | request | npub — the single-writer path for kind 3 updates |
 | `totem.peer.seen` | push | fips authenticated a peer |
 | `totem.peer.gone` | push | peer left the mesh (last authenticated npub) |
 | `totem.peer.candidate` | push | NIP-11 marker + npub claim matched; signed challenge still pending |
 | `totem.recognized` | push | signed challenge verdict passed (peer is a totem) |
 | `totem.befriended` | push | kind 3 published |
-| `totem.sync.started` / `totem.sync.done` | push | npub, encounter, direction; done adds outcome, duration, exit/error, and event counts when the relay runner exposes them reliably |
+| `totem.sync.started` / `totem.sync.done` | push | npub, encounter, periodic attempt, direction; done adds outcome, duration, exit/error, the runner's readable reconciliation summary, and optional parsed missing-remote/local counts |
+| `totem.owner.claimed` | push | the previously unclaimed device persisted its owner |
+| `totem.metadata.changed` | push | device-signed kind-0 event ID and effective name |
+| `totem.config.changed` | push | newly persisted effective engagement policy |
 
 Pushes are lossy by design: consumers reconcile against `totem.status.get`
-on (re)connect. The CLI (`totemctl`) is a client of this bus and introduces
+on (re)connect. `totem.events.get` is operator-facing recent history, bounded
+to the current process; it does not make push delivery reliable. The CLI
+(`totemctl`) is a client of this bus and introduces
 no separate API (`10-control-plane.md`).
 
 ## Key encoding

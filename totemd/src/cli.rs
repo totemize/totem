@@ -11,6 +11,7 @@ Commands:
   status              Daemon, FIPS, recognition, and event status
   config              Effective operator policy
   peers               Direct peers, NIP-11 hints, probe and recognition
+  history             Recent events from the current daemon run
   events              Follow the live SSE push stream
   call <type> [json]  Send any bus message
   help                Show this help
@@ -55,6 +56,7 @@ pub fn run(args: &[String]) {
         Some("status") => show(post(json!({"type": "totem.status.get", "id": "1"}))),
         Some("config") => show(post(json!({"type": "totem.config.get", "id": "1"}))),
         Some("peers") => show(post(json!({"type": "totem.peers.get", "id": "1"}))),
+        Some("history") => show(post(json!({"type": "totem.events.get", "id": "1"}))),
         // `totemctl call <type> [json payload]` — escape hatch for any
         // registered (or future) message.
         Some("call") => {
@@ -91,6 +93,7 @@ pub fn run(args: &[String]) {
                     std::process::exit(1);
                 }
             };
+            eprintln!("totemctl: connected; following live events (Ctrl-C to stop)");
             use std::io::{BufRead, BufReader};
             for line in BufReader::new(resp.into_reader()).lines() {
                 let line = line.expect("stream read");

@@ -7,13 +7,16 @@
 
 use std::io::IsTerminal;
 
+mod auth;
 mod bus;
 mod challenge;
 mod cli;
 mod config;
 mod fips;
 mod http;
+mod owner;
 mod probe;
+mod profile;
 mod state;
 mod sync;
 mod web;

@@ -61,10 +61,10 @@ Status: Draft (living document — shrinks as we resolve)
 - Privacy of relations: are kind 3 contact lists public, or visible only to
   the parties? Encounter records: wanted, and at what visibility? (An open
   contact graph publishes physical movement and social patterns.)
-- Key management: does the owner use the totem's npub or a separate admin
-  npub? What happens to contacts and mesh identity on key rotation? (v1
-  defaults to an admin npub allowlist on the control plane,
-  `10-control-plane.md`.)
+- Key lifecycle: v1 now separates the device key from one locally persisted
+  owner npub. What physical proof should replace first-signer bootstrap, how
+  is a lost owner key recovered, and what happens to contacts and mesh
+  identity when the device key rotates?
 
 ### Guest experience
 

@@ -23,7 +23,7 @@ relay {
     realIpHeader = ""
 
     info {
-        name = "!Totem {{ inventory_hostname }}"
+        name = (string (read "/var/lib/totemd/nip11-name"))
         description = "This is a strfry instance."
         pubkey = "{{ totem_npub_hex }}"
         contact = ""

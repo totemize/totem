@@ -4,26 +4,40 @@
 //! against `totem.status.get` on (re)connect.
 
 use std::{
-    collections::{HashMap, HashSet},
-    sync::Mutex,
+    collections::{HashMap, HashSet, VecDeque},
+    path::PathBuf,
+    sync::{Mutex, RwLock},
     time::Instant,
 };
 
 use serde_json::Value;
 use tokio::sync::broadcast;
 
-use crate::{config::Config, fips::PeerInfo, probe::ProbeVerdicts, sync::SyncSupervisor};
+use crate::{
+    auth,
+    config::{Befriend, Config},
+    fips::PeerInfo,
+    owner,
+    probe::ProbeVerdicts,
+    sync::SyncSupervisor,
+};
+
+const EVENT_HISTORY_CAPACITY: usize = 256;
 
 pub struct AppState {
     pub started: Instant,
-    /// Effective operator policy (`10-control-plane.md`); read-only.
-    pub config: Config,
+    /// Effective policy: static defaults plus durable owner overrides.
+    config: RwLock<Config>,
+    pub owner: owner::Store,
+    pub auth: auth::Nonces,
     /// NIP-11 probe verdicts per peer npub.
     pub verdicts: ProbeVerdicts,
     /// Fan-out for unsolicited `totem.*` pushes; SSE subscribers tap in.
     pub tx: broadcast::Sender<Value>,
     /// Push counters by type — surfaced via `totem.status.get`.
     counters: Mutex<HashMap<String, u64>>,
+    /// Recent pushes for `totem.events.get`; process-local and oldest first.
+    event_history: Mutex<VecDeque<Value>>,
     peers: Mutex<HashMap<String, PeerInfo>>,
     /// Authenticated for the current FIPS encounter only; cleared on gone.
     recognized: Mutex<HashSet<String>>,
@@ -48,20 +62,46 @@ struct FipsHealth {
 }
 
 impl AppState {
+    #[cfg(test)]
     pub fn new(config: Config) -> Self {
+        Self::with_owner(owner::Store::memory(config))
+    }
+
+    pub fn load(config: Config, path: PathBuf) -> Result<Self, String> {
+        Ok(Self::with_owner(owner::Store::load(config, path)?))
+    }
+
+    fn with_owner(owner: owner::Store) -> Self {
         let (tx, _) = broadcast::channel(256);
         Self {
             started: Instant::now(),
-            config,
+            config: RwLock::new(owner.effective_config()),
+            owner,
+            auth: auth::Nonces::default(),
             verdicts: ProbeVerdicts::default(),
             tx,
             counters: Mutex::new(HashMap::new()),
+            event_history: Mutex::new(VecDeque::with_capacity(EVENT_HISTORY_CAPACITY)),
             peers: Mutex::new(HashMap::new()),
             recognized: Mutex::new(HashSet::new()),
             syncs: SyncSupervisor::default(),
             mesh: Mutex::new(MeshInfo::default()),
             fips: Mutex::new(FipsHealth::default()),
         }
+    }
+
+    pub fn config(&self) -> Config {
+        self.config.read().unwrap().clone()
+    }
+
+    pub fn update_policy(&self, sync: bool, befriend: Befriend) -> Result<Config, String> {
+        let config = self.owner.update_policy(sync, befriend)?;
+        *self.config.write().unwrap() = config.clone();
+        self.push(serde_json::json!({
+            "type": "totem.config.changed",
+            "config": config,
+        }));
+        Ok(config)
     }
 
     /// Publish an unsolicited push; silently dropped when no subscriber.
@@ -74,11 +114,21 @@ impl AppState {
                 .entry(t.to_string())
                 .or_insert(0) += 1;
         }
+        let mut history = self.event_history.lock().unwrap();
+        if history.len() == EVENT_HISTORY_CAPACITY {
+            history.pop_front();
+        }
+        history.push_back(msg.clone());
+        drop(history);
         let _ = self.tx.send(msg);
     }
 
     pub fn counters(&self) -> HashMap<String, u64> {
         self.counters.lock().unwrap().clone()
+    }
+
+    pub fn event_history(&self) -> Vec<Value> {
+        self.event_history.lock().unwrap().iter().cloned().collect()
     }
 
     pub fn peers_map(&self) -> HashMap<String, PeerInfo> {

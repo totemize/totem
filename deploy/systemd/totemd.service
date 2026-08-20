@@ -7,6 +7,7 @@ After=fips.service network-online.target
 Type=simple
 User=totem
 Group=totem
+StateDirectory=totemd
 # systemd reads the root:root 0600 source and exposes a private, read-only
 # credential to this unprivileged service. Source permissions stay intact.
 LoadCredential=fips.key:/etc/fips/fips.key

@@ -1204,6 +1204,8 @@ name = "totemd"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64",
+ "bitcoin_hashes 1.2.0",
  "nostr",
  "serde",
  "serde_json",

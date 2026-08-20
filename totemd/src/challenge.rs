@@ -18,7 +18,7 @@ use axum::{
 use nostr::{
     event::FinalizeEvent,
     nips::nip19::FromBech32,
-    prelude::{Event, EventBuilder, Keys, Kind, PublicKey, Tag},
+    prelude::{Event, EventBuilder, Keys, Kind, PublicKey, Tag, Timestamp},
 };
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -53,7 +53,7 @@ impl Signer {
         Ok(Self::new(keys))
     }
 
-    fn new(keys: Keys) -> Self {
+    pub(crate) fn new(keys: Keys) -> Self {
         Self {
             keys,
             rate: Mutex::new((Instant::now(), 0)),
@@ -62,6 +62,17 @@ impl Signer {
 
     pub fn public_key(&self) -> PublicKey {
         self.keys.public_key()
+    }
+
+    pub(crate) fn finalize(
+        &self,
+        builder: EventBuilder,
+        created_at: Timestamp,
+    ) -> Result<Event, String> {
+        builder
+            .custom_created_at(created_at)
+            .finalize(&self.keys)
+            .map_err(|e| format!("sign device event: {e}"))
     }
 
     fn sign(&self, nonce: &str, url: &str) -> Result<Event, SignError> {
@@ -126,7 +137,7 @@ fn signed_event(keys: &Keys, nonce: &str, url: &str) -> Result<Event, String> {
         .map_err(|e| format!("sign challenge: {e}"))
 }
 
-fn exact_tag<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
+pub(crate) fn exact_tag<'a>(event: &'a Event, name: &str) -> Option<&'a str> {
     let mut found = event.tags.iter().filter(|tag| tag.kind() == name);
     let tag = found.next()?;
     (found.next().is_none() && tag.len() == 2)
@@ -203,7 +214,7 @@ pub fn router(signer: Arc<Signer>) -> Router {
     Router::new().route(PATH, get(handler)).with_state(signer)
 }
 
-fn nonce() -> Result<String, String> {
+pub(crate) fn nonce() -> Result<String, String> {
     let mut bytes = [0u8; 16];
     fs::File::open("/dev/urandom")
         .and_then(|mut f| f.read_exact(&mut bytes))

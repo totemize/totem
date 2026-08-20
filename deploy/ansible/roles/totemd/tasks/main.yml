@@ -58,6 +58,8 @@
       RUST_LOG=info
       TOTEMD_WEB_ADDR=[::]:8080
       TOTEMD_BUS_ADDR=127.0.0.1:8081
+      TOTEMD_SYNC_INTERVAL_SECS=300
+      TOTEMD_SYNC_TIMEOUT_SECS=300
   notify: Restart totemd
 
 - name: Seed totemd operator policy on bare devices
@@ -68,6 +70,28 @@
     group: root
     mode: "0644"
     force: false
+  notify: Restart totemd
+
+- name: Check for a configured device-name fallback
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/grep
+      - -q
+      - '^\[device\]'
+      - /etc/totemd/config.toml
+  register: totemd_device_name
+  changed_when: false
+  failed_when: false
+
+- name: Add the inventory name as fallback on existing configurations
+  ansible.builtin.blockinfile:
+    path: /etc/totemd/config.toml
+    insertbefore: BOF
+    marker: "# {mark} ANSIBLE MANAGED DEVICE NAME"
+    block: |
+      [device]
+      name = "{{ inventory_hostname }}"
+  when: totemd_device_name.rc != 0
   notify: Restart totemd
 
 - name: Install totemd

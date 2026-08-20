@@ -12,14 +12,12 @@ persists events in an embedded LMDB database, publishes a NIP-11 information
 document, and provides NIP-77 negentropy reconciliation. Totem does not fork
 the relay protocol or proxy relay traffic through `totemd`.
 
-Architecture-specific binaries are staged outside Git. The deployment notes
-identify the current bench artifact as router lineage revision `5e81e24`, plus
-the armv6 alignment/build work recorded in the journey journal. That pinned
-revision is provenance for the staged artifact; it is not present in this
-repository and should not be inferred from the current upstream default
-branch. Capability is still tested, not inferred from a branch name: a live
-2026-08-20 audit found motown's installed aarch64 build omitted NIP-77 from
-NIP-11 and requires restaging.
+Architecture-specific binaries are staged outside Git. The armv6 lineage and
+alignment work are recorded in the journey journal; motown runs strfry master
+`5d89a62`, compatible with NIP-77 protocol 0. These revisions are artifact
+provenance, not a
+substitute for verification: every deployed relay must advertise NIP 77 and
+`negentropy = 1` and complete protocol-0 reconciliation.
 
 ## Deployed layout
 
@@ -29,7 +27,7 @@ NIP-11 and requires restaging.
 | `/opt/strfry/lib/` | Architecture-specific musl loader and libraries | root-owned runtime artifact |
 | `/opt/strfry/usr/lib/` | Additional runtime libraries | root-owned runtime artifact |
 | `/etc/strfry.conf` | Relay configuration | `root:strfry`, `0640` |
-| `/var/lib/strfry/` | LMDB environment and relay state | `strfry:strfry`, `0750` directory |
+| `/var/lib/strfry/` | LMDB environment and relay state | group-scoped setgid directory, `2770` |
 | `/var/cache/totem-deploy/strfry-<sha256>.tar.gz` | Content-addressed deployment cache | root |
 
 `strfry.service` runs as the `strfry` system user with
@@ -77,7 +75,7 @@ relay {
     realIpHeader = ""
 
     info {
-        name = "!Totem <inventory-hostname>"
+        name = (string (read "/var/lib/totemd/nip11-name"))
         description = "This is a strfry instance."
         pubkey = "<inventory-host-public-key-hex>"
         contact = ""
@@ -116,9 +114,11 @@ relay {
 ```
 
 Ansible writes the full template only if `/etc/strfry.conf` is absent. On
-every run it surgically reconciles the load-bearing `bind`, `info.name`, and
-`info.pubkey` lines. Other operator limits, plugins, and database paths are
-preserved.
+every run it surgically reconciles the load-bearing `bind`, dynamic
+`info.name`, and `info.pubkey` lines. `totemd` atomically updates the public
+name value file; a systemd path unit touches the root-owned config so strfry
+hot-reloads it without restart or connection churn. Other operator limits,
+plugins, and database paths are preserved.
 
 ## Configuration guide
 
@@ -148,11 +148,13 @@ Ansible deployment.
 
 ### NIP-11 identity
 
-The name prefix `!Totem` is the recognition hint specified by Totem. The bare
-template fills `relay.info.pubkey` from the inventory host's public FIPS
-identity. `totemd` treats the document only as a cheap prefilter: the marker
-and key must match, then a per-encounter signed challenge proves the claim.
-Ansible inventory contains no private identity material.
+The name prefix `!Totem` is the recognition hint specified by Totem. Its
+suffix comes from the latest valid device-authored kind-0 name, with deployment
+configuration as fallback. The template fills `relay.info.pubkey` from the
+inventory host's public FIPS identity. `totemd` treats the document only as a
+cheap prefilter: the marker and key must match, then a per-encounter signed
+challenge proves the claim. Ansible inventory contains no private identity
+material.
 
 Retrieve NIP-11 with the required media type:
 
@@ -166,9 +168,9 @@ A plain `curl http://127.0.0.1:7777/` may return an empty body; that is not a
 valid NIP-11 health check.
 
 The Ansible verification role requires `negentropy` to equal `1`,
-`supported_nips` to contain `77`, and `name`/`pubkey` to equal the selected
-inventory host's identity. It then checks the same key against totemd's signed
-challenge.
+`supported_nips` to contain `77`, the NIP-11 name to equal the derived value
+file and retain its `!Totem` prefix, and `pubkey` to equal the inventory host's
+identity. It then checks the same key against totemd's signed challenge.
 
 ### Event limits
 
