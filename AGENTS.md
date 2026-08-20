@@ -119,6 +119,7 @@ ssh motown.fips          # via FIPS mesh
   flash never clobbers edits); restart totemd after changes.
 - Signed challenge build is deployed to all three bench units. Metot joined
   this baseline through the converged Ansible deployment on 2026-08-20.
+- The sync-supervisor build is deployed only to totem + motown.
 - Challenge signing key on enabled units: source remains
   `/etc/fips/fips.key` root:root 0600; `totemd.service` passes it to `User=totem` with systemd `LoadCredential=`.
   Do not copy it, print it, or loosen its mode.

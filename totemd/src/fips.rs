@@ -19,7 +19,7 @@ use tokio::{
     net::UnixStream,
 };
 
-use crate::{probe, state::AppState};
+use crate::{probe, state::AppState, sync};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct PeerInfo {
@@ -207,9 +207,10 @@ async fn tick(st: &Arc<AppState>) -> Result<(), String> {
         tracing::info!(npub, "peer seen");
         st.push(json!({ "type": "totem.peer.seen", "npub": npub }));
         let st = st.clone();
-        tokio::spawn(async move { probe::on_seen(&st, &npub, &ip).await });
+        tokio::spawn(async move { probe::on_seen(st, &npub, &ip).await });
     }
     for npub in &gone {
+        sync::cancel(st, npub);
         st.forget_recognized(npub);
         tracing::info!(npub, "peer gone");
         st.push(json!({ "type": "totem.peer.gone", "npub": npub }));

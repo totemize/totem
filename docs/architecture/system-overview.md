@@ -115,8 +115,10 @@ device-side resolver support from `.fips` resolution on a development host.
 5. A matching `!Totem` name/public-key claim emits `totem.peer.candidate` and
    starts a fresh-nonce signed challenge against the peer's port `8080`.
 6. A valid kind-27235 proof emits `totem.recognized` for the current FIPS
-   encounter; departure clears recognition and emits `totem.peer.gone`.
-7. SSE clients receive those pushes from `/bus/events`. Push delivery is
+   encounter and starts one policy-permitted bidirectional relay sync.
+7. Departure clears recognition, cancels an active sync, and emits
+   `totem.peer.gone`; completion is reported as `totem.sync.done`.
+8. SSE clients receive those pushes from `/bus/events`. Push delivery is
    intentionally lossy, so clients query `totem.status.get` and
    `totem.peers.get` after connecting or reconnecting.
 
@@ -127,8 +129,9 @@ LMDB. The required artifact supports NIP-77 negentropy and the `strfry sync`
 client. The Ansible contract verifies NIP-77 and the NIP-11 identity used by
 totemd's implemented recognition/challenge loop; a 2026-08-20 live audit
 found motown's then-installed aarch64 relay failed that NIP-77 contract and
-must be restaged. `totemd` does not yet invoke the sync supervisor, so
-relay-to-relay encounter sync remains design intent.
+must be restaged. `totemd` now supervises the unprivileged strfry runner after
+recognition, with per-encounter deduplication, timeout, and departure/shutdown
+cancellation.
 
 ### Hardware calls
 
@@ -169,7 +172,7 @@ session plaintext.
 | Python display/NFC/storage/network API | Implemented; hardware availability depends on the device |
 | NIP-11 candidate probe and per-encounter signed Totem challenge | Implemented |
 | Kind-3 contact writer | Bus message names reserved; writer returns “not implemented” |
-| Automatic encounter sync supervisor | Planned in spec, not implemented in `totemd` |
+| Automatic encounter sync supervisor | Implemented with per-peer state and bus pushes |
 | Owner UI and NIP-98 administration | Planned in spec |
 | Happlet/NAP IPC runtime | Deferred beyond the v1 kernel |
 

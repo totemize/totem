@@ -23,7 +23,7 @@ use nostr::{
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
-use crate::{http, state::AppState};
+use crate::{http, state::AppState, sync};
 
 const PATH: &str = "/totem/challenge";
 const WEB_PORT: u16 = 8080;
@@ -223,13 +223,13 @@ async fn prove_port(expected_npub: &str, ip: &str, port: u16) -> Result<(), Stri
     verify(&response.event, expected_npub, &nonce, &endpoint)
 }
 
-pub async fn on_candidate(st: &AppState, npub: &str, ip: &str) {
+pub async fn on_candidate(st: Arc<AppState>, npub: &str, ip: &str) {
     // ponytail: one proof attempt per encounter; add bounded retry only if
     // transient challenge misses appear in fleet logs.
     on_candidate_port(st, npub, ip, WEB_PORT).await;
 }
 
-async fn on_candidate_port(st: &AppState, npub: &str, ip: &str, port: u16) {
+async fn on_candidate_port(st: Arc<AppState>, npub: &str, ip: &str, port: u16) {
     let Some(encounter) = st.peer_encounter(npub) else {
         return;
     };
@@ -237,6 +237,8 @@ async fn on_candidate_port(st: &AppState, npub: &str, ip: &str, port: u16) {
         Ok(()) if st.recognize(npub, encounter) => {
             tracing::info!(npub, "peer recognized as a totem");
             st.push(serde_json::json!({ "type": "totem.recognized", "npub": npub }));
+            // ponytail: friendship membership stays empty until the kind-3 reader lands.
+            sync::start(st, npub.to_owned(), ip.to_owned(), encounter, false);
         }
         Ok(()) => tracing::debug!(npub, "discarded stale or duplicate challenge result"),
         Err(e) => tracing::info!(npub, error = %e, "challenge failed"),
@@ -301,7 +303,10 @@ mod tests {
         let app = router(Arc::new(Signer::new(keys)));
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
-        let st = AppState::new(Config::default());
+        let st = Arc::new(AppState::new(Config {
+            sync: false,
+            ..Config::default()
+        }));
         let mut peers = HashMap::new();
         peers.insert(
             npub.clone(),
@@ -315,7 +320,7 @@ mod tests {
         );
         st.set_peers(peers);
         let mut pushes = st.tx.subscribe();
-        on_candidate_port(&st, &npub, "127.0.0.1", port).await;
+        on_candidate_port(st.clone(), &npub, "127.0.0.1", port).await;
         assert!(st.is_recognized(&npub));
         assert_eq!(pushes.try_recv().unwrap()["type"], "totem.recognized");
         server.abort();

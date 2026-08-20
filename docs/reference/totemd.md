@@ -15,8 +15,9 @@ description: Daemon policy, signed recognition, totemctl commands, bus envelopes
 
 The implemented encounter ladder watches authenticated FIPS peers, applies a
 cached NIP-11 identity prefilter, and proves candidates with a signed
-per-encounter challenge. Contact-list writes, relay sync supervision, and the
-owner application are not implemented yet.
+per-encounter challenge, then supervises one bidirectional relay sync per
+recognized encounter. Contact-list writes and the owner application are not
+implemented yet.
 
 ## Daemon command
 
@@ -37,6 +38,7 @@ Starting `totemd` without a mode, or with a mode other than `serve` or
 | `TOTEMD_FIPS_POLL_MS` | `2000` | FIPS status/peer polling interval in milliseconds. Invalid values fall back to `2000`. |
 | `TOTEMD_CONFIG` | `/etc/totemd/config.toml` | Operator engagement-policy file. Missing means defaults; malformed content stops startup. |
 | `TOTEMD_KEY_PATH` | systemd credential `fips.key`, else `/etc/fips/fips.key` | Explicit challenge-signing key override, primarily for local tests/development. |
+| `TOTEMD_SYNC_TIMEOUT_SECS` | `300` | Maximum runtime of one encounter sync before the child is killed. Invalid or zero values use the default. |
 | `RUST_LOG` | `info` directive added | tracing filter for daemon logs. |
 
 The deployed defaults live in `/etc/totemd/totemd.env`; operator policy lives
@@ -60,8 +62,9 @@ sync = true
 `probe` enables the read-only NIP-11 prefilter. Positive candidates remain
 cached for the daemon lifetime; `not_totem` and `unreachable` grades are
 retried after `verdict_ttl_hours`. `befriend` accepts `auto`, `ask`, or
-`never`. Sync policy is independent of friendship, although the sync executor
-itself has not landed yet.
+`never`. `sync = true` reconciles with every recognized Totem; `false`
+restricts reconciliation to recognized peers already known as friends. Until
+the kind-3 reader lands, that friends-only set is empty.
 
 ## `totemctl` reference
 
@@ -213,6 +216,10 @@ Each entry contains:
 | `probe_verdict` | string or `null` | Cached `candidate`, `not_totem`, or `unreachable` NIP-11 grade. |
 | `nip11_name` | string or `null` | Bounded, control-safe unsigned display hint retained for candidates. |
 | `recognized` | boolean | Whether the signed challenge passed for this current encounter. |
+| `sync_state` | string or `null` | Current encounter's `running`, `succeeded`, `failed`, `timed_out`, or `cancelled` state. |
+| `sync_duration_ms` | integer or `null` | Elapsed runtime while active, then final duration. |
+| `sync_exit_code` | integer or `null` | Child exit code when one exists. |
+| `sync_error` | string or `null` | Spawn, wait, timeout, or non-zero-exit diagnostic. |
 
 State is process-local: restarting `totemd` resets timestamps, counters,
 probe caches, and recognition. A FIPS departure clears that peer's recognition
@@ -246,6 +253,8 @@ Implemented pushes:
 | `totem.peer.gone` | `npub` | A peer from the prior snapshot is absent. |
 | `totem.peer.candidate` | `npub` | NIP-11 name and public-key claim match the authenticated FIPS npub. |
 | `totem.recognized` | `npub` | A strict kind-27235 signed proof passes for the same current encounter. |
+| `totem.sync.started` | `npub`, `encounter`, `direction` | One policy-permitted reconciliation is reserved for the encounter. |
+| `totem.sync.done` | started fields plus `outcome`, `duration_ms`, `exit_code`, `error` | The child exits, times out, or is cancelled by departure/shutdown. |
 
 SSE example:
 
@@ -258,8 +267,8 @@ Broadcast lag is dropped by the SSE adapter. Consumers must treat the stream
 as notification only and reconcile by calling `totem.status.get` and
 `totem.peers.get` after every connection or reconnection.
 
-The spec reserves additional push names such as `totem.befriended` and
-`totem.sync.*`; this revision does not emit them.
+The spec additionally reserves `totem.befriended`; this revision does not
+emit it.
 
 ## FIPS watcher behavior
 
@@ -278,7 +287,11 @@ matching the FIPS npub. Candidate metadata is unsigned and never sufficient
 for recognition. The daemon then sends one fresh random 128-bit nonce to the
 peer's challenge responder on port `8080`; a slow response cannot cross a
 disconnect/reconnect because recognition also checks the captured
-`first_seen` encounter token.
+`first_seen` encounter token. A new recognition starts
+`/usr/local/libexec/totem-strfry sync ws://[peer]:7777 --dir=both` when policy
+permits. Duplicate recognition for the encounter is ignored; departure and
+daemon shutdown cancel the child. Child output goes to journald and its
+environment is cleared so signing-credential paths are not inherited.
 
 ## Public challenge endpoint
 

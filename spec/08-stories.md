@@ -32,7 +32,8 @@ moderation layer), `05-kernel.md` (control plane behind the web app).
 other over Bluetooth via FIPS, authenticate, recognize each other via the
 NIP-11 marker, and sync their relays via negentropy. For this acceptance
 test both demo units set `policy.befriend = "auto"`, so they also publish
-mutual kind 3 events; friendship is not a prerequisite for sync.*
+mutual kind 3 events. Their default `policy.sync = true` makes friendship
+unnecessary for sync; operators may instead choose friends-only sync.*
 
 Validates: `03-network.md` (discovery/pairing sequence, sync lifecycle),
 `02-identity.md` (recognition flow, contacts), `04-relay.md` (NIP-77),

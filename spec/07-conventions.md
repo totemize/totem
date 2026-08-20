@@ -95,7 +95,7 @@ domain registry:
 | `totem.peer.candidate` | push | NIP-11 marker + npub claim matched; signed challenge still pending |
 | `totem.recognized` | push | signed challenge verdict passed (peer is a totem) |
 | `totem.befriended` | push | kind 3 published |
-| `totem.sync.started` / `totem.sync.done` | push | peer, direction, event counts |
+| `totem.sync.started` / `totem.sync.done` | push | npub, encounter, direction; done adds outcome, duration, exit/error, and event counts when the relay runner exposes them reliably |
 
 Pushes are lossy by design: consumers reconcile against `totem.status.get`
 on (re)connect. The CLI (`totemctl`) is a client of this bus and introduces

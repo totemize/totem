@@ -251,13 +251,14 @@ missing records after reconciliation.
 The local CLI can reconcile in either direction:
 
 ```text
-strfry sync ws://[peer-fips-ipv6]:7777 --dir down
-strfry sync ws://[peer-fips-ipv6]:7777 --dir up
-strfry sync ws://[peer-fips-ipv6]:7777 --dir both
+strfry sync ws://[peer-fips-ipv6]:7777 --dir=down
+strfry sync ws://[peer-fips-ipv6]:7777 --dir=up
+strfry sync ws://[peer-fips-ipv6]:7777 --dir=both
 ```
 
-`totemd` does not invoke these commands yet. The sync supervisor described in
-`spec/10-control-plane.md` remains planned.
+After signed recognition and policy approval, `totemd` invokes the last form
+through `/usr/local/libexec/totem-strfry`. It permits one attempt per peer
+encounter and cancels the child on timeout, departure, or daemon shutdown.
 
 ## Operator checks
 

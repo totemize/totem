@@ -38,7 +38,7 @@ splits across the two servers; both ports are pinned in `07-conventions.md`.
 | **Net-code loop** | Watches the fips control socket (`/run/fips/control.sock`, JSON-lines — a direct client, never a `fipsctl` shell-out) for authenticated peers; resolves `.fips` via the documented embedder path (UDP `[::1]:5354`); probes NIP-11; runs the challenge as prover; emits verdicts (`02-identity.md`) |
 | **Challenge responder** | `GET /totem/challenge` on the web port; signs kind 27235 with the device key; strict nonce/URL/method binding and a small-burst global signature limit |
 | **Contacts writer** | Serialized read-modify-sign-write of kind 3 — the only writer; mutations from pairing, from the owner web app, and from `totemctl` all route through here |
-| **Sync supervisor** | Spawns and supervises `strfry sync ws://[peer]:PORT --dir both` per successful verdict; negentropy's design makes interrupted syncs resumable on the next encounter |
+| **Sync supervisor** | Spawns and supervises `strfry sync ws://[peer]:PORT --dir=both` when recognition and policy permit; departure, shutdown, and a bounded runtime cancel the child, while negentropy makes the next encounter resumable |
 | **Web server** | Two binds: the public web port (guest page + relay URL, owner app behind NIP-98, challenge endpoint) and a **loopback-only bind** for the bus |
 | **Device manager client** | A client of the local device-manager API (`src/totem/api` — display, NFC, storage, network) for hardware actuation (e.g. show sync state); device events are surfaced on the bus |
 | **Encounter log** | Append-only JSONL of verdicts and syncs — the substrate for future encounter records (`09-open-questions.md`) and the source of stats |
@@ -56,13 +56,14 @@ happens after FIPS reports an authenticated peer.
 | `net.probe` | `true` | Run the read-only NIP-11 prefilter on peers |
 | `net.verdict_ttl_hours` | `24` | Minimum delay before re-probing a non-totem or unreachable peer |
 | `policy.befriend` | `"ask"` | `auto`, `ask`, or `never` publish the peer in kind 3 |
-| `policy.sync` | `true` | Opportunistically sync with recognized totems |
+| `policy.sync` | `true` | `true`: sync every recognized totem; `false`: sync recognized friends only |
 
 The engagement ladder is: FIPS peer seen → NIP-11 candidate → signed
-challenge → recognized totem. **Sync and friendship are independent after
-recognition.** Sync exchanges public relay data; kind 3 is a published social
-claim. `ask` holds a pending request for the owner surface; demo units MAY set
-`auto`, while `ask` is the conservative factory default.
+challenge → recognized totem. Sync exchanges public relay data; kind 3 is a
+published social claim. Friendship publication remains a separate decision,
+but operators may use existing friendship as the sync floor by setting
+`policy.sync = false`. `ask` holds a pending request for the owner surface;
+demo units MAY set `auto`, while `ask` is the conservative factory default.
 
 The cheap NIP-11 prefilter is graded per npub: candidates stay cached for the
 daemon lifetime; non-totem/unreachable results expire after the configured

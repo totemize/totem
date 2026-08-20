@@ -12,7 +12,7 @@ use std::{
 use serde_json::Value;
 use tokio::sync::broadcast;
 
-use crate::{config::Config, fips::PeerInfo, probe::ProbeVerdicts};
+use crate::{config::Config, fips::PeerInfo, probe::ProbeVerdicts, sync::SyncSupervisor};
 
 pub struct AppState {
     pub started: Instant,
@@ -27,6 +27,7 @@ pub struct AppState {
     peers: Mutex<HashMap<String, PeerInfo>>,
     /// Authenticated for the current FIPS encounter only; cleared on gone.
     recognized: Mutex<HashSet<String>>,
+    pub(crate) syncs: SyncSupervisor,
     /// fips-side identity/mesh info from the last successful poll.
     mesh: Mutex<MeshInfo>,
     /// Connectivity health of the fips control socket.
@@ -57,6 +58,7 @@ impl AppState {
             counters: Mutex::new(HashMap::new()),
             peers: Mutex::new(HashMap::new()),
             recognized: Mutex::new(HashSet::new()),
+            syncs: SyncSupervisor::default(),
             mesh: Mutex::new(MeshInfo::default()),
             fips: Mutex::new(FipsHealth::default()),
         }
@@ -136,6 +138,7 @@ impl AppState {
                     }
                 }
                 j["recognized"] = Value::from(self.is_recognized(&p.npub));
+                self.syncs.add_peer_fields(&p.npub, p.first_seen, &mut j);
                 j
             })
             .collect()

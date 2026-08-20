@@ -26,9 +26,10 @@ Per `03-network.md`, sync uses NIP-77 over the same websocket, followed by
 REQ/EVENT transfers. The **flatness rule** applies: a totem connecting to
 another totem's relay uses it exactly the way a human user's client does —
 same ports, same protocol, no privileged peer-to-peer path. A totem is simply
-another relay client. Sync does **not** require either device to publish the
-other in kind 3: negentropy exchanges relay data, while friendship is a
-separate social claim controlled by each operator (`10-control-plane.md`).
+another relay client. With `policy.sync = true`, sync does **not** require
+either device to publish the other in kind 3: negentropy exchanges relay data,
+while friendship is a separate social claim. Setting `policy.sync = false`
+restricts encounters to peers already known as friends (`10-control-plane.md`).
 
 ## Permission and moderation layer
 

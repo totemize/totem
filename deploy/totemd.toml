@@ -12,5 +12,5 @@ verdict_ttl_hours = 24
 [policy]
 # Published kind-3 relationship: "auto", "ask", or "never".
 befriend = "ask"
-# Opportunistic relay sync is independent of friendship.
+# true: sync every recognized Totem. false: sync recognized friends only.
 sync = true

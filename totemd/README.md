@@ -10,6 +10,7 @@ TOTEMD_KEY_PATH=/path/to/test-nsec cargo run -- serve
 # Pinned service binds (address remains env-overridable):
 #   TOTEMD_WEB_ADDR=[::]:8080       public web + challenge (IPv6 + IPv4)
 #   TOTEMD_BUS_ADDR=127.0.0.1:8081 loopback bus (never exposed)
+#   TOTEMD_SYNC_TIMEOUT_SECS=300      maximum runtime per encounter sync
 # Logging: RUST_LOG (default info); stdout → journald under systemd.
 # Config: /etc/totemd/config.toml (override path with TOTEMD_CONFIG).
 ```
@@ -31,7 +32,8 @@ in `/etc/fips/fips.yaml`.
 the daemon lifetime; negative/unreachable results use
 `verdict_ttl_hours`. Candidate rows retain the bounded unsigned NIP-11 name
 as `nip11_name`; npub remains the authenticated identity. `policy.befriend`
-is `auto|ask|never`; sync is an independent toggle.
+is `auto|ask|never`. `policy.sync = true` syncs every recognized Totem;
+`false` restricts sync to known friends.
 
 ## Bus
 
@@ -65,5 +67,6 @@ or target sysroot is required.
 
 Skeleton: bus + SSE + totemctl. Landed: fips control-socket watcher;
 operator config; cached NIP-11 prefilter; signed per-encounter challenge
-(responder + prover); live probe/recognition state; armv6 + aarch64 musl
-cross builds. Next: sync supervisor → kind 3 writer.
+(responder + prover); supervised bidirectional relay sync with live peer state;
+armv6 + aarch64 musl cross builds. Next: minimal owner web page, then kind 3
+friendship actions.

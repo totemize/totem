@@ -15,6 +15,7 @@ mod fips;
 mod http;
 mod probe;
 mod state;
+mod sync;
 mod web;
 
 const HELP: &str = "totemd — Totem control plane

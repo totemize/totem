@@ -141,8 +141,8 @@ impl ProbeVerdicts {
 /// Probe-triggered-by-seen handler. Cheap paths first: probe disabled →
 /// out; fresh verdict → maybe push `totem.peer.candidate` (per-encounter) and
 /// out; only then one fetch.
-pub async fn on_seen(st: &AppState, npub: &str, ip: &str) {
-    if on_seen_port(st, npub, ip, RELAY_PORT).await == Some(ProbeVerdict::Candidate) {
+pub async fn on_seen(st: std::sync::Arc<AppState>, npub: &str, ip: &str) {
+    if on_seen_port(&st, npub, ip, RELAY_PORT).await == Some(ProbeVerdict::Candidate) {
         challenge::on_candidate(st, npub, ip).await;
     }
 }

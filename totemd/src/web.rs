@@ -13,7 +13,7 @@ use axum::{
 use serde_json::{json, Value};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
-use crate::{bus, challenge, config, fips, state::AppState};
+use crate::{bus, challenge, config, fips, state::AppState, sync};
 
 fn addr_from_env(var: &str, default: &str) -> SocketAddr {
     let value = std::env::var_os(var).unwrap_or_else(|| default.into());
@@ -70,7 +70,7 @@ pub async fn serve() {
         .expect("bus bind");
 
     // Bind the responder before existing FIPS peers trigger challenges.
-    tokio::spawn(fips::watch(st.clone()));
+    let fips_task = tokio::spawn(fips::watch(st.clone()));
 
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
@@ -79,14 +79,43 @@ pub async fn serve() {
         "totemd starting (bus loopback only)"
     );
 
-    let web = axum::serve(web_l, web_router).with_graceful_shutdown(async {
-        let _ = tokio::signal::ctrl_c().await;
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    let shutdown_st = st.clone();
+    let fips_abort = fips_task.abort_handle();
+    tokio::spawn(async move {
+        shutdown_signal().await;
+        fips_abort.abort();
+        sync::cancel_all(&shutdown_st);
+        let _ = shutdown_tx.send(true);
     });
-    let bus = axum::serve(bus_l, bus_router).with_graceful_shutdown(async {
-        let _ = tokio::signal::ctrl_c().await;
+    let mut web_shutdown = shutdown_rx.clone();
+    let mut bus_shutdown = shutdown_rx;
+    let web = axum::serve(web_l, web_router).with_graceful_shutdown(async move {
+        let _ = web_shutdown.changed().await;
     });
-    tokio::try_join!(web, bus).expect("server failed");
+    let bus = axum::serve(bus_l, bus_router).with_graceful_shutdown(async move {
+        let _ = bus_shutdown.changed().await;
+    });
+    let result = tokio::try_join!(web, bus);
+    fips_task.abort();
+    sync::shutdown(&st).await;
+    result.expect("server failed");
     tracing::info!("totemd shut down");
+}
+
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        let mut terminate =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("SIGTERM handler");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = terminate.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = tokio::signal::ctrl_c().await;
 }
 
 async fn root() -> Json<Value> {
