@@ -61,8 +61,20 @@ export class MockBus implements BusClient {
   }
 
   async claim(_ownerNpub: string): Promise<void> {
-    // Simulate waiting for the button press / NFC tap on the device.
-    await new Promise((r) => setTimeout(r, 2500));
+    // Wait for the (mock) device button: window.mockPress() confirms,
+    // 60s without a press rejects like the real timeout would.
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        delete (window as { mockPress?: () => void }).mockPress;
+        reject(new Error("timeout"));
+      }, 60_000);
+      (window as { mockPress?: () => void }).mockPress = () => {
+        clearTimeout(timer);
+        delete (window as { mockPress?: () => void }).mockPress;
+        resolve();
+      };
+      console.info("presence: call window.mockPress() to simulate the device button");
+    });
     this.claimed = true;
     storage()?.setItem("mock.claimed", "1");
   }
