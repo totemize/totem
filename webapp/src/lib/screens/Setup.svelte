@@ -13,24 +13,12 @@
 {#if setup.step === "welcome"}
   <div class="screen setup center">
     <div class="mark">T</div>
-    <h1>{store.state.node?.name ?? "totem"}</h1>
+    <h1>unclaimed totem</h1>
     <div class="claim-group">
       <p class="dim">This totem has no owner yet.</p>
-      <button class="btn primary" onclick={() => store.setupGo("identity")}>claim this totem</button>
+      <button class="btn primary" onclick={() => store.setupClaim()}>claim this totem</button>
+      {#if setup.error}<div class="setup-error">{setup.error}</div>{/if}
     </div>
-  </div>
-{:else if setup.step === "identity"}
-  <div class="screen setup center">
-    <h1>Claim this totem with</h1>
-    <div class="connect-options">
-      <button class="connect-option" onclick={() => store.setupConnect("bunker")}>
-        <span class="connect-title">bunker</span>
-      </button>
-      <button class="connect-option" onclick={() => store.setupConnect("extension")}>
-        <span class="connect-title">extension</span>
-      </button>
-    </div>
-    {#if setup.error}<div class="setup-error">{setup.error}</div>{/if}
   </div>
 {:else if setup.step === "presence"}
   <div class="screen setup center">

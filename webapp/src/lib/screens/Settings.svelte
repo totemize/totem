@@ -15,10 +15,15 @@
     setTimeout(() => (copied = null), 900);
   }
 
+  let confirmingReset = $state(false);
+
   function danger(action: "wipe" | "rotate" | "reset") {
     if (action === "reset") {
-      if (confirm("Reset config? The totem returns to its unclaimed state.")) {
+      if (confirmingReset) {
+        confirmingReset = false;
         void store.resetConfig();
+      } else {
+        confirmingReset = true;
       }
       return;
     }
@@ -64,6 +69,6 @@
     <summary>advanced</summary>
     <button class="danger-item" onclick={() => danger("wipe")}>wipe stored notes</button>
     <button class="danger-item" onclick={() => danger("rotate")}>rotate device key</button>
-    <button class="danger-item" onclick={() => danger("reset")}>reset config</button>
+    <button class="danger-item" onclick={() => danger("reset")}>{confirmingReset ? "click again to confirm reset" : "reset config"}</button>
   </details>
 </div>
