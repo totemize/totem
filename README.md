@@ -72,6 +72,8 @@ src/totem/
 ├── managers/      # Serialized high-level device operations
 ├── __main__.py    # CLI entry point
 └── logging.py     # stdout-first logging
+totemd/            # Rust control-plane daemon (spec/10-control-plane.md);
+│                  # same binary serves as `totemctl` in client mode
 tests/
 ├── unit/          # deterministic mock-transport tests
 └── hardware/      # explicit physical-device smoke tests

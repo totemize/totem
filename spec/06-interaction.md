@@ -74,6 +74,12 @@ requests receive read-only access (state and the relay URL, nothing else),
 so guests can never invoke control-plane operations. Initial provisioning
 and key recovery remain open questions (`09-open-questions.md`).
 
+The web app — and the challenge endpoint, and the bus — are served by the
+control-plane daemon, **totemd** (`10-control-plane.md`); v1 owner identity
+is an administrator npub allowlist configured on the daemon. The relay
+remains a separate stock server on its own port: nothing about owner
+control flows through it.
+
 ## Guest experience
 
 Open questions: captive portal on join? Is the web app read-only for
