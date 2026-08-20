@@ -7,8 +7,7 @@
 </script>
 
 <div class="screen">
-  <button class="back" onclick={() => store.show("peers")}><span class="arr">←</span> Friends</button>
-  <div class="section-label" style="padding-top:4px">all encounters</div>
+  <button class="back section-back" onclick={() => store.show("peers")}><span class="arr">←</span> recently encountered</button>
   {#each store.state.encounterLog as entry, i (i)}
     <FriendRow {store} info={entry.peer} hint={relativeTime(entry.at)} />
   {/each}

@@ -117,6 +117,7 @@ body {
 
 .back { text-align: left; background: none; border: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); cursor: pointer; padding: 16px 20px 12px; display: flex; align-items: center; gap: 6px; }
 .back:hover { color: var(--ink); }
+.back.section-back { font-size: 15px; color: var(--ink); padding: 26px 20px 8px; }
 
 /* advanced disclosure */
 details.advanced { margin-top: 10px; }

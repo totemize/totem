@@ -33,7 +33,7 @@
       <FriendRow {store} info={peer.info} hint="connected" />
     {/each}
 
-    <div class="section-label">recently connected</div>
+    <div class="section-label">recently encountered</div>
     {#each recent as entry, i (i)}
       <FriendRow {store} info={entry.peer} hint={relativeTime(entry.at)} />
     {/each}
