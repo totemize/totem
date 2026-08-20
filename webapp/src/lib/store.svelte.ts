@@ -1,4 +1,5 @@
 import type { BusClient, RelayClient } from "./api";
+import { claimWithBunker, claimWithExtension, type OwnerSigner } from "./signer";
 import type {
   EncounterLogEntry,
   NodeInfo,
@@ -215,17 +216,39 @@ export class Store {
     this.state.setup.error = null;
   }
 
+  /** Owner signer once connected; signs admin events after setup too. */
+  ownerSigner: OwnerSigner | null = null;
+
   /**
    * Sign in with a remote signer ("bunker", NIP-46) or a browser
    * extension (NIP-07): the owner key signs the admin events that
-   * claim and control the totem. Mocked: both resolve a fake identity.
+   * claim and control the totem. "demo" skips signing entirely.
    */
-  async setupConnect(method: "bunker" | "extension"): Promise<void> {
+  async setupConnect(method: "bunker" | "extension" | "demo", bunkerUri?: string): Promise<void> {
     const setup = this.state.setup;
     if (!setup) return;
-    setup.ownerNpub = `mock-owner-via-${method}`;
-    setup.step = "presence";
     setup.error = null;
+    try {
+      if (method === "extension") {
+        const { pubkey, signer } = await claimWithExtension();
+        setup.ownerNpub = pubkey;
+        this.ownerSigner = signer;
+      } else if (method === "bunker") {
+        if (!bunkerUri?.startsWith("bunker://")) {
+          setup.error = "paste a bunker:// URI";
+          return;
+        }
+        const { pubkey, signer } = await claimWithBunker(bunkerUri);
+        setup.ownerNpub = pubkey;
+        this.ownerSigner = signer;
+      } else {
+        setup.ownerNpub = "demo-owner";
+      }
+    } catch (err) {
+      setup.error = err instanceof Error ? err.message : "sign-in failed";
+      return;
+    }
+    setup.step = "presence";
     try {
       await this.bus.claim(setup.ownerNpub);
       setup.step = "name";

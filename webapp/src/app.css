@@ -170,6 +170,7 @@ details.advanced summary:hover { color: var(--ink); }
   padding: 18px 22px; cursor: pointer; font-family: inherit; width: 180px;
 }
 .connect-option:hover { background: var(--line); }
+.connect-option.selected { outline: 1.5px solid var(--ink); }
 .connect-option .connect-title { font-size: 15px; font-weight: 700; color: var(--ink); }
 .setup-toggles { width: min(400px, 100%); text-align: left; }
 .presence-pulse {

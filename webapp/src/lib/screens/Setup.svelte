@@ -4,6 +4,8 @@
   const { store }: { store: Store } = $props();
   const setup = $derived(store.state.setup!);
   let name = $state("");
+  let bunkerOpen = $state(false);
+  let bunkerUri = $state("");
 
   $effect(() => {
     if (setup.step === "name") name = store.state.node?.name ?? "";
@@ -23,13 +25,22 @@
   <div class="screen setup center">
     <h1>Claim this totem with</h1>
     <div class="connect-options">
-      <button class="connect-option" onclick={() => store.setupConnect("bunker")}>
+      <button class="connect-option" class:selected={bunkerOpen} onclick={() => (bunkerOpen = !bunkerOpen)}>
         <span class="connect-title">bunker</span>
       </button>
       <button class="connect-option" onclick={() => store.setupConnect("extension")}>
         <span class="connect-title">extension</span>
       </button>
+      <button class="connect-option" onclick={() => store.setupConnect("demo")}>
+        <span class="connect-title">demo</span>
+      </button>
     </div>
+    {#if bunkerOpen}
+      <input class="name-input" type="text" placeholder="bunker://…" bind:value={bunkerUri}
+        spellcheck="false" autocapitalize="off" autocomplete="off"
+        onkeydown={(e) => e.key === "Enter" && store.setupConnect("bunker", bunkerUri)}>
+      <button class="btn primary" onclick={() => store.setupConnect("bunker", bunkerUri)}>connect</button>
+    {/if}
     {#if setup.error}<div class="setup-error">{setup.error}</div>{/if}
   </div>
 {:else if setup.step === "presence"}
