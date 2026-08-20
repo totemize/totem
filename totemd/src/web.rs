@@ -13,7 +13,7 @@ use axum::{
 use serde_json::{json, Value};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
-use crate::{bus, state::AppState};
+use crate::{bus, fips, state::AppState};
 
 fn addr_from_env(var: &str, default: &str) -> SocketAddr {
     std::env::var(var)
@@ -24,6 +24,7 @@ fn addr_from_env(var: &str, default: &str) -> SocketAddr {
 
 pub async fn serve() {
     let st = Arc::new(AppState::new());
+    tokio::spawn(fips::watch(st.clone()));
 
     // Loopback only: the bus is kernel-internal by construction.
     let bus_router = Router::new()

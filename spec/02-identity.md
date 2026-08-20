@@ -37,8 +37,8 @@ regular user peer.
 
 A totem advertises itself in its relay's NIP-11 info document using
 **standard NIP-11 fields only** (`07-conventions.md`): the relay `name`
-carries the totem marker (a `!Totem` prefix), and `self` carries the device
-npub. This is an unsigned **hint**: a cheap pre-filter so peers only run the
+carries the totem marker (a `!Totem` prefix), and `pubkey` carries the
+device npub. This is an unsigned **hint**: a cheap pre-filter so peers only run the
 authentication challenge at things that look like totems. It authenticates
 nothing by itself — and because both fields are standard, any conforming
 relay whose operator can set them can declare totemhood: no relay fork, no

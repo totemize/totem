@@ -53,7 +53,8 @@ Other conforming relays are acceptable; strfry is what we prototype against.
 The relay serves its NIP-11 info document over HTTP at the standard relay
 port. The totem marker and npub ride **standard NIP-11 fields**
 (`07-conventions.md`): no Totem-specific relay customization is required —
-any conforming relay whose operator can set `info.name` and `info.self` can
+any conforming relay whose operator can set `info.name` and `info.pubkey`
+can
 declare totemhood. This document is the recognition surface used by
 `02-identity.md`; the challenge itself is served by the control plane on
 the web port (`10-control-plane.md`), so the relay stays a stock, unproxied

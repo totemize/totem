@@ -69,6 +69,36 @@ ssh metot.fips          # via FIPS mesh
   socket at `/run/fips/control.sock`). Use `sudo` only for root-only things
   (`systemctl restart fips`, reading `/etc/fips/fips.key`, `sudo fipsctl`).
 
+### motown (test unit #3)
+
+- Fresh unit, onboarded 2026-08-20. Debian 13 (trixie), **aarch64** (64-bit —
+  unlike totem's armv6l; cross-builds need the aarch64 target).
+- Reaches LAN via mDNS: `motown.local` → `192.168.8.196` (address is
+  DHCP — mDNS name is the stable handle).
+- `~/.ssh/config` alias `motown` (User `totem`); our key is installed,
+  passwordless works. Fallback password: `totem`.
+- FIPS npub: `npub1rx7epldvux4d306aasw0n6y7wn9je0wa3yw4f8djpsw28g8zqzxsgg2g35`
+  (`fips.service` running, same layout as totem: binaries in
+  `/usr/local/bin`, config+key in `/etc/fips/`, `totem` in the `fips`
+  group; static aarch64 musl build of the same checkout as totem —
+  BLE off like the others).
+
+```bash
+ssh motown               # via LAN
+ssh motown.fips          # via FIPS mesh
+```
+
+- Runs the same strfry as totem (`references/strfry` `router` branch — has
+  the `mesh` app; aarch64 build, alpine-minirootfs runtime under
+  `/opt/strfry`, `bind = "::"` set): relay on port 7777, verified over LAN
+  and over the mesh from totem.
+- NIP-11 markers per 07 conventions (2026-08-20): `info.name =
+  "!Totem motown"`, `info.pubkey` = hex npub `19bd90fd…2008d` (renders,
+  verified over mesh — `pubkey` is the load-bearing claim, present since
+  strfry's first commit); `info.self` kept as dormant duplicate until a
+  strfry upgrade understands it. Footgun: golpe takes the LAST duplicate
+  key — set the stock `pubkey = ""` line, don't add a second one.
+
 ### Device inspection conventions
 
 ```bash
@@ -127,8 +157,8 @@ tried on totem, reverted 2026-08-19; devices stay symmetric.
 
 The mesh is IPv6-only (`fd00::/8`). Stock strfry binds `0.0.0.0` →
 mesh SYNs get RST ("Connection refused") while LAN and pings work.
-Fixed on both devices 2026-08-19 (`/etc/strfry.conf` line 44). Re-check
-after any strfry reinstall/config reset.
+Fixed on totem+metot 2026-08-19, motown 2026-08-20 (config copied verbatim;
+`/etc/strfry.conf` line 44). Re-check after any strfry reinstall/config reset.
 
 ### Dev host also runs fips
 

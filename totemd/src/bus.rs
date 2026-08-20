@@ -22,12 +22,15 @@ pub fn handle(msg: Value, st: &AppState) -> Value {
             out["status"] = json!({
                 "version": env!("CARGO_PKG_VERSION"),
                 "uptime_secs": st.started.elapsed().as_secs(),
+                "fips": st.fips_json(),
+                "peers": st.peers_snapshot().len(),
                 "events": st.counters(),
             });
         }
-        // Net-code loop (fips watch → recognize → sync) lands next;
-        // honest empty until then.
-        "totem.peers.get" => out["peers"] = json!([]),
+        "totem.peers.get" => {
+            out["peers"] = serde_json::to_value(st.peers_snapshot())
+                .unwrap_or_else(|_| json!([]));
+        }
         "totem.contacts.add" | "totem.contacts.remove" => {
             out["ok"] = json!(false);
             out["error"] = json!("contacts writer not implemented (kind 3 single writer lands with net code)");
@@ -73,5 +76,29 @@ mod tests {
         let r = handle(json!({"type": "totem.status.get"}), &st);
         assert_eq!(r["status"]["events"]["totem.peer.seen"], 2);
         assert_eq!(r["status"]["events"]["totem.sync.done"], 1);
+    }
+
+    #[tokio::test]
+    async fn peers_get_returns_watcher_state() {
+        use crate::fips::PeerInfo;
+        use std::collections::HashMap;
+        let st = AppState::new();
+        let mut m = HashMap::new();
+        m.insert(
+            "npub1aa".into(),
+            PeerInfo {
+                npub: "npub1aa".into(),
+                ipv6_addr: "fd00::1".into(),
+                transport_type: "udp".into(),
+                first_seen: 7,
+                last_seen: 9,
+            },
+        );
+        st.set_peers(m);
+        let r = handle(json!({"type": "totem.peers.get", "id": "p1"}), &st);
+        assert_eq!(r["type"], "totem.peers.get.result");
+        assert_eq!(r["peers"][0]["npub"], "npub1aa");
+        assert_eq!(r["peers"][0]["ipv6_addr"], "fd00::1");
+        assert_eq!(r["status"], serde_json::Value::Null); // no stale fields
     }
 }

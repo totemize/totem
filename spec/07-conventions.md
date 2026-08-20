@@ -48,12 +48,17 @@ custom fields:
 - **`name` MUST start with `!Totem`** (e.g. `!Totem Mara`). The prefix is
   the totem marker — the same string as the AP SSID, one marker everywhere
   a totem appears, and it renders in nostr clients' relay lists.
-- **`self` MUST be the device npub** — the identity claim the challenge
-  verifies (`02-identity.md`).
+- **`pubkey` MUST be the device npub** (hex or bech32) — the identity
+  claim the challenge verifies (`02-identity.md`). `pubkey` is NIP-11's
+  administrative-contact field, present in every strfry build; on a totem
+  the device npub *is* the administrative identity (one identity
+  everywhere, `02-identity.md`). A relay MAY additionally set `self` to
+  the same npub where supported — a prober MUST accept either field as
+  the claim.
 
 A relay whose `name` lacks the prefix is not a totem. The marker is the
 recognition *hint*; authentication is the challenge in `02-identity.md`.
-Because both fields are standard, any conforming configurable relay can
+Because all fields are standard, any conforming configurable relay can
 declare totemhood — no relay fork or proxying required.
 
 ## Challenge protocol
@@ -82,6 +87,7 @@ domain registry:
 | `totem.peers.get` | request | current mesh peers |
 | `totem.contacts.add` / `totem.contacts.remove` | request | npub — the single-writer path for kind 3 updates |
 | `totem.peer.seen` | push | fips authenticated a peer |
+| `totem.peer.gone` | push | peer left the mesh (last authenticated npub) |
 | `totem.recognized` | push | challenge verdict passed (peer is a totem) |
 | `totem.befriended` | push | kind 3 published |
 | `totem.sync.started` / `totem.sync.done` | push | peer, direction, event counts |

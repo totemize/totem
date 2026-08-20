@@ -33,6 +33,7 @@ cargo test
 
 ## Status
 
-Skeleton: bus + SSE + totemctl. Landed next: fips control-socket watch
-(net-code loop), challenge endpoint, kind 3 contacts writer, `strfry sync`
-supervisor, owner web app.
+Skeleton: bus + SSE + totemctl. Landed: fips control-socket watcher
+(poll `show_peers`/`show_status`, peer seen/gone diff → pushes, live
+`totem.peers.get`), armv6-musl static cross build (rust-lld). Next:
+NIP-11 probe → challenge → sync supervisor.
