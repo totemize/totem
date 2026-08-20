@@ -26,9 +26,22 @@ identity is written into the bare strfry NIP-11 seed and verified against both
 the relay document and totemd's signed challenge. Private identity material is
 never stored in inventory or artifacts.
 
-Metot's inventory also seeds `TOTEM_EINK_DRIVER=waveshare_2in13_v4` and
-`TOTEM_UPS_DRIVER=pisugar2`. The device-manager package set includes
-`python3-smbus` for read-only PiSugar2 telemetry. The playbook does not edit
+The common device-manager role installs the same screen package, systemd unit,
+and replay command on every Totem. Inventory decides whether that unit is
+enabled and running: the fleet default is `totem_screen_enabled=false`, while
+Metot's host variables set it to true, seed
+`TOTEM_EINK_DRIVER=waveshare_2in13_v4`, apply the enclosure's
+`TOTEM_SCREEN_ROTATION=180`, and select `TOTEM_UPS_DRIVER=pisugar2`. The screen
+service renders through the local device-manager API, presents the boot splash
+before releasing the remaining services, and can replay the same sequence
+without a reboot:
+
+```bash
+ssh metot 'totem-screen replay-boot'
+```
+
+The device-manager package set includes `python3-smbus` for read-only PiSugar2
+telemetry. The playbook does not edit
 Raspberry Pi boot firmware or reboot a device; apply
 `deploy/devices/metot.boot-config.txt` separately before expecting real SPI.
 
@@ -53,28 +66,35 @@ untracked source files. A deterministic SHA-256 names the release and its
 checkpoint, so two different worktrees cannot alias the same deployment.
 Debian's architecture-tested Python packages avoid native compilation on armv6.
 
-## Deploy only metot in this sprint
+## Deploy the fleet or an explicit test subset
 
-The inventory contains all three devices, but the guarded wrapper always adds
-`--limit metot` (currently `192.168.8.239`):
+The normal entry point targets the `totems` inventory group. Host variables,
+not host-specific scripts, gate optional hardware services:
 
 ```bash
 read -rs TOTEM_SSH_PASSWORD && export TOTEM_SSH_PASSWORD
-deploy/ansible/scripts/deploy-metot.sh
+deploy/ansible/scripts/deploy.sh
 ```
 
-Run the same command a second time. A converged deployment must report
-`changed=0`, and the verification role checks all four services, FIPS TUN
-health, strfry NIP-77 support, an LMDB scan through the unprivileged runner,
-`totemd`, the Python health endpoint, and the migration chain. The verification
-also requires the `!Totem metot` NIP-11 identity and a kind-27235 challenge
-signed by metot's FIPS key.
+During isolated hardware testing, pass Ansible's ordinary host limit without
+changing the deployment path or inventory policy:
+
+```bash
+deploy/ansible/scripts/deploy.sh --limit metot
+```
+
+Run the selected deployment a second time. A converged deployment must report
+`changed=0`, and the verification role checks the core services plus any
+host-enabled screen service, FIPS TUN health, strfry NIP-77 support, an LMDB
+scan through the unprivileged runner, `totemd`, the Python health endpoint, and
+the migration chain. The verification also requires the `!Totem metot` NIP-11
+identity and a kind-27235 challenge signed by metot's FIPS key.
 
 For an operational no-restart window, keep enforcing files and state while
 suppressing all service restart handlers:
 
 ```bash
-deploy/ansible/scripts/deploy-metot.sh \
+deploy/ansible/scripts/deploy.sh \
   --extra-vars totem_service_restarts_enabled=false
 ```
 
@@ -83,6 +103,6 @@ and their dependencies/health checks without changing the normal deployment
 default:
 
 ```bash
-deploy/ansible/scripts/deploy-metot.sh \
+deploy/ansible/scripts/deploy.sh \
   --extra-vars totem_device_manager_enabled=false
 ```

@@ -8,3 +8,11 @@
     name: totem.service
     state: restarted
   when: totem_service_restarts_enabled | bool
+
+- name: Restart screen state service
+  ansible.builtin.systemd_service:
+    name: totem-screen.service
+    state: restarted
+  when:
+    - totem_service_restarts_enabled | bool
+    - totem_screen_enabled | bool

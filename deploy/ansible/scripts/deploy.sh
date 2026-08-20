@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sprint-safe entry point: this wrapper can only target inventory host metot.
+# Fleet entry point. Use Ansible's --limit only for an intentional test subset.
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
@@ -14,4 +14,4 @@ if [[ -n "${TOTEM_SSH_PASSWORD:-}" ]]; then
   )
 fi
 
-exec ansible-playbook playbooks/deploy.yml --limit metot "${extra_vars[@]}" "$@"
+exec ansible-playbook playbooks/deploy.yml "${extra_vars[@]}" "$@"

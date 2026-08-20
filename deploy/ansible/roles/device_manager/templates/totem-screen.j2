@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+if [ -r /etc/totem/totem.env ]; then
+    set -a
+    . /etc/totem/totem.env
+    set +a
+fi
+
+exec /opt/totem/.venv/bin/totem-screen "$@"

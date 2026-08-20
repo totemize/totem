@@ -1,0 +1,22 @@
+[Unit]
+Description=Totem e-ink screen state service
+Requires=totem.service
+After=totem.service
+Before=fips.service strfry.service totemd.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=totem
+Group=totem
+WorkingDirectory=/opt/totem/current
+EnvironmentFile=-/etc/totem/totem.env
+ExecStart=/opt/totem/.venv/bin/totem-screen run
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=120
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

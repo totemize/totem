@@ -30,6 +30,11 @@ splits across the two servers; both ports are pinned in `07-conventions.md`.
   `strfry` group and LMDB stays group-writable, so sync needs no root process.
 - Web assets are embedded in the binary; deployment is one binary plus one
   systemd unit.
+- Display presentation is a separate `totem-screen` process. `totemd` remains
+  the state authority, while the Python device-manager API remains the only
+  owner of display SPI/GPIO. The screen process consumes control-plane state
+  and submits complete frames through that API; it never opens display hardware
+  itself.
 
 ## Components
 
@@ -40,7 +45,7 @@ splits across the two servers; both ports are pinned in `07-conventions.md`.
 | **Contacts writer** | Serialized read-modify-sign-write of kind 3 — the only writer; mutations from pairing, from the owner web app, and from `totemctl` all route through here |
 | **Sync supervisor** | Spawns and supervises `strfry sync ws://[peer]:PORT --dir=both` when recognition and policy permit; departure, shutdown, and a bounded runtime cancel the child, while negentropy makes the next encounter resumable |
 | **Web server** | Two binds: the public web port (guest page + relay URL, owner app behind NIP-98, challenge endpoint) and a **loopback-only bind** for the bus |
-| **Device manager client** | A client of the local device-manager API (`src/totem/api` — display, NFC, storage, network) for hardware actuation (e.g. show sync state); device events are surfaced on the bus |
+| **Device manager boundary** | Hardware actuation remains behind the local device-manager API (`src/totem/api` — display, NFC, storage, network). Presentation consumers such as `totem-screen` derive state from the bus/status surface and submit complete frames; device events are surfaced on the bus. |
 | **Encounter log** | Append-only JSONL of verdicts and syncs — the substrate for future encounter records (`09-open-questions.md`) and the source of stats |
 
 ## Configuration and engagement policy
@@ -85,6 +90,12 @@ Messages use the NIP-5D wire shape; the `totem.*` domain registry lives in
 on the loopback bind, push via SSE (`/bus/events`); pushes are lossy and
 consumers reconcile against `totem.status.get` on (re)connect. Diagnostics
 stay in journald — peripherals react to typed events, never to logs.
+
+The boot-display POC uses the same boundary before typed display events exist:
+it checks the device-manager health endpoint, `fipsctl` status, the relay
+socket, and `totemctl status`. Future peer and synchronization screens replace
+these boot probes with typed bus pushes plus status reconciliation; the frame
+model and hardware boundary do not change.
 
 The bus is the v1 seed of the IPC projection (`05-kernel.md`): the NAP
 message grammar over plain HTTP, with no napplet machinery (manifests,

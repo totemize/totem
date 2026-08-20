@@ -50,6 +50,7 @@
     - {path: /opt/totem, owner: totem, group: totem, mode: "0755"}
     - {path: /opt/totem/releases, owner: totem, group: totem, mode: "0755"}
     - {path: "/opt/totem/releases/{{ totem_source_revision }}", owner: totem, group: totem, mode: "0755"}
+    - {path: /usr/local/libexec, owner: root, group: root, mode: "0755"}
     - {path: /etc/totem, owner: root, group: totem, mode: "0750"}
     - {path: /var/lib/totem, owner: totem, group: totem, mode: "0750"}
     - {path: /var/lib/totem/storage, owner: totem, group: totem, mode: "0750"}
@@ -113,7 +114,9 @@
           - --no-build-isolation
           - --force-reinstall
           - "/opt/totem/releases/{{ totem_source_revision }}/app"
-      notify: Restart device manager
+      notify:
+        - Restart device manager
+        - Restart screen state service
 
     - name: Record the installed Python release
       ansible.builtin.copy:
@@ -133,7 +136,9 @@
     owner: totem
     group: totem
     force: true
-  notify: Restart device manager
+  notify:
+    - Restart device manager
+    - Restart screen state service
 
 - name: Install the managed device-manager environment
   ansible.builtin.template:
@@ -142,7 +147,9 @@
     owner: root
     group: totem
     mode: "0640"
-  notify: Restart device manager
+  notify:
+    - Restart device manager
+    - Restart screen state service
 
 - name: Install the device-manager systemd unit
   ansible.builtin.template:
@@ -154,6 +161,34 @@
   notify:
     - Reload systemd for device manager
     - Restart device manager
+
+- name: Install the screen state systemd unit
+  ansible.builtin.template:
+    src: totem-screen.service.j2
+    dest: /etc/systemd/system/totem-screen.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd for device manager
+    - Restart screen state service
+
+- name: Install the screen replay command launcher
+  ansible.builtin.template:
+    src: totem-screen.j2
+    dest: /usr/local/libexec/totem-screen
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the screen replay command link
+  ansible.builtin.file:
+    src: /usr/local/libexec/totem-screen
+    dest: /usr/local/bin/totem-screen
+    state: link
+    owner: root
+    group: root
+    force: true
 
 - name: Read the device-manager layout migration checkpoint
   ansible.builtin.stat:
@@ -178,6 +213,22 @@
     enabled: true
     state: started
     daemon_reload: true
+
+- name: Enable and start the screen state service
+  ansible.builtin.systemd_service:
+    name: totem-screen.service
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: totem_screen_enabled | bool
+
+- name: Disable and stop the screen state service
+  ansible.builtin.systemd_service:
+    name: totem-screen.service
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  when: not (totem_screen_enabled | bool)
 
 - name: Apply device-manager changes before verification
   ansible.builtin.meta: flush_handlers
