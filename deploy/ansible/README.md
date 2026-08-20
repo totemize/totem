@@ -26,8 +26,10 @@ identity is written into the bare strfry NIP-11 seed and verified against both
 the relay document and totemd's signed challenge. Private identity material is
 never stored in inventory or artifacts.
 
-Metot's inventory also seeds `TOTEM_EINK_DRIVER=waveshare_2in13_v4`. The
-playbook does not edit Raspberry Pi boot firmware or reboot a device; apply
+Metot's inventory also seeds `TOTEM_EINK_DRIVER=waveshare_2in13_v4` and
+`TOTEM_UPS_DRIVER=pisugar2`. The device-manager package set includes
+`python3-smbus` for read-only PiSugar2 telemetry. The playbook does not edit
+Raspberry Pi boot firmware or reboot a device; apply
 `deploy/devices/metot.boot-config.txt` separately before expecting real SPI.
 
 ## Prepare artifacts

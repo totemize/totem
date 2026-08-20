@@ -13,6 +13,7 @@ from totem.devices.display.display import EInkDeviceInterface
 from totem.devices.nfc.nfc import NFCDeviceInterface
 from totem.devices.storage.device import StorageDeviceInterface
 from totem.devices.network.network import WiFiDeviceInterface
+from totem.devices.ups.ups import UPSDeviceInterface
 
 
 pytestmark = pytest.mark.unit
@@ -40,6 +41,8 @@ DRIVERS = (
     ("totem.devices.network.drivers.mock_wifi", WiFiDeviceInterface),
     ("totem.devices.network.drivers.rpi5_onboard_wifi", WiFiDeviceInterface),
     ("totem.devices.network.drivers.usb_wifi_adapter", WiFiDeviceInterface),
+    ("totem.devices.ups.drivers.pisugar2", UPSDeviceInterface),
+    ("totem.devices.ups.drivers.waveshare_ups_hat_c", UPSDeviceInterface),
 )
 
 
