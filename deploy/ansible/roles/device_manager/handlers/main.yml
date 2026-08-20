@@ -1,0 +1,10 @@
+---
+- name: Reload systemd for device manager
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart device manager
+  ansible.builtin.systemd_service:
+    name: totem.service
+    state: restarted
+  when: totem_service_restarts_enabled | bool

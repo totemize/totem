@@ -1,0 +1,107 @@
+---
+- name: Build totemd for the target architecture
+  ansible.builtin.command:
+    argv:
+      - cargo
+      - build
+      - --release
+      - --locked
+      - --target
+      - "{{ totemd_rust_target }}"
+  args:
+    chdir: "{{ totem_repo_root }}/totemd"
+  changed_when: false
+  delegate_to: localhost
+  become: false
+
+- name: Inspect the built totemd binary
+  ansible.builtin.stat:
+    path: >-
+      {{ totem_repo_root }}/totemd/target/{{ totemd_rust_target }}/release/totemd
+    checksum_algorithm: sha256
+  register: totemd_local_artifact
+  delegate_to: localhost
+  become: false
+
+- name: Require the built totemd binary
+  ansible.builtin.assert:
+    that:
+      - totemd_local_artifact.stat.exists
+      - totemd_local_artifact.stat.isreg
+
+- name: Create totemd configuration directory
+  ansible.builtin.file:
+    path: /etc/totemd
+    state: directory
+    owner: root
+    group: totem
+    mode: "0750"
+
+- name: Seed totemd environment on bare devices
+  ansible.builtin.copy:
+    dest: /etc/totemd/totemd.env
+    owner: root
+    group: totem
+    mode: "0640"
+    force: false
+    content: |
+      RUST_LOG=info
+      TOTEMD_WEB_ADDR=0.0.0.0:8080
+      TOTEMD_BUS_ADDR=127.0.0.1:8081
+  notify: Restart totemd
+
+- name: Install totemd
+  ansible.builtin.copy:
+    src: >-
+      {{ totem_repo_root }}/totemd/target/{{ totemd_rust_target }}/release/totemd
+    dest: /usr/local/bin/totemd
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart totemd
+
+- name: Install the totemctl command link
+  ansible.builtin.file:
+    src: /usr/local/bin/totemd
+    dest: /usr/local/bin/totemctl
+    state: link
+    owner: root
+    group: root
+    force: true
+
+- name: Install the totemd systemd unit
+  ansible.builtin.template:
+    src: totemd.service.j2
+    dest: /etc/systemd/system/totemd.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd for totemd
+    - Restart totemd
+
+- name: Read the totemd migration checkpoint
+  ansible.builtin.stat:
+    path: "{{ totem_migration_root }}/0030-totemd-layout.complete"
+  register: totemd_checkpoint
+
+- name: Record totemd layout adoption
+  ansible.builtin.copy:
+    dest: "{{ totem_migration_root }}/0030-totemd-layout.complete"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      migration=0030-totemd-layout
+      sha256={{ totemd_local_artifact.stat.checksum }}
+  when: not totemd_checkpoint.stat.exists
+
+- name: Enable and start totemd
+  ansible.builtin.systemd_service:
+    name: totemd.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply totemd changes before verification
+  ansible.builtin.meta: flush_handlers

@@ -58,8 +58,8 @@ PYTHONPATH=src python examples/display_bytes.py \
 Raw framebuffer dimensions and pixel layout are driver-specific. The
 Waveshare 2.13-inch V4 driver requires exactly 4,000 bytes.
 
-`metot` uses the checked-in [`deploy/devices/metot.env`](../../deploy/devices/metot.env)
-profile. Install that file as `/etc/totem/totem.env`; the systemd unit reads it
+`metot` uses the checked-in `deploy/devices/metot.env` profile. Install that
+file as `/etc/totem/totem.env`; the systemd unit reads it
 on startup. SPI0 must also be enabled persistently in the Raspberry Pi boot
 configuration (`dtparam=spi=on`).
 

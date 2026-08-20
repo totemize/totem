@@ -1,0 +1,103 @@
+---
+- name: Wait for service ports
+  ansible.builtin.wait_for:
+    host: "{{ item.host }}"
+    port: "{{ item.port }}"
+    timeout: 30
+  loop:
+    - {host: '127.0.0.1', port: 7777}
+    - {host: '127.0.0.1', port: 8080}
+    - {host: '127.0.0.1', port: 8081}
+
+- name: Wait for the Python device-manager port
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: 8000
+    timeout: 30
+  when: totem_device_manager_enabled | bool
+
+- name: Read systemd service facts
+  ansible.builtin.service_facts:
+
+- name: Require enabled core services to be running
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services[item].state == 'running'
+      - ansible_facts.services[item].status == 'enabled'
+    fail_msg: "{{ item }} is not enabled and running"
+  loop:
+    - fips.service
+    - strfry.service
+    - totemd.service
+
+- name: Require the Python device manager to be enabled and running
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services['totem.service'].state == 'running'
+      - ansible_facts.services['totem.service'].status == 'enabled'
+    fail_msg: totem.service is not enabled and running
+  when: totem_device_manager_enabled | bool
+
+- name: Read FIPS status
+  ansible.builtin.command:
+    argv: [fipsctl, show, status]
+  register: fips_status_command
+  changed_when: false
+
+- name: Validate FIPS runtime health
+  ansible.builtin.assert:
+    that:
+      - (fips_status_command.stdout | from_json).state == 'running'
+      - (fips_status_command.stdout | from_json).tun_state == 'active'
+      - (fips_status_command.stdout | from_json).persistent
+
+- name: Read strfry NIP-11 information
+  ansible.builtin.uri:
+    url: http://127.0.0.1:7777/
+    headers:
+      Accept: application/nostr+json
+    return_content: true
+    status_code: 200
+  register: strfry_nip11
+
+- name: Validate the strfry relay contract
+  ansible.builtin.assert:
+    that:
+      - strfry_nip11.json.negentropy | int == 1
+      - 77 in strfry_nip11.json.supported_nips
+
+- name: Read totemd status
+  ansible.builtin.command:
+    argv: [totemctl, status]
+  register: totemd_status_command
+  changed_when: false
+
+- name: Validate totemd status
+  ansible.builtin.assert:
+    that:
+      - (totemd_status_command.stdout | from_json).ok
+      - (totemd_status_command.stdout | from_json).status.fips.connected
+
+- name: Read Python device-manager health
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8000/health
+    return_content: true
+    status_code: 200
+  when: totem_device_manager_enabled | bool
+
+- name: Find completed migration checkpoints
+  ansible.builtin.find:
+    paths: "{{ totem_migration_root }}"
+    patterns: '*.complete'
+    file_type: file
+  register: migration_checkpoints
+
+- name: Require the complete migration chain
+  ansible.builtin.assert:
+    that:
+      - >-
+        migration_checkpoints.matched | int >=
+        (5 if totem_device_manager_enabled | bool else 4)
+    fail_msg: >-
+      Expected the enabled roles' migration checkpoints, found
+      {{ migration_checkpoints.matched }}.
