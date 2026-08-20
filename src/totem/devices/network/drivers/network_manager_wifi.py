@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import threading
 import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional
@@ -94,6 +95,7 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
         self._event_callback = event_callback
         self._p2p_path: Optional[str] = None
         self._p2p_discovering = False
+        self._p2p_discovery_timer: Optional[threading.Timer] = None
         self._managed_groups: Dict[str, P2PGroup] = {}
 
     def set_event_callback(self, callback) -> None:
@@ -447,6 +449,20 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
             timeout,
         )
         self._p2p_discovering = True
+        self._p2p_discovery_timer = threading.Timer(
+            duration_seconds, self._expire_p2p_discovery
+        )
+        self._p2p_discovery_timer.daemon = True
+        self._p2p_discovery_timer.start()
+
+    def _expire_p2p_discovery(self) -> None:
+        try:
+            self.stop_p2p_discovery()
+        except RadioOperationError:
+            # NetworkManager also enforces the discovery timeout, so expiry may
+            # race its own StopFind. Local state still must become inactive.
+            self._p2p_discovering = False
+            self._p2p_discovery_timer = None
 
     def stop_p2p_discovery(self, timeout: float = 15.0) -> None:
         if not self._p2p_discovering:
@@ -457,10 +473,14 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
                 NM_SERVICE, path, NM_WIFI_P2P, "StopFind", timeout=timeout
             )
         except DBusCallError as exc:
-            if not exc.error_name.endswith(("NotFound", "NotActive")):
+            if not exc.error_name.endswith(("NotFound", "NotActive", "Failed")):
                 raise
         finally:
             self._p2p_discovering = False
+            timer = self._p2p_discovery_timer
+            self._p2p_discovery_timer = None
+            if timer is not None:
+                timer.cancel()
 
     def is_p2p_discovering(self) -> bool:
         return self._p2p_discovering
@@ -655,14 +675,10 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
         if message.interface != NM_WIFI_P2P or not message.body:
             return
         if message.member == "PeerAdded":
-            peer_path = message.body[0]
-            try:
-                peer = self._peer_from_path(peer_path)
-                self._emit(
-                    "wifi_p2p_peer_found", {"peer_id": peer.id, "address": peer.address}
-                )
-            except RadioOperationError:
-                pass
+            # This callback runs on the D-Bus loop thread. Do not synchronously
+            # call back into that loop for peer properties; consumers can use
+            # list_p2p_peers() after receiving the path-only notification.
+            self._emit("wifi_p2p_peer_found", {"path": message.body[0]})
         elif message.member == "PeerRemoved":
             self._emit("wifi_p2p_peer_lost", {"path": message.body[0]})
 

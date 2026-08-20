@@ -138,6 +138,9 @@ class BluetoothCapabilitiesResponse(BaseModel):
     address: str
     address_type: Optional[str] = None
     name: Optional[str] = None
+    version: Optional[int] = None
+    manufacturer: Optional[int] = None
+    modalias: Optional[str] = None
     roles: List[str]
     supported_advertisement_instances: int
     active_advertisement_instances: int

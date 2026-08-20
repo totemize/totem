@@ -270,22 +270,44 @@ class Driver(BluetoothDeviceInterface):
     def get_capabilities(self):
         self._ready()
         adapter = self._runtime.get_all(BLUEZ_SERVICE, self._adapter_path, ADAPTER)
-        advertising = self._runtime.get_all(
-            BLUEZ_SERVICE, self._adapter_path, ADVERTISING_MANAGER
-        )
+        advertising_manager_available = True
+        try:
+            advertising = self._runtime.get_all(
+                BLUEZ_SERVICE, self._adapter_path, ADVERTISING_MANAGER
+            )
+        except DBusCallError:
+            advertising_manager_available = False
+            advertising = {}
         caps = advertising.get("SupportedCapabilities", {})
         roles = list(adapter.get("Roles", []))
         has_central = "central" in roles or "central-peripheral" in roles
         has_peripheral = "peripheral" in roles or "central-peripheral" in roles
+        advertisement_instances = int(advertising.get("SupportedInstances", 0))
+        advertising_supported = (
+            has_peripheral
+            and advertising_manager_available
+            and advertisement_instances > 0
+        )
+        if not has_peripheral:
+            advertising_reason = "peripheral role absent"
+        elif not advertising_manager_available:
+            advertising_reason = "BlueZ LE advertising manager absent"
+        elif advertisement_instances <= 0:
+            advertising_reason = "no advertisement instances available"
+        else:
+            advertising_reason = None
         return BluetoothCapabilities(
             adapter=self._adapter_path.rsplit("/", 1)[-1],
             address=str(adapter.get("Address", "")),
             address_type=adapter.get("AddressType"),
             name=adapter.get("Name"),
-            roles=roles,
-            supported_advertisement_instances=int(
-                advertising.get("SupportedInstances", 0)
+            version=(int(adapter["Version"]) if "Version" in adapter else None),
+            manufacturer=(
+                int(adapter["Manufacturer"]) if "Manufacturer" in adapter else None
             ),
+            modalias=adapter.get("Modalias"),
+            roles=roles,
+            supported_advertisement_instances=advertisement_instances,
             active_advertisement_instances=int(advertising.get("ActiveInstances", 0)),
             supported_advertisement_includes=list(
                 advertising.get("SupportedIncludes", [])
@@ -302,9 +324,8 @@ class Driver(BluetoothDeviceInterface):
                     has_central, None if has_central else "central role absent"
                 ),
                 "advertising": OperationSupport(
-                    has_peripheral
-                    and int(advertising.get("SupportedInstances", 0)) > 0,
-                    None if has_peripheral else "peripheral role absent",
+                    advertising_supported,
+                    advertising_reason,
                 ),
                 "connect": OperationSupport(
                     has_central, None if has_central else "central role absent"
@@ -462,6 +483,11 @@ class Driver(BluetoothDeviceInterface):
 
     def register_advertisement(self, specification, timeout: float = 15.0):
         self._ready()
+        advertising = self.get_capabilities().operations["advertising"]
+        if not advertising.supported:
+            raise UnsupportedFeatureError(
+                advertising.reason or "BLE advertising is unsupported"
+            )
         advertisement_id = specification.get("id") or uuid.uuid4().hex
         if advertisement_id in self._advertisements:
             return self._advertisements[advertisement_id]["model"]

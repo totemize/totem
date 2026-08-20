@@ -7,7 +7,14 @@ from contextlib import asynccontextmanager
 import os
 from typing import Any, Callable, Dict, Optional
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 import uvicorn
@@ -346,7 +353,10 @@ def create_app(
         return serialize(value)
 
     @application.get("/network/wifi/networks", response_model=list[WiFiNetworkResponse])
-    async def wifi_networks(request: Request, timeout_seconds: float = 20.0):
+    async def wifi_networks(
+        request: Request,
+        timeout_seconds: float = Query(default=20.0, gt=0, le=120),
+    ):
         manager = await _get_manager(request, "network")
         values = await _call_hardware(
             request, "network", manager.scan_wifi_networks, timeout_seconds
@@ -367,7 +377,10 @@ def create_app(
         return Status(success=True, message="Wi-Fi station connection activated")
 
     @application.delete("/network/wifi/connections", response_model=Status)
-    async def wifi_disconnect(request: Request, timeout_seconds: float = 15.0):
+    async def wifi_disconnect(
+        request: Request,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
         manager = await _get_manager(request, "network")
         await _call_hardware(
             request, "network", manager.disconnect_from_network, timeout_seconds
@@ -388,7 +401,10 @@ def create_app(
         return Status(success=True, message="Wi-Fi hotspot activated")
 
     @application.delete("/network/wifi/hotspots", response_model=Status)
-    async def wifi_hotspot_stop(request: Request, timeout_seconds: float = 15.0):
+    async def wifi_hotspot_stop(
+        request: Request,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
         manager = await _get_manager(request, "network")
         await _call_hardware(request, "network", manager.stop_hotspot, timeout_seconds)
         return Status(success=True, message="Wi-Fi hotspot deactivated")
@@ -406,7 +422,10 @@ def create_app(
         return Status(success=True, message="Wi-Fi Direct discovery started")
 
     @application.delete("/network/wifi/p2p/discovery", response_model=Status)
-    async def p2p_discovery_stop(request: Request, timeout_seconds: float = 15.0):
+    async def p2p_discovery_stop(
+        request: Request,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
         manager = await _get_manager(request, "network")
         await _call_hardware(
             request, "network", manager.stop_p2p_discovery, timeout_seconds
@@ -439,7 +458,9 @@ def create_app(
 
     @application.delete("/network/wifi/p2p/groups/{group_id}", response_model=Status)
     async def p2p_group_remove(
-        request: Request, group_id: str, timeout_seconds: float = 15.0
+        request: Request,
+        group_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
     ):
         manager = await _get_manager(request, "network")
         await _call_hardware(
@@ -470,7 +491,9 @@ def create_app(
 
     @application.delete("/network/bluetooth/discovery", response_model=Status)
     async def bluetooth_discovery_stop(
-        request: Request, session_id: str, timeout_seconds: float = 15.0
+        request: Request,
+        session_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
     ):
         manager = await _get_manager(request, "network")
         await _call_hardware(
@@ -529,7 +552,9 @@ def create_app(
         response_model=Status,
     )
     async def bluetooth_advertisement_unregister(
-        request: Request, advertisement_id: str, timeout_seconds: float = 15.0
+        request: Request,
+        advertisement_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
     ):
         manager = await _get_manager(request, "network")
         await _call_hardware(
@@ -592,7 +617,7 @@ def create_app(
         request: Request,
         device_id: str,
         characteristic_id: str,
-        timeout_seconds: float = 15.0,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
     ):
         manager = await _get_manager(request, "network")
         value = await _call_hardware(
@@ -657,7 +682,9 @@ def create_app(
         response_model=Status,
     )
     async def bluetooth_gatt_unsubscribe(
-        request: Request, subscription_id: str, timeout_seconds: float = 15.0
+        request: Request,
+        subscription_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
     ):
         manager = await _get_manager(request, "network")
         await _call_hardware(

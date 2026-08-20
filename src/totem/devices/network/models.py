@@ -131,6 +131,9 @@ class BluetoothCapabilities:
     address: str
     address_type: Optional[str]
     name: Optional[str]
+    version: Optional[int]
+    manufacturer: Optional[int]
+    modalias: Optional[str]
     roles: List[str]
     supported_advertisement_instances: int
     active_advertisement_instances: int

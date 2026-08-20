@@ -1,5 +1,7 @@
 """Unit coverage for capability parsing and policy-free radio lifecycles."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from totem.devices.network.capabilities import (
@@ -109,6 +111,8 @@ def test_mock_radios_report_real_shape_and_transition_idempotently():
     capabilities = manager.get_capabilities()
     assert capabilities.wifi.operations["p2p_group"].supported
     assert capabilities.bluetooth.operations["gatt_client"].supported
+    assert capabilities.bluetooth.version == 9
+    assert capabilities.bluetooth.manufacturer == 15
     manager.close()
     manager.close()
 
@@ -229,3 +233,32 @@ def test_bluez_advertisement_ids_are_safe_unique_dbus_path_segments():
     assert _object_path_segment("live-metot-adv") != _object_path_segment(
         "live_metot_adv"
     )
+
+
+def test_network_manager_peer_signal_does_not_reenter_dbus_loop():
+    from totem.devices.network.drivers.network_manager_wifi import (
+        NM_WIFI_P2P,
+        NetworkManagerWiFiDriver,
+    )
+
+    events = []
+    driver = NetworkManagerWiFiDriver(
+        "wlan0",
+        runtime=object(),
+        event_callback=lambda event, data: events.append((event, data)),
+    )
+
+    driver._on_message(
+        SimpleNamespace(
+            interface=NM_WIFI_P2P,
+            member="PeerAdded",
+            body=["/org/freedesktop/NetworkManager/WifiP2PPeer/1"],
+        )
+    )
+
+    assert events == [
+        (
+            "wifi_p2p_peer_found",
+            {"path": "/org/freedesktop/NetworkManager/WifiP2PPeer/1"},
+        )
+    ]

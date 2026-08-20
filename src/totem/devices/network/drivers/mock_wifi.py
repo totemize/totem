@@ -1,6 +1,7 @@
 """Deterministic mock with parity to the complete Wi-Fi contract."""
 
 import time
+import threading
 from typing import Any, Callable, Dict, Optional
 import uuid
 
@@ -33,6 +34,7 @@ class Driver(WiFiDeviceInterface):
         self.hotspot_active = False
         self.hotspot_ssid: Optional[str] = None
         self.p2p_discovering = False
+        self._p2p_discovery_timer: Optional[threading.Timer] = None
         self.groups: Dict[str, P2PGroup] = {}
         self._event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None
 
@@ -159,10 +161,19 @@ class Driver(WiFiDeviceInterface):
             raise ValueError("P2P discovery duration must be between 1 and 600 seconds")
         self.p2p_discovering = True
         self._emit("wifi_p2p_peer_found", {"peer_id": "02_00_00_00_00_02"})
+        self._p2p_discovery_timer = threading.Timer(
+            duration_seconds, self.stop_p2p_discovery
+        )
+        self._p2p_discovery_timer.daemon = True
+        self._p2p_discovery_timer.start()
 
     def stop_p2p_discovery(self, timeout: float = 15.0):
         self._ready()
         self.p2p_discovering = False
+        timer = self._p2p_discovery_timer
+        self._p2p_discovery_timer = None
+        if timer is not None:
+            timer.cancel()
 
     def is_p2p_discovering(self) -> bool:
         return self.p2p_discovering
@@ -215,6 +226,10 @@ class Driver(WiFiDeviceInterface):
     def close(self):
         if getattr(self, "_closed", False):
             return
-        self.p2p_discovering = False
+        if self.initialized:
+            self.stop_p2p_discovery()
+        elif self._p2p_discovery_timer is not None:
+            self._p2p_discovery_timer.cancel()
+            self._p2p_discovery_timer = None
         self.groups.clear()
         super().close()
