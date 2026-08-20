@@ -12,6 +12,27 @@ from totem.devices.registry import (
 
 # src/devices/eink/eink.py
 
+FULL_REFRESH = "full"
+PARTIAL_REFRESH = "partial"
+REFRESH_MODES = frozenset((FULL_REFRESH, PARTIAL_REFRESH))
+
+
+def normalize_refresh_mode(refresh_mode) -> str:
+    """Normalize API enums and strings without coupling drivers to Pydantic."""
+    value = getattr(refresh_mode, "value", refresh_mode)
+    if not isinstance(value, str):
+        raise TypeError("refresh_mode must be a string")
+    value = value.strip().lower()
+    if value not in REFRESH_MODES:
+        raise ValueError(
+            "Unsupported refresh_mode {!r}; expected one of {}".format(
+                value,
+                ", ".join(sorted(REFRESH_MODES)),
+            )
+        )
+    return value
+
+
 class EInkDeviceInterface(DeviceDriver):
     @abstractmethod
     def init(self):
@@ -171,12 +192,33 @@ class EInk:
         """Alias for clear_display"""
         return self.clear_display()
 
-    def display_image(self, image):
-        self.driver.display_image(image)
+    def supports_refresh_mode(self, refresh_mode, *, raw: bool = False) -> bool:
+        mode = normalize_refresh_mode(refresh_mode)
+        if mode == FULL_REFRESH:
+            return True
+        operation_name = "display_bytes_partial" if raw else "display_image_partial"
+        return callable(getattr(self.driver, operation_name, None))
+
+    def partial_refresh_ready(self) -> bool:
+        """Whether a partial-capable driver has a known controller baseline."""
+        return bool(getattr(self.driver, "partial_refresh_ready", True))
+
+    def display_image(self, image, refresh_mode=FULL_REFRESH):
+        mode = normalize_refresh_mode(refresh_mode)
+        if mode == PARTIAL_REFRESH:
+            operation = getattr(self.driver, "display_image_partial", None)
+            if callable(operation):
+                return operation(image)
+        return self.driver.display_image(image)
 
     def display(self, image):
         """Alias for display_image"""
         return self.display_image(image)
 
-    def display_bytes(self, image_bytes):
-        self.driver.display_bytes(image_bytes)
+    def display_bytes(self, image_bytes, refresh_mode=FULL_REFRESH):
+        mode = normalize_refresh_mode(refresh_mode)
+        if mode == PARTIAL_REFRESH:
+            operation = getattr(self.driver, "display_bytes_partial", None)
+            if callable(operation):
+                return operation(image_bytes)
+        return self.driver.display_bytes(image_bytes)

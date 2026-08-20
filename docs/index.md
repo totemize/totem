@@ -38,6 +38,7 @@ normative product design.
 | If you need to… | Start here |
 |---|---|
 | Understand processes, ports, trust boundaries, and data flow | [System architecture](/architecture/system-overview) |
+| Design display behavior from system, power, mesh, peer, and sync states | [Totem state catalog](/reference/state-model) |
 | Provision or converge a device | [Ansible runbook](/operations/ansible) |
 | Inspect `totemd`, use `totemctl`, or integrate with the local bus | [`totemd` CLI and bus](/reference/totemd) |
 | Run or call the hardware API and understand driver selection | [Python device manager](/reference/device-manager) |

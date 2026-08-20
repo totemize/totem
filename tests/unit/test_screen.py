@@ -22,12 +22,14 @@ class FakeDisplay:
     def __init__(self):
         self.waited = False
         self.images = []
+        self.refresh_modes = []
 
     async def wait_ready(self, timeout=60.0):
         self.waited = True
 
-    async def show(self, image):
+    async def show(self, image, refresh_mode="full"):
         self.images.append(image.copy())
+        self.refresh_modes.append(refresh_mode)
 
 
 class FakeNotifier:
@@ -113,5 +115,6 @@ def test_synthetic_boot_replays_every_transition(monkeypatch):
     assert display.waited
     assert notifier.calls == ["Boot splash rendered"]
     assert len(display.images) == 3 + len(SERVICE_SPECS)
+    assert display.refresh_modes == ["full"] + ["partial"] * (len(display.images) - 1)
     assert controller.current == ScreenFrame(ScreenState.IDLE, "(^_^)")
     assert sleeps[-1] == 2.0

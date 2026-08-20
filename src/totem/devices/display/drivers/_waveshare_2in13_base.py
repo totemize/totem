@@ -378,6 +378,20 @@ class Waveshare2in13Base(EInkDeviceInterface):
         self._set_window(0, 0, self.NATIVE_WIDTH - 1, self.NATIVE_HEIGHT - 1)
         self._set_cursor(0, 0)
 
+    def _frame_payload(self, image_bytes) -> bytes:
+        """Return one validated controller-native framebuffer."""
+        payload = bytes(image_bytes)
+        if len(payload) != self.FRAME_BYTES:
+            raise ValueError(
+                f"Incorrect framebuffer size: expected {self.FRAME_BYTES} bytes, "
+                f"got {len(payload)}"
+            )
+        return payload
+
+    def _write_frame(self, command: int, payload: bytes) -> None:
+        self.send_command(command)
+        self.send_data(payload)
+
     def clear(self):
         if not self.initialized:
             self.init()
@@ -390,18 +404,12 @@ class Waveshare2in13Base(EInkDeviceInterface):
         return True
 
     def display_bytes(self, image_bytes):
-        payload = bytes(image_bytes)
-        if len(payload) != self.FRAME_BYTES:
-            raise ValueError(
-                f"Incorrect framebuffer size: expected {self.FRAME_BYTES} bytes, "
-                f"got {len(payload)}"
-            )
+        payload = self._frame_payload(image_bytes)
         if not self.initialized:
             self.init()
 
         self._prepare_frame_write()
-        self.send_command(self.WRITE_RAM)
-        self.send_data(payload)
+        self._write_frame(self.WRITE_RAM, payload)
         self._update()
 
     def getbuffer(self, image):

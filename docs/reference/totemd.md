@@ -40,6 +40,7 @@ Starting `totemd` without a mode, or with a mode other than `serve` or
 | `TOTEMD_FIPS_POLL_MS` | `2000` | FIPS status/peer polling interval in milliseconds. Invalid values fall back to `2000`. |
 | `TOTEMD_CONFIG` | `/etc/totemd/config.toml` | Deployment fallback file. Missing means defaults; malformed content stops startup. |
 | `TOTEMD_STATE` | `/var/lib/totemd/state.toml` | Durable owner and policy-override state. Malformed or unsupported state stops startup. |
+| `TOTEMD_ENCOUNTER_HISTORY` | `/var/lib/totemd/recognized-encounters.jsonl` | Versioned append-only history of successful signed encounters. Corrupt completed records, unreadable paths, or unsupported versions stop startup; one torn final append is safely removed. Primarily overridable for tests. |
 | `TOTEMD_NIP11_NAME_PATH` | `/var/lib/totemd/nip11-name` | Derived public name read by strfry; primarily overridable for tests. |
 | `TOTEMD_STRFRY_RUNNER` | `/usr/local/libexec/totem-strfry` | Trusted local relay scan/import runner; primarily overridable for tests. |
 | `TOTEMD_KEY_PATH` | systemd credential `fips.key`, else `/etc/fips/fips.key` | Explicit challenge-signing key override, primarily for local tests/development. |
@@ -244,12 +245,15 @@ This is the same object embedded in `totem.status.get`.
 
 Request payload: none.
 
-The result's `peers` array is sorted by first observation and then npub.
+The result's `peers` array is sorted by first observation and then npub. It
+contains current peers plus at most 64 bounded cancellation tombstones so a
+snapshot-only consumer can observe a sync that was interrupted by departure.
 Each entry contains:
 
 | Field | Type | Meaning |
 |---|---|---|
 | `npub` | string | Authenticated FIPS identity. |
+| `present` | boolean | `true` for a current direct peer. `false` only for a bounded departed row carrying an authoritative cancelled-sync result. |
 | `ipv6_addr` | string | FIPS-derived mesh IPv6 address reported by `show_peers`. |
 | `transport_type` | string | Direct peer transport reported by FIPS. |
 | `first_seen` | integer | Unix seconds when this `totemd` process first observed the peer. |
@@ -257,15 +261,32 @@ Each entry contains:
 | `probe_verdict` | string or `null` | Cached `candidate`, `not_totem`, or `unreachable` NIP-11 grade. |
 | `nip11_name` | string or `null` | Bounded, control-safe unsigned display hint retained for candidates. |
 | `recognized` | boolean | Whether the signed challenge passed for this current encounter. |
+| `known_before` | boolean | Whether this npub had a successfully persisted signed encounter before the current one. It remains pinned through the encounter, including its first successful proof. |
 | `sync_attempt` | integer or `null` | Current periodic reconciliation attempt, starting at 1 for each encounter. |
 | `sync_state` | string or `null` | Running or most recent `succeeded`, `failed`, `timed_out`, or `cancelled` outcome for the current encounter. |
 | `sync_duration_ms` | integer or `null` | Elapsed runtime while active, then final duration. |
 | `sync_exit_code` | integer or `null` | Child exit code when one exists. |
 | `sync_error` | string or `null` | Spawn, wait, timeout, or non-zero-exit diagnostic. |
 
-State is process-local: restarting `totemd` resets timestamps, counters,
-probe caches, and recognition. A FIPS departure clears that peer's recognition
-even without a daemon restart.
+Current-encounter state is process-local: restarting `totemd` resets
+timestamps, counters, probe caches, recognition, and cancellation tombstones.
+A FIPS departure clears that peer's recognition even without a daemon restart.
+If the departure interrupts a running sync, `totemd` pins the job to
+`cancelled` before signalling its child and retains the original encounter as
+`present=false`. That tombstone is removed by any replacement encounter and
+the oldest is evicted when the 64-row bound is reached. Completed jobs do not
+become false cancellations on later departure. `totem.status.get` peer and
+recognized counts remain live-only. `known_before` is the durable exception:
+it survives both departure and daemon restart.
+
+The history file contains one strict version-1 JSON object per successful
+signed encounter. Each append is flushed with file and parent-directory
+`fsync`; the file is private mode `0600`. Recognition, its push, and sync all
+fail closed if the append cannot be made durable. The writer rolls back a
+failed append to its prior length. After abrupt power loss, the loader removes
+only one unterminated final record because its missing commit newline means it
+never became accepted; malformed completed/interior records, unknown
+fields/versions, invalid npubs, and unreadable paths remain startup errors.
 
 ### `totem.events.get`
 
@@ -303,7 +324,7 @@ Implemented pushes:
 | `totem.peer.seen` | `npub` | A peer appears in a new FIPS snapshot. The first successful poll emits this for already-connected peers. |
 | `totem.peer.gone` | `npub` | A peer from the prior snapshot is absent. |
 | `totem.peer.candidate` | `npub` | NIP-11 name and public-key claim match the authenticated FIPS npub. |
-| `totem.recognized` | `npub` | A strict kind-27235 signed proof passes for the same current encounter. |
+| `totem.recognized` | `npub`, `known_before` | A strict kind-27235 signed proof passes for the same current encounter after its history record is durable. |
 | `totem.sync.started` | `npub`, `encounter`, `attempt`, `direction` | A policy-permitted periodic reconciliation round starts. |
 | `totem.sync.done` | started fields plus `outcome`, `duration_ms`, `exit_code`, `error`, `summary`, `missing_remote`, `missing_local` | The round exits, times out, or is cancelled; the readable summary survives if optional numeric parsing fails. |
 | `totem.owner.claimed` | none | The first valid signer was persisted as owner. |
@@ -324,6 +345,10 @@ as notification only and reconcile by calling `totem.status.get` and
 The spec additionally reserves `totem.befriended`; this revision does not
 emit it.
 
+For a display-oriented view of how these events combine with system,
+hardware, power, mesh, and relationship state, see the
+[Totem state catalog](/reference/state-model).
+
 ## FIPS watcher behavior
 
 Each poll opens a fresh Unix-socket connection, sends one newline-delimited
@@ -341,7 +366,10 @@ matching the FIPS npub. Candidate metadata is unsigned and never sufficient
 for recognition. The daemon then sends one fresh random 128-bit nonce to the
 peer's challenge responder on port `8080`; a slow response cannot cross a
 disconnect/reconnect because recognition also checks the captured
-`first_seen` encounter token. A new recognition starts
+`first_seen` encounter token. Before publishing recognition, `totemd` appends
+that signed encounter to its private durable history and classifies the peer
+with `known_before`; a persistence failure publishes nothing and starts no
+sync. A new recognition starts
 `/usr/local/libexec/totem-strfry sync ws://[peer]:7777 --dir=both` when policy
 permits. After each round finishes, the supervisor waits five minutes and
 repeats while the same peer encounter remains recognized and eligible. Rounds

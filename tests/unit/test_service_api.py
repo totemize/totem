@@ -164,6 +164,84 @@ def test_binary_endpoints_reject_invalid_base64():
     assert storage.status_code == 422
 
 
+def test_display_image_partial_mode_is_forwarded_explicitly():
+    class PartialDisplayManager:
+        def __init__(self):
+            self.calls = []
+
+        def display_encoded_image(self, data, refresh_mode="full"):
+            self.calls.append((data, refresh_mode))
+
+    display = PartialDisplayManager()
+    app = create_app({"display": lambda: display})
+    with TestClient(app) as client:
+        response = client.post(
+            "/display/image",
+            json={
+                "image_base64": base64.b64encode(b"frame").decode("ascii"),
+                "refresh_mode": "partial",
+            },
+        )
+
+    assert response.status_code == 200
+    assert display.calls == [(b"frame", "partial")]
+
+
+def test_display_image_default_and_explicit_full_keep_legacy_manager_call():
+    display = FakeDisplayManager()
+    app = create_app({"display": lambda: display})
+    encoded = base64.b64encode(b"frame").decode("ascii")
+    with TestClient(app) as client:
+        omitted = client.post(
+            "/display/image",
+            json={"image_base64": encoded},
+        )
+        explicit = client.post(
+            "/display/image",
+            json={"image_base64": encoded, "refresh_mode": "full"},
+        )
+
+    assert omitted.status_code == 200
+    assert explicit.status_code == 200
+    assert display.image_calls == [b"frame", b"frame"]
+
+
+def test_display_image_rejects_unknown_refresh_mode_before_hardware_call():
+    display = FakeDisplayManager()
+    app = create_app({"display": lambda: display})
+    with TestClient(app) as client:
+        response = client.post(
+            "/display/image",
+            json={
+                "image_base64": base64.b64encode(b"frame").decode("ascii"),
+                "refresh_mode": "turbo",
+            },
+        )
+
+    assert response.status_code == 422
+    assert display.image_calls == []
+
+
+def test_display_image_partial_hardware_failure_is_502():
+    class FailingDisplayManager:
+        @staticmethod
+        def display_encoded_image(data, refresh_mode="full"):
+            raise TimeoutError("display busy")
+
+    app = create_app({"display": FailingDisplayManager})
+    with TestClient(app) as client:
+        response = client.post(
+            "/display/image",
+            json={
+                "image_base64": base64.b64encode(b"frame").decode("ascii"),
+                "refresh_mode": "partial",
+            },
+        )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "Display hardware operation failed"
+
+
 def test_manager_initialization_is_lazy_and_failure_is_503():
     calls = []
 

@@ -16,6 +16,7 @@ from totem import __version__
 from totem.api.event_manager import EventManager
 from totem.api.models import (
     DisplayImageRequest,
+    DisplayRefreshMode,
     DisplayTextRequest,
     NFCWriteRequest,
     NetworkConfigurationRequest,
@@ -207,9 +208,20 @@ def create_app(
     async def display_image(request: Request, command: DisplayImageRequest):
         manager = await _get_manager(request, "display")
         image_data = _decode_base64(command.image_base64, "image_base64")
-        await _call_hardware(
-            request, "display", manager.display_encoded_image, image_data
-        )
+        if command.refresh_mode == DisplayRefreshMode.PARTIAL:
+            await _call_hardware(
+                request,
+                "display",
+                manager.display_encoded_image,
+                image_data,
+                command.refresh_mode.value,
+            )
+        else:
+            # Keep the original one-argument manager call for old clients and
+            # injected manager implementations when the request omits a mode.
+            await _call_hardware(
+                request, "display", manager.display_encoded_image, image_data
+            )
         return Status(success=True, message="Image displayed successfully")
 
     @application.post("/nfc/read", response_model=Status)

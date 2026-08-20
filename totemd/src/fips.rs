@@ -187,7 +187,8 @@ async fn tick(st: &Arc<AppState>) -> Result<(), String> {
     let status = query("show_status").await?;
     let snap = parse_snapshot(&peers, &status);
     let (own_npub, mesh_size) = (snap.own_npub.clone(), snap.mesh_size);
-    let (merged, seen, gone) = diff(&st.peers_map(), snap);
+    let previous = st.peers_map();
+    let (merged, seen, gone) = diff(&previous, snap);
     let seen_info: Vec<(String, String)> = seen
         .iter()
         .filter_map(|npub| {
@@ -202,6 +203,11 @@ async fn tick(st: &Arc<AppState>) -> Result<(), String> {
     st.set_fips(true, None);
     st.set_peers(merged);
     st.set_mesh(own_npub, mesh_size);
+    for npub in &gone {
+        if let Some(peer) = previous.get(npub) {
+            sync::depart(st, peer);
+        }
+    }
 
     for (npub, ip) in seen_info {
         tracing::info!(npub, "peer seen");
@@ -210,7 +216,6 @@ async fn tick(st: &Arc<AppState>) -> Result<(), String> {
         tokio::spawn(async move { probe::on_seen(st, &npub, &ip).await });
     }
     for npub in &gone {
-        sync::cancel(st, npub);
         st.forget_recognized(npub);
         tracing::info!(npub, "peer gone");
         st.push(json!({ "type": "totem.peer.gone", "npub": npub }));

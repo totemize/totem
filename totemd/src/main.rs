@@ -12,6 +12,7 @@ mod bus;
 mod challenge;
 mod cli;
 mod config;
+mod encounter;
 mod fips;
 mod http;
 mod owner;

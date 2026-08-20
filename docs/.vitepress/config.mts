@@ -29,6 +29,7 @@ export default defineConfig({
       {
         text: 'Reference',
         items: [
+          { text: 'Totem state catalog', link: '/reference/state-model' },
           { text: 'totemd CLI and bus', link: '/reference/totemd' },
           { text: 'Python device manager', link: '/reference/device-manager' },
           { text: 'FIPS', link: '/reference/fips' },

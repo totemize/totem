@@ -25,7 +25,7 @@ pub fn handle(msg: Value, st: &AppState) -> Value {
                 "uptime_secs": st.started.elapsed().as_secs(),
                 "config": serde_json::to_value(st.config()).unwrap_or(Value::Null),
                 "fips": st.fips_json(),
-                "peers": st.peers_snapshot().len(),
+                "peers": st.peer_count(),
                 "recognized": st.recognized_count(),
                 "claimed": st.owner.owner().is_some(),
                 "events": st.counters(),
@@ -134,14 +134,16 @@ mod tests {
             crate::probe::ProbeVerdict::Candidate,
             Some("!Totem test".into()),
         );
-        st.recognize("npub1aa", 7);
+        assert_eq!(st.recognize("npub1aa", 7).unwrap(), Some(false));
         let r = handle(json!({"type": "totem.peers.get", "id": "p1"}), &st);
         assert_eq!(r["type"], "totem.peers.get.result");
         assert_eq!(r["peers"][0]["npub"], "npub1aa");
         assert_eq!(r["peers"][0]["ipv6_addr"], "fd00::1");
+        assert_eq!(r["peers"][0]["present"], true);
         assert_eq!(r["peers"][0]["probe_verdict"], "candidate");
         assert_eq!(r["peers"][0]["nip11_name"], "!Totem test");
         assert_eq!(r["peers"][0]["recognized"], true);
+        assert_eq!(r["peers"][0]["known_before"], false);
         assert_eq!(r["status"], serde_json::Value::Null); // no stale fields
     }
 }

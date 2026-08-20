@@ -38,12 +38,25 @@ class DeviceManagerDisplay:
         with self._opener.open(operation, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
 
-    async def ready(self) -> bool:
+    async def health(self) -> Dict[str, Any]:
+        """Return the DeviceManager health snapshot, or an empty snapshot."""
+
         try:
             response = await asyncio.to_thread(self._request, "/health")
         except (error.URLError, OSError, TimeoutError, ValueError):
-            return False
-        return response.get("status") == "healthy"
+            return {}
+        return response
+
+    async def ready(self) -> bool:
+        return (await self.health()).get("status") == "healthy"
+
+    async def ups_status(self) -> Dict[str, Any]:
+        """Read UPS facts without making optional telemetry fatal to screen."""
+
+        try:
+            return await asyncio.to_thread(self._request, "/ups/status")
+        except (error.URLError, OSError, TimeoutError, ValueError):
+            return {}
 
     async def wait_ready(self, timeout: float = 60.0) -> None:
         loop = asyncio.get_running_loop()
@@ -53,10 +66,13 @@ class DeviceManagerDisplay:
                 raise TimeoutError("Timed out waiting for the Totem device API")
             await asyncio.sleep(0.25)
 
-    async def show(self, image: Image.Image) -> None:
+    async def show(self, image: Image.Image, refresh_mode: str = "full") -> None:
         encoded = io.BytesIO()
         image.save(encoded, format="PNG")
-        payload = {"image_base64": base64.b64encode(encoded.getvalue()).decode("ascii")}
+        payload = {
+            "image_base64": base64.b64encode(encoded.getvalue()).decode("ascii"),
+            "refresh_mode": refresh_mode,
+        }
         response = await asyncio.to_thread(
             self._request,
             "/display/image",

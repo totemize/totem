@@ -33,17 +33,31 @@ Metot's host variables set it to true, seed
 `TOTEM_EINK_DRIVER=waveshare_2in13_v4`, apply the enclosure's
 `TOTEM_SCREEN_ROTATION=180`, and select `TOTEM_UPS_DRIVER=pisugar2`. The screen
 service renders through the local device-manager API, presents the boot splash
-before releasing the remaining services, and can replay the same sequence
-without a reboot:
+before releasing the remaining services, then continuously projects
+authoritative control-plane/device/UPS snapshots. The deployed defaults use a
+2.1-second coalescing window, 15-second safety poll, 20% low and 8% critical
+battery thresholds, and one full refresh per twenty requested partial frames.
+Inventory can also pin comma-separated sequence-rate, minimum-dwell, and
+priority overrides plus the bounded pending-scene capacity; empty override
+strings retain the reviewed built-in policy.
+Replay boot or every exact runtime frame without rebooting:
 
 ```bash
 ssh metot 'totem-screen replay-boot'
+ssh metot 'totem-screen replay-states --replay-frame-seconds 2'
 ```
 
 The device-manager package set includes `python3-smbus` for read-only PiSugar2
-telemetry. The playbook does not edit
-Raspberry Pi boot firmware or reboot a device; apply
-`deploy/devices/metot.boot-config.txt` separately before expecting real SPI.
+telemetry. Inventory also declares the hardware interfaces each host requires.
+For metot, Ansible converges `dtparam=spi=on` and `dtparam=i2c_arm=on` in
+`/boot/firmware/config.txt`, persists and loads the kernel's `i2c-dev`
+userspace adapter, reboots only when either boot parameter changes, then fails
+verification unless `/dev/spidev0.0`, `/dev/i2c-1`, and live UPS telemetry are
+all available. `deploy/devices/metot.boot-config.txt` mirrors the same two
+settings for image-building and manual recovery.
+If a controller run stops after writing that block but before its reboot,
+resume once with `--extra-vars totem_force_hardware_reboot=true`; the fleet
+default remains false.
 
 ## Prepare artifacts
 

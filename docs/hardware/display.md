@@ -61,7 +61,34 @@ Waveshare 2.13-inch V4 driver requires exactly 4,000 bytes.
 `metot` uses the checked-in `deploy/devices/metot.env` profile. Install that
 file as `/etc/totem/totem.env`; the systemd unit reads it
 on startup. SPI0 must also be enabled persistently in the Raspberry Pi boot
-configuration (`dtparam=spi=on`).
+configuration (`dtparam=spi=on`). The converged Ansible inventory owns this
+setting for metot and verifies `/dev/spidev0.0` after any required reboot.
+
+## Full and partial refresh
+
+`POST /display/image` and the display-manager image methods accept `full` and
+`partial` refresh modes. Full remains the default for compatibility. The V4
+driver uses differential full-frame partial updates: a full update first seeds
+controller RAM planes `0x24` and `0x26`; later partial updates retain the prior
+frame, select update control `0xFF`, and do not clear or reinitialize the panel
+between animation frames. The reset pin is pulsed only when entering a partial
+burst.
+
+Set `TOTEM_EINK_FULL_REFRESH_EVERY` to a positive integer. The default and
+metot deployment value are `20`; the twentieth requested partial frame is
+promoted to a full refresh, so no burst exceeds nineteen consecutive partial
+waveforms. The cadence remains configurable so field testing can balance
+ghosting against disruptive full-panel flashes. Drivers that do not implement
+partial refresh safely fall back to full updates, and a controller restart or
+failed update forces a new full baseline.
+
+The command sequence follows Waveshare's
+[V4 Python driver](https://github.com/waveshareteam/e-Paper/blob/a794fbc39656b0f93938d1ffb3fdc77eaed9e9fc/RaspberryPi_JetsonNano/python/lib/waveshare_epd/epd2in13_V4.py)
+and
+[V4 demo](https://github.com/waveshareteam/e-Paper/blob/a794fbc39656b0f93938d1ffb3fdc77eaed9e9fc/RaspberryPi_JetsonNano/python/examples/epd_2in13_V4_test.py).
+Previous-plane tracking incorporates the hardware-tested correction described
+in the upstream repository's
+[ghosting fix PR #416](https://github.com/waveshareteam/e-Paper/pull/416).
 
 Mock behavior must be explicit:
 

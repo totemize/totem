@@ -58,6 +58,30 @@
     - totem_device_manager_enabled | bool
     - not (totem_screen_enabled | bool)
 
+- name: Inspect configured hardware device nodes
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop:
+    - path: /dev/spidev0.0
+      enabled: "{{ totem_spi_enabled }}"
+      label: SPI0
+    - path: /dev/i2c-1
+      enabled: "{{ totem_i2c_enabled }}"
+      label: I2C1
+  when: item.enabled | bool
+  register: totem_hardware_nodes
+
+- name: Require configured hardware device nodes
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: >-
+      {{ item.item.label }} is enabled in inventory but {{ item.item.path }}
+      is absent after deployment.
+  loop: "{{ totem_hardware_nodes.results | default([]) }}"
+  when:
+    - not (item.skipped | default(false))
+
 - name: Read FIPS status
   ansible.builtin.command:
     argv: [fipsctl, show, status]
@@ -174,6 +198,29 @@
     status_code: 200
     use_proxy: false
   when: totem_device_manager_enabled | bool
+
+- name: Read configured UPS telemetry
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8000/ups/status
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: totem_ups_status
+  when:
+    - totem_device_manager_enabled | bool
+    - totem_ups_driver | length > 0
+
+- name: Validate configured UPS telemetry
+  ansible.builtin.assert:
+    that:
+      - totem_ups_status.json.model | length > 0
+      - totem_ups_status.json.battery_percent | float >= 0
+      - totem_ups_status.json.battery_percent | float <= 100
+      - totem_ups_status.json.voltage_volts | float > 0
+      - totem_ups_status.json.power_plugged in [true, false, none]
+  when:
+    - totem_device_manager_enabled | bool
+    - totem_ups_driver | length > 0
 
 - name: Find completed migration checkpoints
   ansible.builtin.find:

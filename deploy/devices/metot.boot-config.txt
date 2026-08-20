@@ -1,2 +1,3 @@
 # Required Raspberry Pi boot configuration for metot.
 dtparam=spi=on
+dtparam=i2c_arm=on
