@@ -122,7 +122,9 @@ ssh motown.fips          # via FIPS mesh
   Public metadata is the latest own device-signed kind 0 in strfry.
 - Signed challenge build is deployed to all three bench units. Metot joined
   this baseline through the converged Ansible deployment on 2026-08-20.
-- The sync-supervisor build is deployed only to totem + motown.
+- The automatic sync supervisor is deployed only to totem + motown. Motown
+  runs the current five-minute periodic/history build with readable per-round
+  reconciliation summaries; totem retains the earlier encounter build.
 - Challenge signing key on enabled units: source remains
   `/etc/fips/fips.key` root:root 0600; `totemd.service` passes it to `User=totem` with systemd `LoadCredential=`.
   Do not copy it, print it, or loosen its mode.
@@ -141,6 +143,7 @@ ssh motown.fips          # via FIPS mesh
 ssh totem 'totemctl status'  # fips health + effective policy + counters
 ssh totem 'totemctl peers'   # peers + NIP-11 hint + probe/recognition state
 ssh totem 'totemctl config'  # effective engagement policy
+ssh motown 'totemctl history' # bounded pushes + per-round sync summaries
 ```
 
 ### Device inspection conventions
