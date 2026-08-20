@@ -284,10 +284,13 @@ shape is:
   /opt/strfry/bin/strfry --config=/etc/strfry.conf scan '{}'
 ```
 
-Run database-reading commands as `strfry` so ownership and environment match
-the service. Commands such as `delete`, `import`, database upgrade, and
-compaction mutate durable relay data; schedule and back up those operations
-instead of using them as diagnostics.
+For the deployed layout, run read-only scans and sync commands as `totem`
+through `/usr/local/libexec/totem-strfry`; the wrapper fixes the loader,
+library path, config, and working directory. Group-scoped access permits the
+control plane to read/write LMDB without sudo or world-writable state. Commands
+such as `delete`, `import`, database upgrade, and compaction mutate durable
+relay data; schedule and back up those operations instead of using them as
+diagnostics.
 
 ## Deployment behavior
 
@@ -300,9 +303,11 @@ The Ansible strfry role:
 4. copies the archive into a checksum-addressed remote cache;
 5. extracts only an artifact whose installation sentinel is absent;
 6. verifies the architecture-specific musl loader;
-7. installs/enables the systemd unit and records migration
+7. installs the root-owned command runner, setgid/group-write policy, and
+   unprivileged `totem` access;
+8. installs/enables the systemd unit and records migration
    `0020-strfry-layout.complete`;
-8. verifies NIP-11 and NIP-77.
+9. verifies NIP-11/NIP-77 and opens LMDB through the runner as `totem`.
 
 The LMDB directory is never replaced by the artifact extraction. Changed
 runtime content notifies a restart handler; the no-restart switch in the

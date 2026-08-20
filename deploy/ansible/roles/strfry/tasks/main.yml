@@ -25,6 +25,13 @@
     create_home: false
     state: present
 
+- name: Allow the Totem control plane to run strfry sync
+  ansible.builtin.user:
+    name: totem
+    groups: strfry
+    append: true
+    state: present
+
 - name: Create strfry runtime directories
   ansible.builtin.file:
     path: "{{ item.path }}"
@@ -34,7 +41,9 @@
     mode: "{{ item.mode }}"
   loop:
     - {path: /opt/strfry, owner: root, group: root, mode: "0755"}
-    - {path: /var/lib/strfry, owner: strfry, group: strfry, mode: "0750"}
+    - {path: /usr/local/libexec, owner: root, group: root, mode: "0755"}
+    - {path: /etc/systemd/system/strfry.service.d, owner: root, group: root, mode: "0755"}
+    - {path: /var/lib/strfry, owner: strfry, group: strfry, mode: "2770"}
 
 - name: Seed an IPv6-capable strfry configuration on bare devices
   ansible.builtin.template:
@@ -119,6 +128,41 @@
     fail_msg: >-
       The {{ totem_artifact_arch }} strfry artifact does not contain
       /opt/strfry/lib/{{ strfry_loader }}.
+
+- name: Install the unprivileged strfry command runner
+  ansible.builtin.copy:
+    src: "{{ totem_repo_root }}/deploy/totem-strfry"
+    dest: /usr/local/libexec/totem-strfry
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install strfry sync permission policy
+  ansible.builtin.copy:
+    src: "{{ totem_repo_root }}/deploy/systemd/strfry-sync.conf"
+    dest: /etc/systemd/system/strfry.service.d/totemd-sync.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd for strfry
+    - Restart strfry
+
+- name: Find existing top-level strfry database files
+  ansible.builtin.find:
+    paths: /var/lib/strfry
+    file_type: file
+    recurse: false
+  register: strfry_database_files
+
+- name: Preserve group access to existing strfry database files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    group: strfry
+    mode: "0660"
+  loop: "{{ strfry_database_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
 
 - name: Install the strfry systemd unit
   ansible.builtin.template:

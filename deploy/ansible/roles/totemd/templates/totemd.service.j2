@@ -7,7 +7,7 @@ After=fips.service network-online.target
 Type=simple
 User=totem
 Group=totem
-SupplementaryGroups=fips
+SupplementaryGroups=fips strfry
 # The root-owned source remains 0600. systemd exposes a private read-only
 # credential to the unprivileged daemon for challenge signing.
 LoadCredential=fips.key:/etc/fips/fips.key

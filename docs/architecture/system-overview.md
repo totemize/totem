@@ -58,7 +58,7 @@ is LAN, access point, or FIPS.
 |---|---|---|---|
 | `fips.service` | root | Mesh transport, authentication, routing, TUN, local DNS, control socket | `/etc/fips/fips.yaml`, `/etc/fips/fips.key` |
 | `strfry.service` | `strfry` | Nostr relay, NIP-11, NIP-77/negentropy | `/etc/strfry.conf`, `/var/lib/strfry/` |
-| `totemd.service` | `totem`, supplementary group `fips` | FIPS watcher, NIP-11 prefilter, signed recognition, public web bind, loopback message bus | `/etc/totemd/totemd.env`, `/etc/totemd/config.toml`; current encounter state is in memory |
+| `totemd.service` | `totem`, supplementary groups `fips`, `strfry` | FIPS watcher, NIP-11 prefilter, signed recognition, public web bind, loopback message bus, strfry runner access | `/etc/totemd/totemd.env`, `/etc/totemd/config.toml`; current encounter state is in memory |
 | `totem.service` | `totem`, supplementary groups `gpio`, `i2c`, `spi` | FastAPI hardware service and lazy manager/driver lifecycle | `/etc/totem/totem.env`, `/var/lib/totem/storage` |
 
 The systemd definitions are generated from `deploy/ansible/roles/*/templates`.
