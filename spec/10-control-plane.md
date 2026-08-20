@@ -21,12 +21,12 @@ splits across the two servers; both ports are pinned in `07-conventions.md`.
 - One Rust binary, two faces: `totemd serve` (the daemon, a systemd unit)
   and `totemctl` (a client of the bus — the same binary in client mode; it
   introduces no separate API).
-- Runs as root so it can read the FIPS identity key (`/etc/fips/fips.key`,
-  root:root 0600 by design): the challenge responder MUST sign with the
-  device identity (`02-identity.md`). This also settles the
-  `strfry sync` privilege question — config and DB are root/strfry-only.
-  The key's permissions are never loosened; a later `LoadCredential=`
-  split is possible but not required for v1.
+- Runs as the unprivileged `totem` user. systemd `LoadCredential=` reads the
+  FIPS identity key (`/etc/fips/fips.key`, root:root 0600 by design) and
+  exposes only a private read-only service credential; source permissions
+  are never loosened. The key stays in zeroizing memory and signs challenge
+  responses with the device identity (`02-identity.md`). Relay sync privilege
+  is handled separately when the sync supervisor lands.
 - Web assets are embedded in the binary; deployment is one binary plus one
   systemd unit.
 
@@ -35,12 +35,40 @@ splits across the two servers; both ports are pinned in `07-conventions.md`.
 | Component | What it does |
 |-----------|--------------|
 | **Net-code loop** | Watches the fips control socket (`/run/fips/control.sock`, JSON-lines — a direct client, never a `fipsctl` shell-out) for authenticated peers; resolves `.fips` via the documented embedder path (UDP `[::1]:5354`); probes NIP-11; runs the challenge as prover; emits verdicts (`02-identity.md`) |
-| **Challenge responder** | `GET /totem/challenge` on the web port; signs kind 27235 with the device key; rate-limited (every request costs a signature) |
+| **Challenge responder** | `GET /totem/challenge` on the web port; signs kind 27235 with the device key; strict nonce/URL/method binding and a small-burst global signature limit |
 | **Contacts writer** | Serialized read-modify-sign-write of kind 3 — the only writer; mutations from pairing, from the owner web app, and from `totemctl` all route through here |
 | **Sync supervisor** | Spawns and supervises `strfry sync ws://[peer]:PORT --dir both` per successful verdict; negentropy's design makes interrupted syncs resumable on the next encounter |
 | **Web server** | Two binds: the public web port (guest page + relay URL, owner app behind NIP-98, challenge endpoint) and a **loopback-only bind** for the bus |
 | **Device manager client** | A client of the local device-manager API (`src/totem/api` — display, NFC, storage, network) for hardware actuation (e.g. show sync state); device events are surfaced on the bus |
 | **Encounter log** | Append-only JSONL of verdicts and syncs — the substrate for future encounter records (`09-open-questions.md`) and the source of stats |
+
+## Configuration and engagement policy
+
+Operator policy is read at startup from `/etc/totemd/config.toml`. A missing
+file uses the defaults below; a present but malformed file is a startup error (silently
+running the wrong social policy is worse than no daemon). FIPS rendezvous and
+transport remain in `/etc/fips/fips.yaml`; totemd config controls only what
+happens after FIPS reports an authenticated peer.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `net.probe` | `true` | Run the read-only NIP-11 prefilter on peers |
+| `net.verdict_ttl_hours` | `24` | Minimum delay before re-probing a non-totem or unreachable peer |
+| `policy.befriend` | `"ask"` | `auto`, `ask`, or `never` publish the peer in kind 3 |
+| `policy.sync` | `true` | Opportunistically sync with recognized totems |
+
+The engagement ladder is: FIPS peer seen → NIP-11 candidate → signed
+challenge → recognized totem. **Sync and friendship are independent after
+recognition.** Sync exchanges public relay data; kind 3 is a published social
+claim. `ask` holds a pending request for the owner surface; demo units MAY set
+`auto`, while `ask` is the conservative factory default.
+
+The cheap NIP-11 prefilter is graded per npub: candidates stay cached for the
+daemon lifetime; non-totem/unreachable results expire after the configured
+TTL so a peer that later installs totemd can be discovered. This cache never
+replaces authentication: signed challenge verdicts remain per-encounter and
+are not cached across encounters (`02-identity.md`). Persisted grades and
+escalating backoff are deferred until measurements justify them.
 
 ## Owner authentication
 

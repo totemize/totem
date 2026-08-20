@@ -78,16 +78,20 @@ recognition probe is defined in `02-identity.md`):
 2. **Recognize.** Each totem probes the other's standard relay port with a
    NIP-11 request and checks the totem marker, then runs the challenge to
    authenticate the claim (`02-identity.md`).
-3. **Befriend.** Each totem publishes a kind 3 contact event following the
-   other (`02-identity.md`).
-4. **Sync.** Both relays run NIP-77 negentropy reconciliation over the same
-   connection and exchange the missing events (`04-relay.md`).
-5. **Part.** When the peers leave range, transports drop the link; sync state
+3. **Apply policy.** After recognition, each operator's totem independently
+   decides whether to sync and whether to publish a kind 3 contact event
+   (`10-control-plane.md`). Neither decision gates the other.
+4. **Sync (if enabled).** Both relays run NIP-77 negentropy reconciliation
+   over the same connection and exchange the missing events (`04-relay.md`).
+5. **Befriend (if `auto`, or after owner approval).** The totem publishes a
+   kind 3 event following the other (`02-identity.md`).
+6. **Part.** When the peers leave range, transports drop the link; sync state
    is resumable on the next encounter.
 
 ## Sync lifecycle
 
-- **Trigger:** a successful recognition verdict (step 2 above).
+- **Trigger:** a successful recognition verdict (step 2 above), if the
+  operator enables sync. Friendship/kind 3 is never a prerequisite.
 - **Mechanism:** NIP-77 (`references/negentropy.md`) — negentropy set
   reconciliation over the relay websocket, then event transfer via REQ/EVENT.
   Relay-to-relay or client-style; see `04-relay.md` for the flatness rule.

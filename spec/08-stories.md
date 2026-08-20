@@ -30,8 +30,9 @@ moderation layer), `05-kernel.md` (control plane behind the web app).
 
 *Two people carrying totems walk past each other. The totems discover each
 other over Bluetooth via FIPS, authenticate, recognize each other via the
-NIP-11 marker, befriend (mutual kind 3), and sync their relays via
-negentropy. Both walk away carrying each other's notes.*
+NIP-11 marker, and sync their relays via negentropy. For this acceptance
+test both demo units set `policy.befriend = "auto"`, so they also publish
+mutual kind 3 events; friendship is not a prerequisite for sync.*
 
 Validates: `03-network.md` (discovery/pairing sequence, sync lifecycle),
 `02-identity.md` (recognition flow, contacts), `04-relay.md` (NIP-77),

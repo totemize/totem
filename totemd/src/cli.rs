@@ -3,6 +3,19 @@
 
 use serde_json::{json, Value};
 
+const HELP: &str = "totemctl — local client for totemd
+
+Usage: totemctl <command>
+
+Commands:
+  status              Daemon, FIPS, recognition, and event status
+  config              Effective operator policy
+  peers               Direct peers, NIP-11 hints, probe and recognition
+  events              Follow the live SSE push stream
+  call <type> [json]  Send any bus message
+  help                Show this help
+  version             Show the installed version";
+
 fn bus_url() -> String {
     let addr = std::env::var("TOTEMD_BUS_ADDR").unwrap_or_else(|_| "127.0.0.1:8081".into());
     format!("http://{addr}/bus")
@@ -22,21 +35,37 @@ fn post(msg: Value) -> Value {
     }
 }
 
+fn output(s: &str) -> bool {
+    use std::io::Write;
+    writeln!(std::io::stdout().lock(), "{s}").is_ok()
+}
+
 fn show(v: Value) {
-    println!("{}", serde_json::to_string_pretty(&v).expect("json"));
+    output(&serde_json::to_string_pretty(&v).expect("json"));
 }
 
 pub fn run(args: &[String]) {
     match args.first().map(String::as_str) {
+        None | Some("help" | "-h" | "--help") => {
+            output(HELP);
+        }
+        Some("version" | "-V" | "--version") => {
+            output(&format!("totemctl {}", env!("CARGO_PKG_VERSION")));
+        }
         Some("status") => show(post(json!({"type": "totem.status.get", "id": "1"}))),
+        Some("config") => show(post(json!({"type": "totem.config.get", "id": "1"}))),
         Some("peers") => show(post(json!({"type": "totem.peers.get", "id": "1"}))),
         // `totemctl call <type> [json payload]` — escape hatch for any
         // registered (or future) message.
         Some("call") => {
-            let typ = args.get(1).map(String::as_str).map(str::to_string).unwrap_or_else(|| {
-                eprintln!("usage: totemctl call <type> [json payload]");
-                std::process::exit(2);
-            });
+            let typ = args
+                .get(1)
+                .map(String::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    eprintln!("usage: totemctl call <type> [json payload]");
+                    std::process::exit(2);
+                });
             let payload: Value = match args.get(2) {
                 Some(p) => serde_json::from_str(p).unwrap_or_else(|e| {
                     eprintln!("totemctl: invalid JSON payload: {e}");
@@ -65,16 +94,13 @@ pub fn run(args: &[String]) {
             use std::io::{BufRead, BufReader};
             for line in BufReader::new(resp.into_reader()).lines() {
                 let line = line.expect("stream read");
-                if !line.is_empty() && !line.starts_with(':') {
-                    println!("{line}");
+                if !line.is_empty() && !line.starts_with(':') && !output(&line) {
+                    break;
                 }
             }
         }
         other => {
-            eprintln!(
-                "usage: totemctl status | peers | events | call <type> [json payload]\nunknown command: {}",
-                other.unwrap_or("(none)")
-            );
+            eprintln!("unknown command: {}\n\n{HELP}", other.unwrap_or("(none)"));
             std::process::exit(2);
         }
     }

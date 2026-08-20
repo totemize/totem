@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+resource=$(clang -print-resource-dir)
+case "${TARGET:-}" in
+  arm-unknown-linux-musleabihf) set -- -march=armv6 -mfloat-abi=hard -mfpu=vfp "$@" ;;
+esac
+exec clang -nostdinc -isystem "$resource/include" "$@"
