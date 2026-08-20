@@ -65,6 +65,7 @@ body {
 .arr { font-size: 15px; line-height: 1; }
 .clickable { cursor: pointer; }
 .clickable:hover { background: var(--fill); }
+.clickable-plain { cursor: pointer; }
 
 .screen-title { font-size: 20px; font-weight: 700; padding: 18px 20px 0; }
 
