@@ -2,6 +2,8 @@
 
 import base64
 from datetime import datetime, timezone
+import hashlib
+import re
 import threading
 import time
 from typing import Any, Callable, Dict, Optional
@@ -52,6 +54,12 @@ GATT_CHARACTERISTIC = "org.bluez.GattCharacteristic1"
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _object_path_segment(identifier: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9_]", "_", identifier)
+    digest = hashlib.sha256(identifier.encode("utf-8")).hexdigest()[:8]
+    return "{}_{}".format(sanitized, digest)
 
 
 def _bytes_map(values: Dict[Any, Any]) -> Dict[str, str]:
@@ -457,7 +465,9 @@ class Driver(BluetoothDeviceInterface):
         advertisement_id = specification.get("id") or uuid.uuid4().hex
         if advertisement_id in self._advertisements:
             return self._advertisements[advertisement_id]["model"]
-        path = "/org/totem/advertisements/{}".format(advertisement_id)
+        path = "/org/totem/advertisements/{}".format(
+            _object_path_segment(advertisement_id)
+        )
 
         def released():
             self._advertisements.pop(advertisement_id, None)

@@ -220,3 +220,12 @@ def test_bluez_radio_enable_retries_transient_busy_after_unblock(monkeypatch):
     assert result.powered
     assert runtime.calls == 2
     assert unblocks == [False]
+
+
+def test_bluez_advertisement_ids_are_safe_unique_dbus_path_segments():
+    from totem.devices.network.drivers.bluez import _object_path_segment
+
+    assert _object_path_segment("live-metot-adv").startswith("live_metot_adv_")
+    assert _object_path_segment("live-metot-adv") != _object_path_segment(
+        "live_metot_adv"
+    )
