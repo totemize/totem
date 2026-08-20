@@ -70,8 +70,8 @@ body {
 
 /* notes */
 .note-filters { display: flex; gap: 18px; padding: 16px 20px 12px; font-size: 13px; }
-.note-filters button { background: none; border: none; font: inherit; font-size: 13px; color: var(--dim); cursor: pointer; padding: 0; }
-.note-filters button.on { color: var(--ink); font-weight: 700; }
+.note-filters button { background: none; border: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); cursor: pointer; padding: 0; }
+.note-filters button.on { color: var(--ink); }
 .note-filters .search { margin-left: auto; }
 .note { padding: 14px 20px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; }
 .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--fill); flex-shrink: 0; }
@@ -174,5 +174,5 @@ details.advanced summary:hover { color: var(--ink); }
 
 /* tab bar */
 .tabbar { display: flex; background: #fff; }
-.tabbar button { flex: 1; padding: 14px 4px; background: none; border: none; cursor: pointer; font: inherit; font-size: 13px; color: var(--dim); }
-.tabbar button.on { color: var(--ink); font-weight: 700; }
+.tabbar button { flex: 1; padding: 14px 4px; background: none; border: none; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); }
+.tabbar button.on { color: var(--ink); }
