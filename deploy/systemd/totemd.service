@@ -1,0 +1,18 @@
+[Unit]
+Description=Totem control-plane daemon (totemd)
+Wants=fips.service network-online.target
+After=fips.service network-online.target
+
+[Service]
+Type=simple
+# Runs as `totem` (fips group → control socket access). Bumps to root
+# with the challenge slice (needs /etc/fips/fips.key, root:root 0600).
+User=totem
+Group=totem
+EnvironmentFile=-/etc/totemd/totemd.env
+ExecStart=/usr/local/bin/totemd serve
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
