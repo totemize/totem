@@ -4,7 +4,7 @@
 //! against `totem.status.get` on (re)connect.
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     path::PathBuf,
     sync::{Mutex, RwLock},
     time::Instant,
@@ -22,6 +22,8 @@ use crate::{
     sync::SyncSupervisor,
 };
 
+const EVENT_HISTORY_CAPACITY: usize = 256;
+
 pub struct AppState {
     pub started: Instant,
     /// Effective policy: static defaults plus durable owner overrides.
@@ -34,6 +36,8 @@ pub struct AppState {
     pub tx: broadcast::Sender<Value>,
     /// Push counters by type — surfaced via `totem.status.get`.
     counters: Mutex<HashMap<String, u64>>,
+    /// Recent pushes for `totem.events.get`; process-local and oldest first.
+    event_history: Mutex<VecDeque<Value>>,
     peers: Mutex<HashMap<String, PeerInfo>>,
     /// Authenticated for the current FIPS encounter only; cleared on gone.
     recognized: Mutex<HashSet<String>>,
@@ -77,6 +81,7 @@ impl AppState {
             verdicts: ProbeVerdicts::default(),
             tx,
             counters: Mutex::new(HashMap::new()),
+            event_history: Mutex::new(VecDeque::with_capacity(EVENT_HISTORY_CAPACITY)),
             peers: Mutex::new(HashMap::new()),
             recognized: Mutex::new(HashSet::new()),
             syncs: SyncSupervisor::default(),
@@ -109,11 +114,21 @@ impl AppState {
                 .entry(t.to_string())
                 .or_insert(0) += 1;
         }
+        let mut history = self.event_history.lock().unwrap();
+        if history.len() == EVENT_HISTORY_CAPACITY {
+            history.pop_front();
+        }
+        history.push_back(msg.clone());
+        drop(history);
         let _ = self.tx.send(msg);
     }
 
     pub fn counters(&self) -> HashMap<String, u64> {
         self.counters.lock().unwrap().clone()
+    }
+
+    pub fn event_history(&self) -> Vec<Value> {
+        self.event_history.lock().unwrap().iter().cloned().collect()
     }
 
     pub fn peers_map(&self) -> HashMap<String, PeerInfo> {

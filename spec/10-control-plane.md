@@ -46,7 +46,7 @@ splits across the two servers; both ports are pinned in `07-conventions.md`.
 | **Profile writer** | Reads the latest own kind 0, signs owner-authorized metadata with the device key, imports it into the local relay, and mirrors its bounded name into NIP-11 |
 | **Owner state** | Atomically persists one owner npub and owner policy overrides under `/var/lib/totemd`; corrupt state locks startup rather than becoming unclaimed |
 | **Contacts writer** | Serialized read-modify-sign-write of kind 3 — the only writer; mutations from pairing, from the owner web app, and from `totemctl` all route through here |
-| **Sync supervisor** | Spawns and supervises `strfry sync ws://[peer]:PORT --dir=both` when recognition and policy permit; departure, shutdown, and a bounded runtime cancel the child, while negentropy makes the next encounter resumable |
+| **Sync supervisor** | Runs `strfry sync ws://[peer]:PORT --dir=both` immediately and every five minutes while recognition and policy permit; rounds never overlap per peer, and departure, shutdown, or a bounded per-round runtime cancels the child |
 | **Web server** | Two binds: the public web port (guest page + relay URL, owner app behind NIP-98, challenge endpoint) and a **loopback-only bind** for the bus |
 | **Device manager boundary** | Hardware actuation remains behind the local device-manager API (`src/totem/api` — display, NFC, storage, network). Presentation consumers such as `totem-screen` derive state from the bus/status surface and submit complete frames; device events are surfaced on the bus. |
 | **Encounter log** | Append-only JSONL of verdicts and syncs — the substrate for future encounter records (`09-open-questions.md`) and the source of stats |
@@ -98,8 +98,10 @@ and kind 3 and never leaves systemd's credential boundary.
 Messages use the NIP-5D wire shape; the `totem.*` domain registry lives in
 `07-conventions.md` (one home for the vocabulary). Pull via request/result
 on the loopback bind, push via SSE (`/bus/events`); pushes are lossy and
-consumers reconcile against `totem.status.get` on (re)connect. Diagnostics
-stay in journald — peripherals react to typed events, never to logs.
+consumers reconcile against `totem.status.get` on (re)connect. A bounded
+in-memory request exposes recent pushes to operators without changing those
+delivery semantics. Diagnostics stay in journald — peripherals react to typed
+events, never to logs.
 
 The boot-display POC uses the same boundary before typed display events exist:
 it checks the device-manager health endpoint, `fipsctl` status, the relay

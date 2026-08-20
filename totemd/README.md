@@ -10,7 +10,8 @@ TOTEMD_KEY_PATH=/path/to/test-nsec cargo run -- serve
 # Pinned service binds (address remains env-overridable):
 #   TOTEMD_WEB_ADDR=[::]:8080       public web + challenge (IPv6 + IPv4)
 #   TOTEMD_BUS_ADDR=127.0.0.1:8081 loopback bus (never exposed)
-#   TOTEMD_SYNC_TIMEOUT_SECS=300      maximum runtime per encounter sync
+#   TOTEMD_SYNC_INTERVAL_SECS=300     delay between periodic sync rounds
+#   TOTEMD_SYNC_TIMEOUT_SECS=300      maximum runtime per sync round
 # Logging: RUST_LOG (default info); stdout → journald under systemd.
 # Fallback config: /etc/totemd/config.toml (TOTEMD_CONFIG).
 # Owner state: /var/lib/totemd/state.toml (TOTEMD_STATE).
@@ -40,7 +41,8 @@ the daemon lifetime; negative/unreachable results use
 `verdict_ttl_hours`. Candidate rows retain the bounded unsigned NIP-11 name
 as `nip11_name`; npub remains the authenticated identity. `policy.befriend`
 is `auto|ask|never`. `policy.sync = true` syncs every recognized Totem;
-`false` restricts sync to known friends.
+`false` restricts sync to known friends. Eligible peers reconcile immediately
+and every five minutes while the encounter remains connected.
 
 ## Bus
 
@@ -53,6 +55,8 @@ curl -sN 127.0.0.1:8081/bus/events        # live push stream
 cargo run -- totemctl status              # same thing, pretty
 cargo run -- totemctl config              # effective operator policy
 cargo run -- totemctl peers               # NIP-11 name hint + probe/recognition state
+cargo run -- totemctl history             # latest 256 pushes from this daemon run
+cargo run -- totemctl events              # future pushes only
 cargo run -- totemctl help
 cargo run -- totemctl call totem.peers.get
 ```
@@ -81,7 +85,8 @@ or target sysroot is required.
 
 Skeleton: bus + SSE + totemctl. Landed: fips control-socket watcher;
 operator config; cached NIP-11 prefilter; signed per-encounter challenge
-(responder + prover); supervised bidirectional relay sync with live peer state;
-server-rendered owner web app with nonce-bound NIP-98, durable claim/policy
-state, device-signed kind-0 profiles, dynamic NIP-11 naming, and armv6 +
-aarch64 musl cross builds. Next: kind-3 friendship state/actions.
+(responder + prover); periodic supervised bidirectional relay sync with live
+peer state; bounded event history; server-rendered owner web app with
+nonce-bound NIP-98, durable claim/policy state, device-signed kind-0 profiles,
+dynamic NIP-11 naming, and armv6 + aarch64 musl cross builds. Next: kind-3
+friendship state/actions.

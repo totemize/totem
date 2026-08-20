@@ -169,11 +169,11 @@ session plaintext.
 | FIPS service, persistent identity, TUN, DNS, control socket | Implemented and deployment-verified |
 | IPv6-capable strfry relay and NIP-77 advertisement | Implemented; enforced by Ansible (motown's audited aarch64 artifact needs restaging) |
 | `totemd` FIPS polling, peer snapshot, seen/gone pushes | Implemented |
-| `totemctl` help/version/status/config/peers/events/generic call | Implemented |
+| `totemctl` help/version/status/config/peers/history/events/generic call | Implemented |
 | Python display/NFC/storage/network API | Implemented; hardware availability depends on the device |
 | NIP-11 candidate probe and per-encounter signed Totem challenge | Implemented |
 | Kind-3 contact writer | Bus message names reserved; writer returns “not implemented” |
-| Automatic encounter sync supervisor | Implemented with per-peer state and bus pushes |
+| Automatic encounter sync supervisor | Implemented with immediate and five-minute periodic per-peer reconciliation |
 | Web UI and NIP-98 administration | Read-only HTML landing implemented; authenticated controls planned |
 | Happlet/NAP IPC runtime | Deferred beyond the v1 kernel |
 

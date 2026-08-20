@@ -37,6 +37,9 @@ pub fn handle(msg: Value, st: &AppState) -> Value {
         "totem.peers.get" => {
             out["peers"] = serde_json::to_value(st.peers_snapshot()).unwrap_or_else(|_| json!([]));
         }
+        "totem.events.get" => {
+            out["events"] = Value::Array(st.event_history());
+        }
         "totem.contacts.add" | "totem.contacts.remove" => {
             out["ok"] = json!(false);
             out["error"] =
@@ -94,6 +97,19 @@ mod tests {
         let r = handle(json!({"type": "totem.status.get"}), &st);
         assert_eq!(r["status"]["events"]["totem.peer.seen"], 2);
         assert_eq!(r["status"]["events"]["totem.sync.done"], 1);
+    }
+
+    #[test]
+    fn events_get_is_bounded_and_oldest_first() {
+        let st = AppState::new(crate::config::Config::default());
+        for n in 0..257 {
+            st.push(json!({"type": "totem.test", "n": n}));
+        }
+        let r = handle(json!({"type": "totem.events.get", "id": "e1"}), &st);
+        assert_eq!(r["type"], "totem.events.get.result");
+        assert_eq!(r["events"].as_array().unwrap().len(), 256);
+        assert_eq!(r["events"][0]["n"], 1);
+        assert_eq!(r["events"][255]["n"], 256);
     }
 
     #[tokio::test]

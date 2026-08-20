@@ -109,19 +109,22 @@ domain registry:
 | `totem.status.get` | request | mesh state, peers, contacts, totems met, relay event count, storage |
 | `totem.config.get` | request | effective operator engagement policy (read-only in v1) |
 | `totem.peers.get` | request | current mesh peers plus cached probe grade, candidate's unsigned `nip11_name` hint, and per-encounter recognition |
+| `totem.events.get` | request | oldest-first bounded history of pushes from the current daemon run |
 | `totem.contacts.add` / `totem.contacts.remove` | request | npub — the single-writer path for kind 3 updates |
 | `totem.peer.seen` | push | fips authenticated a peer |
 | `totem.peer.gone` | push | peer left the mesh (last authenticated npub) |
 | `totem.peer.candidate` | push | NIP-11 marker + npub claim matched; signed challenge still pending |
 | `totem.recognized` | push | signed challenge verdict passed (peer is a totem) |
 | `totem.befriended` | push | kind 3 published |
-| `totem.sync.started` / `totem.sync.done` | push | npub, encounter, direction; done adds outcome, duration, exit/error, and event counts when the relay runner exposes them reliably |
+| `totem.sync.started` / `totem.sync.done` | push | npub, encounter, periodic attempt, direction; done adds outcome, duration, exit/error, and event counts when the relay runner exposes them reliably |
 | `totem.owner.claimed` | push | the previously unclaimed device persisted its owner |
 | `totem.metadata.changed` | push | device-signed kind-0 event ID and effective name |
 | `totem.config.changed` | push | newly persisted effective engagement policy |
 
 Pushes are lossy by design: consumers reconcile against `totem.status.get`
-on (re)connect. The CLI (`totemctl`) is a client of this bus and introduces
+on (re)connect. `totem.events.get` is operator-facing recent history, bounded
+to the current process; it does not make push delivery reliable. The CLI
+(`totemctl`) is a client of this bus and introduces
 no separate API (`10-control-plane.md`).
 
 ## Key encoding
