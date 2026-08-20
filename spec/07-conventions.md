@@ -85,25 +85,31 @@ The public web listener exposes these same-origin JSON endpoints:
 
 | Method | Path | Access |
 |--------|------|--------|
-| `POST` | `/api/auth/challenge` | Public; binds a one-use nonce to one supported mutation URL, method, and body hash |
+| `GET` | `/api/status` | Public aggregate status, profile, policy, and request-host relay URL |
+| `GET` | `/api/updates` | Public payload-free SSE invalidations for `/api/status` |
+| `POST` | `/api/auth/challenge` | Public; binds a one-use nonce to one supported URL, method, and body hash |
 | `GET` | `/api/owner` | Public claimed/unclaimed boolean; never exposes the owner key |
 | `POST` | `/api/owner/claim` | Signed; first valid signer claims an unclaimed device |
+| `GET` | `/api/owner/events` | Owner-signed current status/peers/history followed by typed SSE pushes |
 | `GET` / `PUT` | `/api/metadata` | Public read; owner-authenticated kind-0 publication |
 | `GET` / `PUT` | `/api/config` | Public effective-policy read; owner-authenticated policy override |
 
-Mutation authorization is kind 27235 with exact `nonce`, `u`, `method`, and
-`payload` tags. The nonce is single-use and replaces wall-clock freshness;
-the payload is SHA-256 of the exact request body. The event signer MUST equal
-the stored owner after claim.
+Authorization is kind 27235 with exact `nonce`, `u`, `method`, and `payload`
+tags. The nonce is single-use and replaces wall-clock freshness; the payload
+is SHA-256 of the exact request body (empty for the owner event stream). The
+event signer MUST equal the stored owner after claim. One valid stream
+signature authenticates that connection only; reconnecting requires a fresh
+signature.
 
 ## Totem bus
 
 The control plane (`10-control-plane.md`) exposes a message bus for
-on-device services (display, sound, lights), the owner web app, and CLI
-clients. Messages use the NIP-5D wire shape (`{ "type": "domain.action",
-... }`, request/result correlated by `id`); unsolicited pushes ride an SSE
-stream at `/bus/events`. The bus is bound to loopback only. The `totem.*`
-domain registry:
+on-device services (display, sound, lights) and CLI clients. Messages use the
+NIP-5D wire shape (`{ "type": "domain.action", ... }`, request/result
+correlated by `id`); unsolicited pushes ride an SSE stream at `/bus/events`.
+The bus is bound to loopback only. The browser receives explicit public/owner
+projections from the web listener rather than access to this generic bus. The
+`totem.*` domain registry:
 
 | Type | Kind | Payload / result |
 |------|------|------------------|
