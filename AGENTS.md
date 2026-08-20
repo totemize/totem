@@ -70,14 +70,15 @@ ssh metot.fips          # via FIPS mesh
 
 (`~/.ssh/config` has `Host *.fips` → `User totem`, so no user prefix needed.)
 
-- No password needed. If auth fails, the fallback password is `totem`.
+- Passwordless access may be absent on a fresh controller checkout; the
+  fallback password is `totem` (required by the 2026-08-20 Ansible run).
 - `fipsctl` works as the `totem` user (member of the `fips` group, control
   socket at `/run/fips/control.sock`). Use `sudo` only for root-only things
   (`systemctl restart fips`, reading `/etc/fips/fips.key`, `sudo fipsctl`).
-- Its strfry remains on the pre-standard-negentropy `router` branch
-  (`5e81e24`) while peripheral work owns the unit. It cannot NIP-77 sync with
-  the protocol-0 totem/motown build; upgrade it only after that work releases
-  the device.
+- Its staged armv6 strfry advertises NIP 77/negentropy and completed a
+  zero-transfer protocol-0 dry reconciliation with totem over FIPS (`Have 0
+  need 0`, 2026-08-20). The Ansible verifier also opens its LMDB through the
+  unprivileged runner on every deployment.
 
 ### motown (test unit #3)
 
@@ -116,15 +117,14 @@ ssh motown.fips          # via FIPS mesh
   `totemd.service` enabled; deploy/update with `deploy/flash.sh [devices]`.
 - Operator policy: `/etc/totemd/config.toml` (created only when absent —
   flash never clobbers edits); restart totemd after changes.
-- Signed challenge build is currently deployed to totem + motown only;
-  metot intentionally remains on the pre-challenge build during parallel
-  peripheral work (it will appear as `candidate`, not `recognized`).
+- Signed challenge build is deployed to all three bench units. Metot joined
+  this baseline through the converged Ansible deployment on 2026-08-20.
 - Challenge signing key on enabled units: source remains
   `/etc/fips/fips.key` root:root 0600; `totemd.service` passes it to `User=totem` with systemd `LoadCredential=`.
   Do not copy it, print it, or loosen its mode.
 - Relay CLI runner: `/usr/local/libexec/totem-strfry`; `totem` belongs to the
   `strfry` group and `/etc/strfry.conf` + `/var/lib/strfry` are group-scoped,
-  never world-writable. `deploy/flash.sh` maintains this integration.
+  never world-writable. `deploy/flash.sh` and Ansible maintain this integration.
 
 ```bash
 ssh totem 'totemctl status'  # fips health + effective policy + counters

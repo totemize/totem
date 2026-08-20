@@ -12,11 +12,6 @@ totem_ups_driver: ""
 totem_local_artifact_root: >-
   {{ playbook_dir }}/../artifacts/{{ totem_artifact_arch }}
 
-# Source revision for the Python device manager release directory. The archive
-# contains only the Python package inputs, not deployment files or local state.
-totem_source_revision: >-
-  {{ lookup('ansible.builtin.pipe', 'git -C ' ~ totem_repo_root ~ ' rev-parse HEAD') | trim }}
-
 totem_base_packages:
   - ca-certificates
   - curl

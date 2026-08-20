@@ -1,4 +1,15 @@
 ---
+- name: Install the target Rust standard library
+  ansible.builtin.command:
+    argv:
+      - rustup
+      - target
+      - add
+      - "{{ totemd_rust_target }}"
+  changed_when: false
+  delegate_to: localhost
+  become: false
+
 - name: Build totemd for the target architecture
   ansible.builtin.command:
     argv:

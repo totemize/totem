@@ -70,8 +70,9 @@ The controller needs:
 
 - `ansible-playbook` with the built-in modules used by the roles;
 - SSH access to the selected target and sudo credentials when required;
-- Cargo/rustup, Clang, and the inventory's musl Rust targets for local `totemd`
-  builds;
+- Cargo/rustup and Zig for local `totemd` builds; Ansible installs the
+  inventory-selected musl Rust target when absent;
+- Python 3 for deterministic device-manager source packaging;
 - a locked FIPS source checkout;
 - a prebuilt strfry runtime root for each target architecture;
 - enough local space for staged archives and Rust targets.
@@ -253,6 +254,9 @@ See [FIPS configuration and implementation](/reference/fips).
 - creates the `strfry` service account and durable LMDB directory;
 - preserves an existing database and operator limits while reconciling the
   IPv6 bind plus the inventory host's `!Totem` name/public identity;
+- installs `/usr/local/libexec/totem-strfry`, grants `totem` group-scoped
+  config/LMDB access, and preserves group writes with setgid plus
+  `UMask=0007`;
 - extracts only a runtime checksum not already marked installed;
 - installs/enables `strfry.service`;
 - records migration `0020-strfry-layout.complete`.
@@ -261,6 +265,8 @@ See [strfry configuration and implementation](/reference/strfry).
 
 ### `totemd`
 
+- installs the inventory-selected Rust standard-library target on the
+  controller when absent;
 - builds locally with `cargo build --release --locked --target <target>`;
 - manages the IPv6-capable `/etc/totemd/totemd.env` and seeds operator policy
   `/etc/totemd/config.toml` only if absent;
@@ -273,9 +279,10 @@ See [`totemd` CLI and message bus](/reference/totemd).
 
 ### `device_manager`
 
-- archives `pyproject.toml`, `README.md`, and `src/` from the selected Git
-  revision;
-- extracts a versioned release below `/opt/totem/releases/<revision>`;
+- hashes and deterministically archives the exact current `pyproject.toml`,
+  `README.md`, and `src/` bytes, including intentional dirty/untracked source;
+- extracts a content-addressed release below
+  `/opt/totem/releases/sha256-<digest>`;
 - creates a system-site-packages virtual environment and installs the Totem
   package without rebuilding platform dependencies;
 - updates `/opt/totem/current`, manages `/etc/totem/totem.env`, and
@@ -303,12 +310,14 @@ The final role checks the enabled scope:
    persistent inventory npub;
 5. NIP-11 reports negentropy, supported NIP `77`, the exact `!Totem` name, and
    the inventory public key;
-6. `/totem/challenge` returns a no-store kind-27235 event signed by that same
+6. the root-owned runner opens the relay LMDB successfully as unprivileged
+   user `totem`, whose access remains group-scoped;
+7. `/totem/challenge` returns a no-store kind-27235 event signed by that same
    FIPS identity, proving the systemd credential and IPv6 web bind;
-7. `totemctl status` reports `ok`, a connected FIPS watcher, and valid
+8. `totemctl status` reports `ok`, a connected FIPS watcher, and valid
    operator policy;
-8. Python `/health` returns HTTP `200` when enabled;
-9. the expected migration checkpoint count exists.
+9. Python `/health` returns HTTP `200` when enabled;
+10. the expected migration checkpoint count exists.
 
 These are live contract checks. A passing port check alone is not treated as
 service health.
@@ -331,7 +340,7 @@ state, and health on every run.
 
 Checksum/revision-specific installation markers live in
 `/var/lib/totem-deploy/artifacts/`. The strfry marker is keyed by archive
-SHA-256; the device-manager marker is keyed by Git revision.
+SHA-256; the device-manager marker is keyed by its deployable source digest.
 
 Do not delete sentinels merely to “retry” a deployment. First determine
 whether the desired artifact, release, or persistent state is actually
@@ -353,6 +362,10 @@ recorded:
 Those counts are historical evidence for that exact role scope and revision,
 not current expected totals. The identity, policy, and challenge tasks in this
 revision legitimately change them.
+
+The first full deployment to physical metot from `totemd` at `54bc749` recorded
+`ok=83 changed=9 failed=0`; the immediate full repeat recorded
+`ok=79 changed=0 failed=0`.
 
 ## Tags and partial runs
 

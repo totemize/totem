@@ -70,6 +70,28 @@
       - strfry_nip11.json.name == '!Totem ' ~ inventory_hostname
       - strfry_nip11.json.pubkey == totem_npub_hex
 
+- name: Exercise an LMDB scan as the unprivileged control-plane user
+  ansible.builtin.command:
+    argv:
+      - /usr/local/libexec/totem-strfry
+      - scan
+      - '{"ids":["0000000000000000000000000000000000000000000000000000000000000000"]}'
+  become_user: totem
+  changed_when: false
+
+- name: Validate the control-plane strfry access boundary
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/test
+      - "{{ item.mode }}"
+      - "{{ item.path }}"
+  become_user: totem
+  changed_when: false
+  loop:
+    - {mode: -r, path: /etc/strfry.conf}
+    - {mode: -w, path: /var/lib/strfry}
+    - {mode: -x, path: /usr/local/libexec/totem-strfry}
+
 - name: Exercise the signed challenge responder over IPv6
   ansible.builtin.uri:
     url: >-

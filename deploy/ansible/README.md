@@ -46,9 +46,12 @@ The staging script installs the requested Rust standard-library target before
 building FIPS. Set `TOTEM_SKIP_FIPS_BUILD=1` only when re-staging already-built
 locked outputs (the script still requires all three target binaries).
 
-`totemd` is built automatically with Cargo's locked dependencies. The Python
-device manager is archived from the current git revision and uses Debian's
-architecture-tested Python packages, avoiding native compilation on armv6.
+`totemd` is built automatically with Cargo's locked dependencies and the Zig
+musl C wrapper. The Python device manager is archived from the exact current
+`README.md`/`pyproject.toml`/`src/` content, including intentional dirty or
+untracked source files. A deterministic SHA-256 names the release and its
+checkpoint, so two different worktrees cannot alias the same deployment.
+Debian's architecture-tested Python packages avoid native compilation on armv6.
 
 ## Deploy only metot in this sprint
 
@@ -62,9 +65,10 @@ deploy/ansible/scripts/deploy-metot.sh
 
 Run the same command a second time. A converged deployment must report
 `changed=0`, and the verification role checks all four services, FIPS TUN
-health, strfry NIP-77 support, `totemd`, the Python health endpoint, and the
-migration chain. The verification also requires the `!Totem metot` NIP-11
-identity and a kind-27235 challenge signed by metot's FIPS key.
+health, strfry NIP-77 support, an LMDB scan through the unprivileged runner,
+`totemd`, the Python health endpoint, and the migration chain. The verification
+also requires the `!Totem metot` NIP-11 identity and a kind-27235 challenge
+signed by metot's FIPS key.
 
 For an operational no-restart window, keep enforcing files and state while
 suppressing all service restart handlers:

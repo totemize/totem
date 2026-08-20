@@ -57,9 +57,9 @@ cargo build --release --target arm-unknown-linux-musleabihf
 cargo build --release --target aarch64-unknown-linux-musl
 ```
 
-Cross builds need Clang; `.cargo/clang-musl` supplies its built-in headers to
-secp256k1 while `rust-lld` links the static binary. No downloaded cross-GCC
-is required.
+Cross builds need Zig; `.cargo/zig-musl` maps Rust targets to Zig's bundled
+musl headers while `rust-lld` links the static binary. No downloaded cross-GCC
+or target sysroot is required.
 
 ## Status
 

@@ -1,4 +1,20 @@
 ---
+- name: Hash the deployable Python source tree
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ totem_repo_root }}/deploy/ansible/scripts/package-python-source.py"
+      - --print-revision
+      - "{{ totem_repo_root }}"
+  register: device_manager_source_revision
+  changed_when: false
+  delegate_to: localhost
+  become: false
+
+- name: Select the content-addressed Python release
+  ansible.builtin.set_fact:
+    totem_source_revision: "{{ device_manager_source_revision.stdout | trim }}"
+
 - name: Create the local source archive cache
   ansible.builtin.file:
     path: "{{ playbook_dir }}/../.cache"
@@ -10,17 +26,13 @@
 - name: Build the versioned Python source archive
   ansible.builtin.command:
     argv:
-      - git
-      - -C
-      - "{{ totem_repo_root }}"
-      - archive
-      - --format=tar.gz
-      - --prefix=app/
-      - "--output={{ playbook_dir }}/../.cache/totem-python-{{ totem_source_revision }}.tar.gz"
+      - python3
+      - "{{ totem_repo_root }}/deploy/ansible/scripts/package-python-source.py"
+      - --output
+      - "{{ playbook_dir }}/../.cache/totem-python-{{ totem_source_revision }}.tar.gz"
+      - --expect-revision
       - "{{ totem_source_revision }}"
-      - pyproject.toml
-      - README.md
-      - src
+      - "{{ totem_repo_root }}"
   args:
     creates: >-
       {{ playbook_dir }}/../.cache/totem-python-{{ totem_source_revision }}.tar.gz
