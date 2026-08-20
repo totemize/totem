@@ -60,29 +60,22 @@ export class MockBus implements BusClient {
     return { ...self, name: this.name };
   }
 
-  async claim(ownerNpub: string): Promise<void> {
-    if (ownerNpub === "demo-owner") {
-      // Demo: window.mockPress() (or clicking the pulse) confirms;
-      // 60s without a press rejects like the real timeout would.
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          delete (window as { mockPress?: () => void }).mockPress;
-          reject(new Error("timeout"));
-        }, 60_000);
-        (window as { mockPress?: () => void }).mockPress = () => {
-          clearTimeout(timer);
-          delete (window as { mockPress?: () => void }).mockPress;
-          resolve();
-        };
-        console.info("presence: call window.mockPress() to simulate the device button");
-      });
-    } else {
-      // Real sign-in: wait for the actual device press — which the mock
-      // bus can never deliver, so this times out like the real thing.
-      await new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error("timeout")), 60_000),
-      );
-    }
+  async claim(_ownerNpub: string): Promise<void> {
+    // No real device yet, so presence is faked on every path: clicking
+    // the pulse (window.mockPress) confirms, 60s without a press rejects.
+    // A real BusClient replaces this with the actual button/NFC wait.
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        delete (window as { mockPress?: () => void }).mockPress;
+        reject(new Error("timeout"));
+      }, 60_000);
+      (window as { mockPress?: () => void }).mockPress = () => {
+        clearTimeout(timer);
+        delete (window as { mockPress?: () => void }).mockPress;
+        resolve();
+      };
+      console.info("presence: call window.mockPress() to simulate the device button");
+    });
     this.claimed = true;
     storage()?.setItem("mock.claimed", "1");
   }
