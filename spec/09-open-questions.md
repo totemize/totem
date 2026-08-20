@@ -68,7 +68,7 @@ Status: Draft (living document — shrinks as we resolve)
 
 ### Guest experience
 
-- Captive portal on AP join? Is the web app read-only for non-owners?
+- Captive portal on AP join?
 
 ### Conventions (remaining values to pin)
 

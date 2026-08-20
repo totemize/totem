@@ -16,8 +16,8 @@ description: Daemon policy, signed recognition, totemctl commands, bus envelopes
 The implemented encounter ladder watches authenticated FIPS peers, applies a
 cached NIP-11 identity prefilter, and proves candidates with a signed
 per-encounter challenge, then supervises one bidirectional relay sync per
-recognized encounter. Contact-list writes and the owner application are not
-implemented yet.
+recognized encounter. The public root is a read-only HTML landing page;
+contact-list writes and authenticated owner controls are not implemented yet.
 
 ## Daemon command
 
@@ -32,7 +32,7 @@ Starting `totemd` without a mode, or with a mode other than `serve` or
 
 | Variable | Default | Effect |
 |---|---|---|
-| `TOTEMD_WEB_ADDR` | `[::]:8080` | Public HTTP listener for `/` and `/totem/challenge`. The IPv6 wildcard is required by the FIPS overlay. |
+| `TOTEMD_WEB_ADDR` | `[::]:8080` | Public HTTP listener for the read-only HTML `/` and `/totem/challenge`. The IPv6 wildcard is required by the FIPS overlay. |
 | `TOTEMD_BUS_ADDR` | `127.0.0.1:8081` | Bus listener used by both daemon and `totemctl`. Keep it loopback-only. |
 | `TOTEMD_FIPS_SOCK` | `/run/fips/control.sock` | FIPS Unix control-socket path. |
 | `TOTEMD_FIPS_POLL_MS` | `2000` | FIPS status/peer polling interval in milliseconds. Invalid values fall back to `2000`. |
@@ -116,6 +116,15 @@ contacts writer is not implemented.
 | `0` | Request was transported and its JSON result printed, or an event stream ended normally. An application result with `"ok": false` still exits `0`; inspect the JSON. |
 | `1` | The bus could not be reached. |
 | `2` | Unknown/missing command, missing call type, malformed JSON, or a non-object call payload. |
+
+## Public read-only page
+
+`GET /` returns server-rendered HTML with no JavaScript or external assets. It
+shows the request-host relay URL, device npub, FIPS connectivity, aggregate
+mesh/peer/recognition/sync counts, effective engagement policy, and daemon
+version. It deliberately omits peer identities and control operations.
+Dynamic text is HTML-escaped; responses use `Cache-Control: no-store`, a
+script-blocking Content Security Policy, and `X-Content-Type-Options: nosniff`.
 
 ## Bus transport
 

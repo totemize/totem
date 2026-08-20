@@ -99,9 +99,9 @@ device-side resolver support from `.fips` resolution on a development host.
 - The Python API currently binds all interfaces, enables permissive CORS, and
   has no authentication layer. Treat port `8000` as a trusted-network or
   development surface until an explicit authorization boundary lands.
-- The `totemd` public bind serves a version object at `/` and the rate-limited
-  signed responder at `/totem/challenge`. Owner authentication and the owner UI
-  are not implemented yet.
+- The `totemd` public bind serves a no-script, read-only HTML landing page at
+  `/` and the rate-limited signed responder at `/totem/challenge`. Owner
+  authentication and control operations are not implemented yet.
 
 ## Control and data flows
 
@@ -173,7 +173,7 @@ session plaintext.
 | NIP-11 candidate probe and per-encounter signed Totem challenge | Implemented |
 | Kind-3 contact writer | Bus message names reserved; writer returns “not implemented” |
 | Automatic encounter sync supervisor | Implemented with per-peer state and bus pushes |
-| Owner UI and NIP-98 administration | Planned in spec |
+| Web UI and NIP-98 administration | Read-only HTML landing implemented; authenticated controls planned |
 | Happlet/NAP IPC runtime | Deferred beyond the v1 kernel |
 
 ## Source map

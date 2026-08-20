@@ -18,7 +18,8 @@ TOTEMD_KEY_PATH=/path/to/test-nsec cargo run -- serve
 Production does not copy or loosen the root-only FIPS key: systemd
 `LoadCredential=` supplies it privately to `User=totem`. Relay commands use
 root-owned `/usr/local/libexec/totem-strfry`; group-scoped config/LMDB access
-keeps the daemon unprivileged.
+keeps the daemon unprivileged. `GET /` is a no-script, server-rendered,
+read-only landing page with the relay URL and aggregate status.
 
 ## Configuration
 
@@ -68,5 +69,5 @@ or target sysroot is required.
 Skeleton: bus + SSE + totemctl. Landed: fips control-socket watcher;
 operator config; cached NIP-11 prefilter; signed per-encounter challenge
 (responder + prover); supervised bidirectional relay sync with live peer state;
-armv6 + aarch64 musl cross builds. Next: minimal owner web page, then kind 3
-friendship actions.
+server-rendered read-only HTML; armv6 + aarch64 musl cross builds. Next: kind 3
+friendship state/actions, then NIP-98-protected owner controls.

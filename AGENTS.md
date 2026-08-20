@@ -126,6 +126,9 @@ ssh motown.fips          # via FIPS mesh
 - Relay CLI runner: `/usr/local/libexec/totem-strfry`; `totem` belongs to the
   `strfry` group and `/etc/strfry.conf` + `/var/lib/strfry` are group-scoped,
   never world-writable. `deploy/flash.sh` and Ansible maintain this integration.
+- Public `GET /` on port 8080 is server-rendered, read-only HTML: relay URL,
+  local identity, and aggregate status only. It has no JavaScript or public
+  control endpoint; `/bus` and `/bus/events` remain loopback-only.
 
 ```bash
 ssh totem 'totemctl status'  # fips health + effective policy + counters

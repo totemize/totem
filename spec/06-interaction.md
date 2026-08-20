@@ -82,8 +82,11 @@ control flows through it.
 
 ## Guest experience
 
-Open questions: captive portal on join? Is the web app read-only for
-non-owners? (`09-open-questions.md`.)
+The v1 unauthenticated landing page is server-rendered, read-only, and usable
+without JavaScript. It surfaces the relay URL plus aggregate device/mesh/sync
+status; peer identities and control operations stay off the public page.
+Whether AP join opens it as a captive portal remains an open question
+(`09-open-questions.md`).
 
 ## The ambassador property
 
