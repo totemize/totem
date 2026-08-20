@@ -23,3 +23,8 @@ references/
 totemd/target/
 node_modules/
 totemd/web/.svelte-kit/
+
+# Locally built deployment inputs. Keep provenance/checksums in the Ansible
+# inventory; do not put architecture-specific binaries in git.
+deploy/ansible/artifacts/*/
+deploy/ansible/.cache/

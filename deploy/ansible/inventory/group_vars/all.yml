@@ -1,0 +1,41 @@
+---
+totem_repo_root: "{{ playbook_dir }}/../../.."
+totem_deploy_root: /var/lib/totem-deploy
+totem_migration_root: "{{ totem_deploy_root }}/migrations"
+totem_artifact_state_root: "{{ totem_deploy_root }}/artifacts"
+totem_remote_cache: /var/cache/totem-deploy
+totem_service_restarts_enabled: true
+totem_device_manager_enabled: true
+totem_local_artifact_root: >-
+  {{ playbook_dir }}/../artifacts/{{ totem_artifact_arch }}
+
+# Source revision for the Python device manager release directory. The archive
+# contains only the Python package inputs, not deployment files or local state.
+totem_source_revision: >-
+  {{ lookup('ansible.builtin.pipe', 'git -C ' ~ totem_repo_root ~ ' rev-parse HEAD') | trim }}
+
+totem_base_packages:
+  - ca-certificates
+  - curl
+  - rsync
+  - python3
+
+totem_device_manager_packages:
+  - python3-venv
+  - python3-pip
+  - python3-poetry-core
+  - python3-numpy
+  - python3-pil
+  - python3-fastapi
+  - python3-uvicorn
+  - python3-pydantic
+  - python3-rpi.gpio
+  - python3-spidev
+  - python3-gpiozero
+  - python3-libgpiod
+
+totem_device_groups:
+  - fips
+  - gpio
+  - i2c
+  - spi

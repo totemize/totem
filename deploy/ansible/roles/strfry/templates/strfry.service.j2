@@ -1,0 +1,19 @@
+[Unit]
+Description=strfry relay service
+After=network.target
+
+[Service]
+User=strfry
+Group=strfry
+WorkingDirectory=/var/lib/strfry
+ExecStart=/opt/strfry/lib/{{ strfry_loader }} --library-path /opt/strfry/lib:/opt/strfry/usr/lib /opt/strfry/bin/strfry --config=/etc/strfry.conf relay
+Restart=on-failure
+RestartSec=5
+ProtectHome=yes
+NoNewPrivileges=yes
+ProtectSystem=full
+LimitCORE=1000000000
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

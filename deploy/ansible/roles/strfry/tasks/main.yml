@@ -1,0 +1,137 @@
+---
+- name: Inspect the local strfry runtime artifact
+  ansible.builtin.stat:
+    path: "{{ totem_local_artifact_root }}/strfry-rootfs.tar.gz"
+    checksum_algorithm: sha256
+  register: strfry_local_artifact
+  delegate_to: localhost
+  become: false
+
+- name: Require the strfry runtime artifact
+  ansible.builtin.assert:
+    that:
+      - strfry_local_artifact.stat.exists
+      - strfry_local_artifact.stat.isreg
+    fail_msg: >-
+      Missing strfry-rootfs.tar.gz for {{ totem_artifact_arch }}. Run
+      deploy/ansible/scripts/stage-artifacts.sh before deploying.
+
+- name: Ensure the strfry service account exists
+  ansible.builtin.user:
+    name: strfry
+    system: true
+    home: /var/lib/strfry
+    shell: /usr/sbin/nologin
+    create_home: false
+    state: present
+
+- name: Create strfry runtime directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /opt/strfry, owner: root, group: root, mode: "0755"}
+    - {path: /var/lib/strfry, owner: strfry, group: strfry, mode: "0750"}
+
+- name: Seed an IPv6-capable strfry configuration on bare devices
+  ansible.builtin.template:
+    src: strfry.conf.j2
+    dest: /etc/strfry.conf
+    owner: root
+    group: strfry
+    mode: "0640"
+    force: false
+  notify: Restart strfry
+
+- name: Cache the strfry runtime archive on the device
+  ansible.builtin.copy:
+    src: "{{ totem_local_artifact_root }}/strfry-rootfs.tar.gz"
+    dest: >-
+      {{ totem_remote_cache }}/strfry-{{ strfry_local_artifact.stat.checksum }}.tar.gz
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Read the strfry artifact checkpoint
+  ansible.builtin.stat:
+    path: >-
+      {{ totem_artifact_state_root }}/strfry-{{ strfry_local_artifact.stat.checksum }}.installed
+  register: strfry_artifact_checkpoint
+
+- name: Install a changed strfry runtime
+  when: not strfry_artifact_checkpoint.stat.exists
+  block:
+    - name: Extract the strfry runtime
+      ansible.builtin.unarchive:
+        src: >-
+          {{ totem_remote_cache }}/strfry-{{ strfry_local_artifact.stat.checksum }}.tar.gz
+        dest: /opt/strfry
+        remote_src: true
+        owner: root
+        group: root
+      notify: Restart strfry
+
+    - name: Record the installed strfry artifact
+      ansible.builtin.copy:
+        dest: >-
+          {{ totem_artifact_state_root }}/strfry-{{ strfry_local_artifact.stat.checksum }}.installed
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          sha256={{ strfry_local_artifact.stat.checksum }}
+          architecture={{ totem_artifact_arch }}
+
+- name: Require the architecture-specific strfry loader
+  ansible.builtin.stat:
+    path: "/opt/strfry/lib/{{ strfry_loader }}"
+  register: strfry_loader_state
+
+- name: Validate the extracted strfry runtime
+  ansible.builtin.assert:
+    that:
+      - strfry_loader_state.stat.exists
+    fail_msg: >-
+      The {{ totem_artifact_arch }} strfry artifact does not contain
+      /opt/strfry/lib/{{ strfry_loader }}.
+
+- name: Install the strfry systemd unit
+  ansible.builtin.template:
+    src: strfry.service.j2
+    dest: /etc/systemd/system/strfry.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd for strfry
+    - Restart strfry
+
+- name: Read the strfry layout migration checkpoint
+  ansible.builtin.stat:
+    path: "{{ totem_migration_root }}/0020-strfry-layout.complete"
+  register: strfry_layout_checkpoint
+
+- name: Record strfry layout adoption
+  ansible.builtin.copy:
+    dest: "{{ totem_migration_root }}/0020-strfry-layout.complete"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      migration=0020-strfry-layout
+      config_policy=preserve-existing-seed-ipv6
+      database_policy=preserve
+  when: not strfry_layout_checkpoint.stat.exists
+
+- name: Enable and start strfry
+  ansible.builtin.systemd_service:
+    name: strfry.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply strfry changes before verification
+  ansible.builtin.meta: flush_handlers

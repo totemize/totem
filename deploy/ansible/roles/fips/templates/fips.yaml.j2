@@ -1,0 +1,25 @@
+# Ansible seed for a new Totem. Existing configurations and identity keys are
+# deliberately preserved. Discovery is off until a later wiring phase.
+node:
+  identity:
+    persistent: true
+  rendezvous:
+    lan:
+      enabled: false
+
+tun:
+  enabled: true
+  name: fips0
+  mtu: 1280
+
+dns:
+  enabled: true
+  port: 5354
+
+transports:
+  udp:
+    bind_addr: "0.0.0.0:2121"
+  tcp:
+    bind_addr: "0.0.0.0:8443"
+
+peers: []
