@@ -1,0 +1,700 @@
+"""Generic BlueZ D-Bus Bluetooth/BLE driver."""
+
+import base64
+from datetime import datetime, timezone
+import threading
+import time
+from typing import Any, Callable, Dict, Optional
+import uuid
+
+from dbus_next import Variant
+from dbus_next.constants import PropertyAccess
+from dbus_next.service import ServiceInterface, dbus_property, method
+
+from totem.devices.network.bluetooth import BluetoothDeviceInterface
+from totem.devices.network.capabilities import parse_rfkill_json
+from totem.devices.network.dbus_runtime import (
+    DBusCallError,
+    SystemDBusRuntime,
+    variant_value,
+)
+from totem.devices.network.drivers.network_manager_wifi import _tool
+from totem.devices.network.errors import (
+    InvalidRadioRequestError,
+    RadioOperationError,
+    RadioResourceNotFoundError,
+    RadioTimeoutError,
+    UnsupportedFeatureError,
+)
+from totem.devices.network.models import (
+    BLEAdvertisement,
+    BLEDevice,
+    BluetoothCapabilities,
+    BluetoothRadioState,
+    GATTCharacteristic,
+    GATTService,
+    OperationSupport,
+    RadioBlockState,
+)
+from totem.logging import logger
+
+
+BLUEZ_SERVICE = "org.bluez"
+OBJECT_MANAGER = "org.freedesktop.DBus.ObjectManager"
+PROPERTIES = "org.freedesktop.DBus.Properties"
+ADAPTER = "org.bluez.Adapter1"
+DEVICE = "org.bluez.Device1"
+ADVERTISING_MANAGER = "org.bluez.LEAdvertisingManager1"
+ADVERTISEMENT = "org.bluez.LEAdvertisement1"
+GATT_SERVICE = "org.bluez.GattService1"
+GATT_CHARACTERISTIC = "org.bluez.GattCharacteristic1"
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _bytes_map(values: Dict[Any, Any]) -> Dict[str, str]:
+    return {
+        str(key): base64.b64encode(bytes(variant_value(value))).decode("ascii")
+        for key, value in values.items()
+    }
+
+
+class AdvertisementObject(ServiceInterface):
+    def __init__(
+        self, specification: Dict[str, Any], release_callback: Callable[[], None]
+    ):
+        super().__init__(ADVERTISEMENT)
+        self.specification = specification
+        self.release_callback = release_callback
+
+    @method()
+    def Release(self):
+        self.release_callback()
+
+    @dbus_property(access=PropertyAccess.READ)
+    def Type(self) -> "s":  # noqa: F821
+        return self.specification.get("type", "peripheral")
+
+    @dbus_property(access=PropertyAccess.READ)
+    def ServiceUUIDs(self) -> "as":  # noqa: F722
+        return self.specification.get("service_uuids", [])
+
+    @dbus_property(access=PropertyAccess.READ)
+    def ManufacturerData(self) -> "a{qv}":  # noqa: F722
+        return {
+            int(key): Variant("ay", bytes(value))
+            for key, value in self.specification.get("manufacturer_data", {}).items()
+        }
+
+    @dbus_property(access=PropertyAccess.READ)
+    def ServiceData(self) -> "a{sv}":  # noqa: F722
+        return {
+            str(key): Variant("ay", bytes(value))
+            for key, value in self.specification.get("service_data", {}).items()
+        }
+
+    @dbus_property(access=PropertyAccess.READ)
+    def Includes(self) -> "as":  # noqa: F722
+        return self.specification.get("includes", [])
+
+    @dbus_property(access=PropertyAccess.READ)
+    def LocalName(self) -> "s":  # noqa: F821
+        return self.specification.get("local_name", "")
+
+
+class Driver(BluetoothDeviceInterface):
+    def __init__(
+        self,
+        runtime: Optional[SystemDBusRuntime] = None,
+        event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
+    ):
+        self.initialized = False
+        self._runtime = runtime
+        self._owns_runtime = runtime is None
+        self._event_callback = event_callback
+        self._adapter_path: Optional[str] = None
+        self._discovery_sessions: Dict[str, Dict[str, Any]] = {}
+        self._discovery_timers: Dict[str, threading.Timer] = {}
+        self._devices: Dict[str, Dict[str, str]] = {}
+        self._advertisements: Dict[str, Dict[str, Any]] = {}
+        self._subscriptions: Dict[str, Dict[str, str]] = {}
+        self._connected_by_manager = set()
+
+    def set_event_callback(self, callback) -> None:
+        self._event_callback = callback
+
+    def _emit(self, event_type: str, data: Dict[str, Any]) -> None:
+        if self._event_callback:
+            self._event_callback(event_type, data)
+
+    def init(self):
+        if self.initialized:
+            return
+        if self._runtime is None:
+            self._runtime = SystemDBusRuntime()
+        self._runtime.add_message_handler(self._on_message)
+        self._adapter_path = self._find_adapter()
+        self.initialized = True
+
+    def _ready(self) -> None:
+        if not self.initialized or self._runtime is None or self._adapter_path is None:
+            raise RadioOperationError("Bluetooth driver is not initialized")
+
+    def _objects(self) -> Dict[str, Dict[str, Dict[str, Any]]]:
+        result = self._runtime.call(
+            BLUEZ_SERVICE, "/", OBJECT_MANAGER, "GetManagedObjects"
+        )
+        return result[0] if result else {}
+
+    def _find_adapter(self) -> str:
+        for path, interfaces in self._objects().items():
+            if ADAPTER in interfaces:
+                return path
+        raise UnsupportedFeatureError("BlueZ exposes no Bluetooth adapter")
+
+    def get_radio_state(self):
+        self._ready()
+        props = self._runtime.get_all(BLUEZ_SERVICE, self._adapter_path, ADAPTER)
+        block = self._rfkill_state(bool(props.get("Powered", False)))
+        return BluetoothRadioState(
+            powered=bool(props.get("Powered", False)),
+            discovering=bool(props.get("Discovering", False)),
+            discoverable=bool(props.get("Discoverable", False)),
+            pairable=bool(props.get("Pairable", False)),
+            block=block,
+        )
+
+    def _rfkill_state(self, powered: bool) -> RadioBlockState:
+        import subprocess
+
+        try:
+            result = subprocess.run(
+                [_tool("rfkill"), "--json"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            return parse_rfkill_json(result.stdout, "bluetooth")
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return RadioBlockState(soft_blocked=not powered, hard_blocked=False)
+
+    def set_radio_enabled(self, enabled: bool, timeout: float = 15.0):
+        self._ready()
+        before = self.get_radio_state()
+        if before.powered == enabled:
+            return before
+        self._runtime.set_property(
+            BLUEZ_SERVICE, self._adapter_path, ADAPTER, "Powered", "b", enabled, timeout
+        )
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            current = self.get_radio_state()
+            if current.powered == enabled:
+                self._emit("bluetooth_radio_state_changed", {"powered": enabled})
+                return current
+            time.sleep(0.1)
+        raise RadioTimeoutError("Timed out waiting for Bluetooth radio state change")
+
+    def get_capabilities(self):
+        self._ready()
+        adapter = self._runtime.get_all(BLUEZ_SERVICE, self._adapter_path, ADAPTER)
+        advertising = self._runtime.get_all(
+            BLUEZ_SERVICE, self._adapter_path, ADVERTISING_MANAGER
+        )
+        caps = advertising.get("SupportedCapabilities", {})
+        roles = list(adapter.get("Roles", []))
+        has_central = "central" in roles or "central-peripheral" in roles
+        has_peripheral = "peripheral" in roles or "central-peripheral" in roles
+        return BluetoothCapabilities(
+            adapter=self._adapter_path.rsplit("/", 1)[-1],
+            address=str(adapter.get("Address", "")),
+            address_type=adapter.get("AddressType"),
+            name=adapter.get("Name"),
+            roles=roles,
+            supported_advertisement_instances=int(
+                advertising.get("SupportedInstances", 0)
+            ),
+            active_advertisement_instances=int(advertising.get("ActiveInstances", 0)),
+            supported_advertisement_includes=list(
+                advertising.get("SupportedIncludes", [])
+            ),
+            maximum_advertisement_length=(
+                int(caps["MaxAdvLen"]) if "MaxAdvLen" in caps else None
+            ),
+            maximum_scan_response_length=(
+                int(caps["MaxScnRspLen"]) if "MaxScnRspLen" in caps else None
+            ),
+            operations={
+                "radio_toggle": OperationSupport(True),
+                "discovery": OperationSupport(
+                    has_central, None if has_central else "central role absent"
+                ),
+                "advertising": OperationSupport(
+                    has_peripheral
+                    and int(advertising.get("SupportedInstances", 0)) > 0,
+                    None if has_peripheral else "peripheral role absent",
+                ),
+                "connect": OperationSupport(
+                    has_central, None if has_central else "central role absent"
+                ),
+                "gatt_client": OperationSupport(
+                    has_central, None if has_central else "central role absent"
+                ),
+            },
+        )
+
+    def _apply_discovery_filter(self, timeout: float) -> None:
+        uuids = sorted(
+            {
+                uuid_value
+                for session in self._discovery_sessions.values()
+                for uuid_value in session["service_uuids"]
+            }
+        )
+        duplicate = any(
+            session["duplicate_data"] for session in self._discovery_sessions.values()
+        )
+        filters = {
+            "Transport": Variant("s", "le"),
+            "DuplicateData": Variant("b", duplicate),
+        }
+        if uuids:
+            filters["UUIDs"] = Variant("as", uuids)
+        self._runtime.call(
+            BLUEZ_SERVICE,
+            self._adapter_path,
+            ADAPTER,
+            "SetDiscoveryFilter",
+            "a{sv}",
+            [filters],
+            timeout,
+        )
+
+    def start_discovery(
+        self,
+        duration_seconds: int = 30,
+        service_uuids=None,
+        duplicate_data: bool = True,
+        session_id=None,
+        timeout: float = 15.0,
+    ):
+        self._ready()
+        if not 1 <= duration_seconds <= 600:
+            raise InvalidRadioRequestError(
+                "BLE discovery duration must be between 1 and 600 seconds"
+            )
+        session_id = session_id or uuid.uuid4().hex
+        if session_id in self._discovery_sessions:
+            return session_id
+        was_empty = not self._discovery_sessions
+        self._discovery_sessions[session_id] = {
+            "service_uuids": list(service_uuids or []),
+            "duplicate_data": bool(duplicate_data),
+        }
+        try:
+            self._apply_discovery_filter(timeout)
+            if was_empty:
+                self._runtime.call(
+                    BLUEZ_SERVICE,
+                    self._adapter_path,
+                    ADAPTER,
+                    "StartDiscovery",
+                    timeout=timeout,
+                )
+        except Exception:
+            self._discovery_sessions.pop(session_id, None)
+            raise
+        timer = threading.Timer(
+            duration_seconds, self._expire_discovery, args=(session_id,)
+        )
+        timer.daemon = True
+        timer.start()
+        self._discovery_timers[session_id] = timer
+        return session_id
+
+    def _expire_discovery(self, session_id: str) -> None:
+        try:
+            self.stop_discovery(session_id)
+        except RadioOperationError:
+            logger.warning("Unable to expire BLE discovery session %s", session_id)
+
+    def stop_discovery(self, session_id: str, timeout: float = 15.0):
+        self._ready()
+        if session_id not in self._discovery_sessions:
+            return
+        self._discovery_sessions.pop(session_id, None)
+        timer = self._discovery_timers.pop(session_id, None)
+        if timer:
+            timer.cancel()
+        if self._discovery_sessions:
+            self._apply_discovery_filter(timeout)
+            return
+        try:
+            self._runtime.call(
+                BLUEZ_SERVICE,
+                self._adapter_path,
+                ADAPTER,
+                "StopDiscovery",
+                timeout=timeout,
+            )
+        except DBusCallError as exc:
+            if not exc.error_name.endswith(("NotReady", "Failed")):
+                raise
+
+    def discovery_session_count(self) -> int:
+        return len(self._discovery_sessions)
+
+    @staticmethod
+    def _device_id(address: str) -> str:
+        return address.lower().replace(":", "_")
+
+    def _device_from_properties(self, path: str, props: Dict[str, Any]) -> BLEDevice:
+        address = str(props.get("Address", ""))
+        now = _utc_now()
+        cached = self._devices.setdefault(
+            path, {"first_seen_at": now, "last_seen_at": now}
+        )
+        cached["last_seen_at"] = now
+        return BLEDevice(
+            id=self._device_id(address),
+            path=path,
+            address=address,
+            address_type=props.get("AddressType"),
+            name=props.get("Alias") or props.get("Name"),
+            service_uuids=list(props.get("UUIDs", [])),
+            service_data=_bytes_map(props.get("ServiceData", {})),
+            manufacturer_data=_bytes_map(props.get("ManufacturerData", {})),
+            rssi=int(props["RSSI"]) if "RSSI" in props else None,
+            tx_power=int(props["TxPower"]) if "TxPower" in props else None,
+            first_seen_at=cached["first_seen_at"],
+            last_seen_at=cached["last_seen_at"],
+            connected=bool(props.get("Connected", False)),
+            paired=bool(props.get("Paired", False)),
+            services_resolved=bool(props.get("ServicesResolved", False)),
+        )
+
+    def list_devices(self):
+        self._ready()
+        devices = []
+        prefix = self._adapter_path + "/dev_"
+        for path, interfaces in self._objects().items():
+            if path.startswith(prefix) and DEVICE in interfaces:
+                devices.append(self._device_from_properties(path, interfaces[DEVICE]))
+        return devices
+
+    def _resolve_device(self, device_id: str) -> BLEDevice:
+        for device in self.list_devices():
+            if device.id == device_id.lower():
+                return device
+        raise RadioResourceNotFoundError("Bluetooth device was not found")
+
+    def register_advertisement(self, specification, timeout: float = 15.0):
+        self._ready()
+        advertisement_id = specification.get("id") or uuid.uuid4().hex
+        if advertisement_id in self._advertisements:
+            return self._advertisements[advertisement_id]["model"]
+        path = "/org/totem/advertisements/{}".format(advertisement_id)
+
+        def released():
+            self._advertisements.pop(advertisement_id, None)
+
+        interface = AdvertisementObject(specification, released)
+        self._runtime.export(path, interface, timeout)
+        try:
+            self._runtime.call(
+                BLUEZ_SERVICE,
+                self._adapter_path,
+                ADVERTISING_MANAGER,
+                "RegisterAdvertisement",
+                "oa{sv}",
+                [path, {}],
+                timeout,
+            )
+        except Exception:
+            self._runtime.unexport(path, interface)
+            raise
+        model = BLEAdvertisement(
+            id=advertisement_id,
+            path=path,
+            type=specification.get("type", "peripheral"),
+            service_uuids=list(specification.get("service_uuids", [])),
+            local_name=specification.get("local_name"),
+            includes=list(specification.get("includes", [])),
+            registered_at=_utc_now(),
+        )
+        self._advertisements[advertisement_id] = {
+            "interface": interface,
+            "path": path,
+            "model": model,
+        }
+        return model
+
+    def unregister_advertisement(self, advertisement_id: str, timeout: float = 15.0):
+        self._ready()
+        entry = self._advertisements.get(advertisement_id)
+        if entry is None:
+            return
+        try:
+            self._runtime.call(
+                BLUEZ_SERVICE,
+                self._adapter_path,
+                ADVERTISING_MANAGER,
+                "UnregisterAdvertisement",
+                "o",
+                [entry["path"]],
+                timeout,
+            )
+        except DBusCallError as exc:
+            if not exc.error_name.endswith("DoesNotExist"):
+                raise
+        finally:
+            self._runtime.unexport(entry["path"], entry["interface"])
+            self._advertisements.pop(advertisement_id, None)
+
+    def list_advertisements(self):
+        return [entry["model"] for entry in self._advertisements.values()]
+
+    def connect_device(self, device_id: str, timeout: float = 30.0):
+        device = self._resolve_device(device_id)
+        if device.connected:
+            return device
+        self._runtime.call(
+            BLUEZ_SERVICE, device.path, DEVICE, "Connect", timeout=timeout
+        )
+        self._connected_by_manager.add(device_id.lower())
+        self._emit(
+            "ble_connection_changed", {"device_id": device_id, "connected": True}
+        )
+        return self._resolve_device(device_id)
+
+    def disconnect_device(self, device_id: str, timeout: float = 15.0):
+        device = self._resolve_device(device_id)
+        if not device.connected:
+            self._connected_by_manager.discard(device_id.lower())
+            return device
+        try:
+            self._runtime.call(
+                BLUEZ_SERVICE, device.path, DEVICE, "Disconnect", timeout=timeout
+            )
+        except DBusCallError as exc:
+            if not exc.error_name.endswith("NotConnected"):
+                raise
+        self._connected_by_manager.discard(device_id.lower())
+        self._emit(
+            "ble_connection_changed", {"device_id": device_id, "connected": False}
+        )
+        return self._resolve_device(device_id)
+
+    def list_gatt(self, device_id: str):
+        device = self._resolve_device(device_id)
+        objects = self._objects()
+        services = []
+        for path, interfaces in objects.items():
+            props = interfaces.get(GATT_SERVICE)
+            if not props or not path.startswith(device.path + "/"):
+                continue
+            characteristics = []
+            for char_path, char_interfaces in objects.items():
+                char = char_interfaces.get(GATT_CHARACTERISTIC)
+                if not char or char.get("Service") != path:
+                    continue
+                value = char.get("Value")
+                characteristics.append(
+                    GATTCharacteristic(
+                        id=char_path.rsplit("/", 1)[-1],
+                        path=char_path,
+                        uuid=str(char.get("UUID", "")),
+                        service_path=path,
+                        flags=list(char.get("Flags", [])),
+                        notifying=bool(char.get("Notifying", False)),
+                        value_base64=(
+                            base64.b64encode(bytes(value)).decode("ascii")
+                            if value is not None
+                            else None
+                        ),
+                    )
+                )
+            services.append(
+                GATTService(
+                    id=path.rsplit("/", 1)[-1],
+                    path=path,
+                    uuid=str(props.get("UUID", "")),
+                    primary=bool(props.get("Primary", False)),
+                    characteristics=characteristics,
+                )
+            )
+        return services
+
+    def _resolve_characteristic(
+        self, device_id: str, characteristic_id: str
+    ) -> GATTCharacteristic:
+        for service in self.list_gatt(device_id):
+            for characteristic in service.characteristics:
+                if characteristic.id == characteristic_id:
+                    return characteristic
+        raise RadioResourceNotFoundError("GATT characteristic was not found")
+
+    def read_characteristic(
+        self, device_id: str, characteristic_id: str, timeout: float = 15.0
+    ):
+        characteristic = self._resolve_characteristic(device_id, characteristic_id)
+        result = self._runtime.call(
+            BLUEZ_SERVICE,
+            characteristic.path,
+            GATT_CHARACTERISTIC,
+            "ReadValue",
+            "a{sv}",
+            [{}],
+            timeout,
+        )
+        return bytes(result[0])
+
+    def write_characteristic(
+        self,
+        device_id: str,
+        characteristic_id: str,
+        value: bytes,
+        with_response: bool = True,
+        timeout: float = 15.0,
+    ):
+        characteristic = self._resolve_characteristic(device_id, characteristic_id)
+        self._runtime.call(
+            BLUEZ_SERVICE,
+            characteristic.path,
+            GATT_CHARACTERISTIC,
+            "WriteValue",
+            "aya{sv}",
+            [
+                bytes(value),
+                {"type": Variant("s", "request" if with_response else "command")},
+            ],
+            timeout,
+        )
+
+    def subscribe_characteristic(
+        self,
+        device_id: str,
+        characteristic_id: str,
+        subscription_id=None,
+        timeout: float = 15.0,
+    ):
+        characteristic = self._resolve_characteristic(device_id, characteristic_id)
+        subscription_id = subscription_id or uuid.uuid4().hex
+        if subscription_id in self._subscriptions:
+            return subscription_id
+        existing = any(
+            item["path"] == characteristic.path for item in self._subscriptions.values()
+        )
+        if not existing:
+            self._runtime.call(
+                BLUEZ_SERVICE,
+                characteristic.path,
+                GATT_CHARACTERISTIC,
+                "StartNotify",
+                timeout=timeout,
+            )
+        self._subscriptions[subscription_id] = {
+            "path": characteristic.path,
+            "device_id": device_id,
+            "characteristic_id": characteristic_id,
+        }
+        return subscription_id
+
+    def unsubscribe_characteristic(self, subscription_id: str, timeout: float = 15.0):
+        entry = self._subscriptions.pop(subscription_id, None)
+        if entry is None:
+            return
+        if any(item["path"] == entry["path"] for item in self._subscriptions.values()):
+            return
+        try:
+            self._runtime.call(
+                BLUEZ_SERVICE,
+                entry["path"],
+                GATT_CHARACTERISTIC,
+                "StopNotify",
+                timeout=timeout,
+            )
+        except DBusCallError as exc:
+            if not exc.error_name.endswith(("Failed", "DoesNotExist")):
+                raise
+
+    def _on_message(self, message) -> None:
+        body = variant_value(message.body)
+        if (
+            message.interface == OBJECT_MANAGER
+            and message.member == "InterfacesAdded"
+            and len(body) == 2
+        ):
+            path, interfaces = body
+            if DEVICE in interfaces:
+                device = self._device_from_properties(path, interfaces[DEVICE])
+                self._emit(
+                    "ble_advertisement_found",
+                    {"device_id": device.id, "address": device.address},
+                )
+        elif (
+            message.interface == OBJECT_MANAGER
+            and message.member == "InterfacesRemoved"
+            and len(body) == 2
+        ):
+            path, interfaces = body
+            if DEVICE in interfaces:
+                cached = self._devices.pop(path, None)
+                self._emit(
+                    "ble_advertisement_expired",
+                    {
+                        "path": path,
+                        "last_seen_at": cached.get("last_seen_at") if cached else None,
+                    },
+                )
+        elif (
+            message.interface == PROPERTIES
+            and message.member == "PropertiesChanged"
+            and len(body) >= 2
+        ):
+            changed_interface, changed = body[0], body[1]
+            if changed_interface == DEVICE and message.path in self._devices:
+                self._devices[message.path]["last_seen_at"] = _utc_now()
+                self._emit("ble_advertisement_updated", {"path": message.path})
+                if "Connected" in changed:
+                    self._emit(
+                        "ble_connection_changed",
+                        {"path": message.path, "connected": bool(changed["Connected"])},
+                    )
+            elif changed_interface == GATT_CHARACTERISTIC and "Value" in changed:
+                value = base64.b64encode(bytes(changed["Value"])).decode("ascii")
+                self._emit(
+                    "gatt_notification", {"path": message.path, "value_base64": value}
+                )
+
+    def close(self):
+        if getattr(self, "_closed", False):
+            return
+        if self.initialized:
+            for session_id in list(self._discovery_sessions):
+                try:
+                    self.stop_discovery(session_id)
+                except RadioOperationError:
+                    pass
+            for advertisement_id in list(self._advertisements):
+                try:
+                    self.unregister_advertisement(advertisement_id)
+                except RadioOperationError:
+                    pass
+            for subscription_id in list(self._subscriptions):
+                try:
+                    self.unsubscribe_characteristic(subscription_id)
+                except RadioOperationError:
+                    pass
+            for device_id in list(self._connected_by_manager):
+                try:
+                    self.disconnect_device(device_id)
+                except RadioOperationError:
+                    pass
+            self._runtime.remove_message_handler(self._on_message)
+            if self._owns_runtime:
+                self._runtime.close()
+        super().close()
