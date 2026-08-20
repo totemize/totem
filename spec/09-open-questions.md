@@ -70,8 +70,6 @@ Status: Draft (living document — shrinks as we resolve)
 
 - Captive portal on AP join? Is the web app read-only for non-owners?
 
-### Conventions (values to pin)
+### Conventions (remaining values to pin)
 
-- Port numbers for relay, web app, and loopback bus (`07-conventions.md`).
 - AP gateway address / ULA choice; captive portal yes/no.
-- Challenge `created_at` freshness window (`07-conventions.md`).

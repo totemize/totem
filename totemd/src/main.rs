@@ -5,11 +5,26 @@
 //! mode, selected by argv[0] or the first argument). Client mode talks to
 //! the daemon's loopback bus; it introduces no separate API.
 
+use std::io::IsTerminal;
+
 mod bus;
+mod challenge;
 mod cli;
+mod config;
 mod fips;
+mod http;
+mod probe;
 mod state;
 mod web;
+
+const HELP: &str = "totemd — Totem control plane
+
+Usage:
+  totemd serve
+  totemd totemctl <command>
+  totemctl <command>
+
+Run `totemctl help` for client commands.";
 
 fn main() {
     let mut args = std::env::args();
@@ -20,7 +35,7 @@ fn main() {
         match args.next() {
             Some(m) => m,
             None => {
-                eprintln!("usage: totemd serve | totemctl <command>");
+                eprintln!("{HELP}");
                 std::process::exit(2);
             }
         }
@@ -30,6 +45,7 @@ fn main() {
     match mode.as_str() {
         "serve" => {
             tracing_subscriber::fmt()
+                .with_ansi(std::io::stdout().is_terminal())
                 .with_env_filter(
                     tracing_subscriber::EnvFilter::from_default_env()
                         .add_directive("info".parse().expect("directive")),
@@ -39,8 +55,10 @@ fn main() {
             rt.block_on(web::serve());
         }
         "totemctl" => cli::run(&rest),
+        "help" | "-h" | "--help" => println!("{HELP}"),
+        "version" | "-V" | "--version" => println!("totemd {}", env!("CARGO_PKG_VERSION")),
         other => {
-            eprintln!("totemd: unknown mode '{other}' (expected: serve)");
+            eprintln!("totemd: unknown mode '{other}' (run `totemd --help`)");
             std::process::exit(2);
         }
     }

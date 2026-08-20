@@ -19,7 +19,7 @@ use tokio::{
     net::UnixStream,
 };
 
-use crate::state::AppState;
+use crate::{probe, state::AppState};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct PeerInfo {
@@ -89,7 +89,12 @@ pub fn parse_snapshot(peers: &Value, status: &Value) -> FipsSnapshot {
         .map(Vec::as_slice)
         .unwrap_or_default()
     {
-        let s = |k: &str| p.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+        let s = |k: &str| {
+            p.get(k)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
         let npub = s("npub");
         if npub.is_empty() {
             continue;
@@ -125,7 +130,7 @@ pub fn diff(
     old: &HashMap<String, PeerInfo>,
     new: FipsSnapshot,
 ) -> (HashMap<String, PeerInfo>, Vec<String>, Vec<String>) {
-    let mut merged = new.peers.clone();
+    let mut merged = new.peers;
     let mut seen = Vec::new();
     for (npub, p) in merged.iter_mut() {
         if let Some(prev) = old.get(npub) {
@@ -136,7 +141,7 @@ pub fn diff(
     }
     let gone: Vec<String> = old
         .keys()
-        .filter(|k| !new.peers.contains_key(*k))
+        .filter(|k| !merged.contains_key(*k))
         .cloned()
         .collect();
     (merged, seen, gone)
@@ -177,23 +182,38 @@ pub async fn watch(st: Arc<AppState>) {
     }
 }
 
-async fn tick(st: &AppState) -> Result<(), String> {
+async fn tick(st: &Arc<AppState>) -> Result<(), String> {
     let peers = query("show_peers").await?;
     let status = query("show_status").await?;
     let snap = parse_snapshot(&peers, &status);
     let (own_npub, mesh_size) = (snap.own_npub.clone(), snap.mesh_size);
     let (merged, seen, gone) = diff(&st.peers_map(), snap);
-    for npub in &seen {
-        tracing::info!(npub, "peer seen");
-        st.push(json!({ "type": "totem.peer.seen", "npub": npub }));
-    }
-    for npub in &gone {
-        tracing::info!(npub, "peer gone");
-        st.push(json!({ "type": "totem.peer.gone", "npub": npub }));
-    }
+    let seen_info: Vec<(String, String)> = seen
+        .iter()
+        .filter_map(|npub| {
+            merged
+                .get(npub)
+                .map(|peer| (npub.clone(), peer.ipv6_addr.clone()))
+        })
+        .collect();
+
+    // Publish current state before pushes/tasks so immediate reconciliation
+    // cannot observe the previous snapshot.
     st.set_fips(true, None);
     st.set_peers(merged);
     st.set_mesh(own_npub, mesh_size);
+
+    for (npub, ip) in seen_info {
+        tracing::info!(npub, "peer seen");
+        st.push(json!({ "type": "totem.peer.seen", "npub": npub }));
+        let st = st.clone();
+        tokio::spawn(async move { probe::on_seen(&st, &npub, &ip).await });
+    }
+    for npub in &gone {
+        st.forget_recognized(npub);
+        tracing::info!(npub, "peer gone");
+        st.push(json!({ "type": "totem.peer.gone", "npub": npub }));
+    }
     Ok(())
 }
 
@@ -220,7 +240,9 @@ mod tests {
                                 "transport_type":"udp"}]}}),
                             "show_status" => json!({"status":"ok","data":{
                                 "npub":"npub1self","estimated_mesh_size":2}}),
-                            other => json!({"status":"error","message":format!("unknown command: {other}")}),
+                            other => {
+                                json!({"status":"error","message":format!("unknown command: {other}")})
+                            }
                         };
                         w.write_all(format!("{resp}\n").as_bytes()).await.unwrap();
                         line.clear();
@@ -263,15 +285,16 @@ mod tests {
 
     #[test]
     fn diff_detects_arrivals_departures_and_preserves_first_seen() {
-        let old: HashMap<String, PeerInfo> = [(
-            "npub1old".to_string(),
-            PeerInfo {
-                npub: "npub1old".into(),
-                ipv6_addr: "fd00::9".into(),
-                transport_type: "udp".into(),
-                first_seen: 100,
-                last_seen: 100,
-            },
+        let old: HashMap<String, PeerInfo> = [
+            (
+                "npub1old".to_string(),
+                PeerInfo {
+                    npub: "npub1old".into(),
+                    ipv6_addr: "fd00::9".into(),
+                    transport_type: "udp".into(),
+                    first_seen: 100,
+                    last_seen: 100,
+                },
             ),
             (
                 "npub1stay".to_string(),

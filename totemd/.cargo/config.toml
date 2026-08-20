@@ -1,5 +1,6 @@
-# Static musl cross builds link with rust-lld (ships with rustup) — the
-# host has no arm cross-gcc, and the crate is pure Rust so lld suffices.
+# Static musl cross builds link with rust-lld (ships with rustup). Core
+# `nostr` compiles secp256k1 C through the tiny clang wrapper below; no
+# downloaded cross-GCC toolchain is needed.
 #   armv6 (totem, metot): arm-unknown-linux-musleabihf
 #   aarch64 (motown):     aarch64-unknown-linux-musl
 [target.arm-unknown-linux-musleabihf]
@@ -7,3 +8,7 @@ linker = "rust-lld"
 
 [target.aarch64-unknown-linux-musl]
 linker = "rust-lld"
+
+[env]
+CC_arm_unknown_linux_musleabihf = { value = ".cargo/clang-musl", relative = true, force = true }
+CC_aarch64_unknown_linux_musl = { value = ".cargo/clang-musl", relative = true, force = true }
