@@ -37,21 +37,34 @@
     {/if}
   </div>
   <div class="pad center" style="padding:24px">
-    {#if info?.picture}
-      <img class="mark mark-img" src={info.picture} alt="">
-    {:else}
-      <div class="mark">T</div>
-    {/if}
     {#if editing}
-      <input class="name-input" type="text" bind:value={editName} spellcheck="false"
-        onkeydown={(e) => e.key === "Enter" && saveEdit()}>
-      <input class="name-input" type="text" bind:value={editPicture} placeholder="picture url…"
-        spellcheck="false" autocapitalize="off" autocomplete="off" style="margin-top:10px"
-        onkeydown={(e) => e.key === "Enter" && saveEdit()}>
+      <div class="edit-field">
+        <span class="edit-label">name</span>
+        <input class="name-input" type="text" bind:value={editName} spellcheck="false"
+          onkeydown={(e) => e.key === "Enter" && saveEdit()}>
+      </div>
+      <div class="edit-field">
+        <span class="edit-label">picture</span>
+        <div class="picture-row">
+          {#if editPicture}
+            <img class="mark mark-img edit-mark" src={editPicture} alt="">
+          {:else}
+            <div class="mark edit-mark">T</div>
+          {/if}
+          <input class="name-input" type="text" bind:value={editPicture} placeholder="picture url…"
+            spellcheck="false" autocapitalize="off" autocomplete="off"
+            onkeydown={(e) => e.key === "Enter" && saveEdit()}>
+        </div>
+      </div>
       <div class="save-row">
         <button class="btn primary" onclick={saveEdit}>save</button>
       </div>
     {:else}
+      {#if info?.picture}
+        <img class="mark mark-img" src={info.picture} alt="">
+      {:else}
+        <div class="mark">T</div>
+      {/if}
       <h1 style="font-size:18px">{info?.name ?? "unknown"}</h1>
     {/if}
     <div class="tiny" style="margin-top:8px">{info ? shortNpub(info.pubkey) : ""} · {info?.relayUrl ?? ""}</div>

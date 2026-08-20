@@ -128,6 +128,12 @@ body {
 .edit-link { background: none; border: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); cursor: pointer; padding: 10px 0 0; }
 .edit-link:hover { color: var(--ink); }
 .save-row { margin: 22px 0; }
+.edit-field { width: min(340px, 90%); margin: 0 auto 14px; text-align: left; }
+.edit-label { display: block; font-size: 11px; font-family: var(--mono); color: var(--dim); margin-bottom: 6px; }
+.edit-field .name-input { width: 100%; }
+.picture-row { display: flex; align-items: center; gap: 10px; }
+.picture-row .name-input { flex: 1; }
+.edit-mark { width: 40px; height: 40px; font-size: 16px; margin: 0; flex-shrink: 0; }
 .mark-img { object-fit: cover; }
 
 /* advanced disclosure */
