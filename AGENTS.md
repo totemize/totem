@@ -99,6 +99,10 @@ ssh motown               # via LAN
 ssh motown.fips          # via FIPS mesh
 ```
 
+- Wi-Fi fallback is staged only on motown: when infrastructure is unavailable,
+  NetworkManager joins a visible open `!Totem` or hosts it at `10.21.0.1`.
+  The live AP proof issued a `10.21.0.75` lease and verified web, relay, SSH,
+  and FIPS health; motown was restored to infrastructure and reboot-verified.
 - Runs strfry master `5d89a62` (aarch64 build, Alpine minirootfs runtime
   under `/opt/strfry`, `bind = "::"`): relay on port 7777, verified over LAN,
   mesh, and bidirectional protocol-0/NIP-77 sync with totem. The original
@@ -237,3 +241,9 @@ with `-H "Accept: application/nostr+json"`.
 
 The remote command keeps running — reconnect and verify state instead of
 assuming failure.
+
+### `/run` is mounted `noexec` on the bench images
+
+A transient systemd rollback cannot execute `/run/script` directly; it fails
+at `EXEC` with status 203. Invoke it as `/bin/sh /run/script`, or install an
+executable under `/usr/local/libexec`.

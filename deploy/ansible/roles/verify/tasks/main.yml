@@ -19,6 +19,33 @@
 - name: Read systemd service facts
   ansible.builtin.service_facts:
 
+- name: Require Wi-Fi fallback to be enabled
+  ansible.builtin.command:
+    argv: [systemctl, is-enabled, totem-wifi-fallback.service]
+  register: verify_totem_wifi_fallback_enabled_command
+  changed_when: false
+  failed_when: verify_totem_wifi_fallback_enabled_command.stdout != 'enabled'
+
+- name: Read Totem NetworkManager profile contracts
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - --get-values
+      - connection.id,802-11-wireless.mode,802-11-wireless.ssid,ipv4.method
+      - connection
+      - show
+      - "{{ item }}"
+  loop:
+    - totem-ap
+    - totem-peer
+  register: verify_totem_wifi_profile_contract
+  changed_when: false
+  failed_when: verify_totem_wifi_profile_contract.stdout_lines != expected[item]
+  vars:
+    expected:
+      totem-ap: [totem-ap, ap, '!Totem', shared]
+      totem-peer: [totem-peer, infrastructure, '!Totem', auto]
+
 - name: Require enabled core services to be running
   ansible.builtin.assert:
     that:

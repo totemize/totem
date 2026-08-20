@@ -8,6 +8,8 @@
   roles:
     - role: base
       tags: [base]
+    - role: network
+      tags: [network]
     - role: fips
       tags: [fips]
     - role: strfry

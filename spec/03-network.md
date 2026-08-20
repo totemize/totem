@@ -65,8 +65,14 @@ Notes:
   limitations versus any other mode.
 - A totem in AP-host mode serves guests **and** acts as the meeting beacon
   for other totems: one emission, two product stories.
-- Role switching between infra-station and AP-host is a policy question
-  (`09-open-questions.md`); v1 devices MAY fix the role in configuration.
+- V1 prefers any configured infrastructure connection. When none is active,
+  the totem waits for NetworkManager's reconnect attempt, joins an existing
+  `!Totem` if one is visible, or starts its own `!Totem` AP after a short
+  randomized delay and final rescan. The delay makes one host likely when
+  several disconnected totems arrive together.
+- AP-host mode is sticky until reboot or an explicit infrastructure reconnect;
+  v1 does not periodically drop connected guests merely to scan for an
+  upstream network.
 
 ## Discovery and pairing sequence
 
@@ -111,8 +117,9 @@ own semantics; Totem adds no sync profile on top.
 
 ## AP-station fallback
 
-A totem MAY join another totem's AP as a station and use the flat path
-(standard ports, NIP-11 probe, relay sync) without FIPS. This works for free
-with the conventions but competes for airtime with guest service; whether it
-is a supported v1 behavior or only a fallback is an open question
-(`09-open-questions.md`).
+Joining an existing `!Totem` before hosting a new AP is supported v1 fallback
+behavior. FIPS LAN rendezvous authenticates peers over that shared L2, after
+which recognition and relay sync use the ordinary FIPS path. A totem MAY also
+use the flat AP path directly (standard ports, NIP-11 probe, relay sync), but
+the implemented control-plane encounter trigger remains an authenticated FIPS
+peer.

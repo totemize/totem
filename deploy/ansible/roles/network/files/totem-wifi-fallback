@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+interface=wlan0
+ssid='!Totem'
+peer_profile=totem-peer
+ap_profile=totem-ap
+grace=${TOTEM_WIFI_GRACE_SECONDS:-15}
+jitter=${TOTEM_WIFI_JITTER_SECONDS:-10}
+wait=${TOTEM_WIFI_ACTIVATION_WAIT_SECONDS:-30}
+nmcli=${TOTEM_NMCLI:-nmcli}
+sleep_cmd=${TOTEM_SLEEP:-sleep}
+
+log() {
+    printf 'totem-wifi-fallback: %s\n' "$*"
+}
+
+active_connection() {
+    "$nmcli" --get-values GENERAL.CONNECTION device show "$interface" 2>/dev/null | head -n 1
+}
+
+connected() {
+    local connection
+    connection=$(active_connection) || return 1
+    [[ -n "$connection" && "$connection" != "--" ]]
+}
+
+peer_visible() {
+    "$nmcli" --terse --fields SSID device wifi list \
+        ifname "$interface" --rescan yes 2>/dev/null | grep -Fxq "$ssid"
+}
+
+join_peer() {
+    log "joining existing $ssid network"
+    "$nmcli" --wait "$wait" connection up "$peer_profile" ifname "$interface"
+}
+
+if connected; then
+    log "leaving active connection $(active_connection) unchanged"
+    exit 0
+fi
+
+"$nmcli" radio wifi on
+"$sleep_cmd" "$grace"
+
+if connected; then
+    log "infrastructure reconnected during grace period"
+    exit 0
+fi
+
+if peer_visible && join_peer; then
+    exit 0
+fi
+
+# ponytail: jitter may split a large simultaneous cohort; add election only if measured.
+if (( jitter > 0 )); then
+    "$sleep_cmd" "$((RANDOM % (jitter + 1)))"
+fi
+
+if connected; then
+    log "another connection became active"
+    exit 0
+fi
+
+if peer_visible && join_peer; then
+    exit 0
+fi
+
+log "no Wi-Fi available; starting $ssid access point"
+"$nmcli" --wait "$wait" connection up "$ap_profile" ifname "$interface"

@@ -1,0 +1,9 @@
+---
+- name: Reload Totem NetworkManager profiles
+  ansible.builtin.command:
+    argv: [nmcli, connection, reload]
+  changed_when: true
+
+- name: Reload systemd for Wi-Fi fallback
+  ansible.builtin.systemd_service:
+    daemon_reload: true

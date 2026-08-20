@@ -1,0 +1,81 @@
+---
+- name: Install Wi-Fi fallback runtime dependencies
+  ansible.builtin.apt:
+    name: "{{ totem_network_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 86400
+
+- name: Keep NetworkManager enabled and running
+  ansible.builtin.systemd_service:
+    name: NetworkManager.service
+    enabled: true
+    state: started
+
+- name: Create Wi-Fi fallback directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /etc/NetworkManager/system-connections, mode: "0700"}
+    - {path: /etc/NetworkManager/dispatcher.d, mode: "0755"}
+    - {path: /usr/local/libexec, mode: "0755"}
+
+- name: Install Totem NetworkManager profiles
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/etc/NetworkManager/system-connections/{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop:
+    - totem-ap.nmconnection
+    - totem-peer.nmconnection
+  notify: Reload Totem NetworkManager profiles
+
+- name: Install the Wi-Fi fallback action
+  ansible.builtin.copy:
+    src: totem-wifi-fallback
+    dest: /usr/local/libexec/totem-wifi-fallback
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the NetworkManager disconnect hook
+  ansible.builtin.copy:
+    src: 90-totem-wifi-fallback
+    dest: /etc/NetworkManager/dispatcher.d/90-totem-wifi-fallback
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the Wi-Fi fallback systemd unit
+  ansible.builtin.copy:
+    src: totem-wifi-fallback.service
+    dest: /etc/systemd/system/totem-wifi-fallback.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd for Wi-Fi fallback
+
+- name: Apply Wi-Fi fallback definitions
+  ansible.builtin.meta: flush_handlers
+
+- name: Confirm NetworkManager loaded the Totem profiles
+  ansible.builtin.command:
+    argv: [nmcli, --get-values, connection.id, connection, show, "{{ item }}"]
+  loop:
+    - totem-ap
+    - totem-peer
+  register: network_totem_wifi_profile
+  changed_when: false
+  failed_when: network_totem_wifi_profile.stdout != item
+
+- name: Enable Wi-Fi fallback for boot and disconnect events
+  ansible.builtin.systemd_service:
+    name: totem-wifi-fallback.service
+    enabled: true
+    daemon_reload: true

@@ -35,10 +35,11 @@ A totem MUST serve these services on the registered ports on every on-ramp
   totem claims, and relay policy governs what guests may write.
 - A roaming totem seeing `!Totem` treats it as a totem beacon (hint only —
   identity is proven by the handshake and challenge, never by the name).
-- **Identical AP subnet on every totem**, so a roaming client keeps its
-  DHCP lease across totems. The totem MUST be reachable at its AP's
-  **gateway address** (and/or an fd00 ULA — **TBD**) so guests never guess
-  where the totem is.
+- **Identical AP subnet on every totem:** `10.21.0.0/24`, with the hosting
+  totem at gateway `10.21.0.1` and DHCP leases from
+  `10.21.0.10`–`10.21.0.209`. A roaming client can retain its lease and always
+  reaches the local web app at `http://10.21.0.1:8080` and relay at
+  `ws://10.21.0.1:7777`. AP IPv6 is deferred.
 - A captive portal landing on the web app is **TBD** (open question).
 
 ## NIP-11 totem marker

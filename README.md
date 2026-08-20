@@ -9,7 +9,7 @@ runtime that detects, initializes, and controls local hardware.
 - Waveshare 2.13-inch and 3.7-inch E-Ink displays
 - ACR122 and PN532 NFC readers
 - NVMe and confined filesystem storage
-- Onboard and USB Wi-Fi interfaces through NetworkManager
+- NetworkManager infrastructure Wi-Fi with open `!Totem` station/AP fallback
 - Explicit in-memory transports for development and CI
 
 Mocks are never selected implicitly. Callers must pass `allow_mock=True`, or
