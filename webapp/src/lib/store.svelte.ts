@@ -10,7 +10,7 @@ import type {
   Settings,
 } from "./types";
 
-export type Screen = "home" | "peers" | "notes" | "settings" | "encounters" | "peer";
+export type Screen = "home" | "peers" | "notes" | "settings" | "encounters" | "landing";
 
 export type SetupStep = "welcome" | "identity" | "presence" | "name" | "public";
 
@@ -32,8 +32,9 @@ export interface State {
   composing: boolean;
   /** Note id whose ⋯ actions are expanded. */
   noteMenu: string | null;
-  /** Peer whose landing page is open (screen "peer"). */
-  selectedPeer: Pubkey | null;
+  /** Totem whose landing page is open (screen "landing") — any totem,
+   * friend or not; carries the identity so no list lookup is needed. */
+  landing: NodeInfo | null;
 }
 
 /** Reactive app store: Svelte 5 runes state, mutations via methods. */
@@ -52,7 +53,7 @@ export class Store {
     friendFilter: "all",
     composing: false,
     noteMenu: null,
-    selectedPeer: null,
+    landing: null,
   });
 
   constructor(
@@ -95,17 +96,17 @@ export class Store {
     this.state.friendFilter = filter;
   }
 
-  /** Screen to return to when closing a peer landing page. */
-  private beforePeer: Screen = "peers";
+  /** Screen to return to when closing a landing page. */
+  private beforeLanding: Screen = "peers";
 
-  openPeer(pubkey: Pubkey): void {
-    if (this.state.screen !== "peer") this.beforePeer = this.state.screen;
-    this.state.selectedPeer = pubkey;
-    this.show("peer");
+  openLanding(info: NodeInfo): void {
+    if (this.state.screen !== "landing") this.beforeLanding = this.state.screen;
+    this.state.landing = info;
+    this.show("landing");
   }
 
-  closePeer(): void {
-    this.show(this.beforePeer);
+  closeLanding(): void {
+    this.show(this.beforeLanding);
   }
 
   async setNoteFilter(filter: NoteFilter): Promise<void> {

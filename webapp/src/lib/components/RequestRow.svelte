@@ -5,7 +5,7 @@
   const { store, peer }: { store: Store; peer: Peer } = $props();
 </script>
 
-<div class="item clickable" onclick={() => store.openPeer(peer.info.pubkey)} role="button" tabindex="0" onkeydown={(e) => e.key === "Enter" && store.openPeer(peer.info.pubkey)}>
+<div class="item clickable" onclick={() => store.openLanding(peer.info)} role="button" tabindex="0" onkeydown={(e) => e.key === "Enter" && store.openLanding(peer.info)}>
   <div class="avatar"></div>
   <span class="label">{peer.info.name}</span>
   <span class="hint">wants to be friends</span>

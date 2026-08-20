@@ -8,7 +8,7 @@
 </script>
 
 <div class="screen">
-  <div class="home-hero center clickable-plain" onclick={() => node && store.openPeer(node.pubkey)} role="button" tabindex="0" onkeydown={(e) => e.key === "Enter" && node && store.openPeer(node.pubkey)}>
+  <div class="home-hero center clickable-plain" onclick={() => node && store.openLanding(node)} role="button" tabindex="0" onkeydown={(e) => e.key === "Enter" && node && store.openLanding(node)}>
     <div class="mark">T</div>
     <h1>{node?.name ?? "…"}</h1>
     {#if enc}

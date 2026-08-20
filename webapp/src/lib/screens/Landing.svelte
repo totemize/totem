@@ -4,17 +4,14 @@
   import type { Store } from "$lib/store.svelte";
 
   const { store }: { store: Store } = $props();
-  const peer = $derived(store.state.peers.find((p) => p.info.pubkey === store.state.selectedPeer));
-  const info = $derived(
-    peer?.info ??
-      (store.state.node?.pubkey === store.state.selectedPeer ? store.state.node : null),
-  );
-  const theirNotes = $derived(store.state.notes.filter((n) => n.author?.pubkey === store.state.selectedPeer));
-  const theirEncounters = $derived(store.state.encounterLog.filter((e) => e.peer.pubkey === store.state.selectedPeer));
+  const info = $derived(store.state.landing);
+  const peer = $derived(store.state.peers.find((p) => p.info.pubkey === info?.pubkey));
+  const notes = $derived(store.state.notes.filter((n) => n.author?.pubkey === info?.pubkey));
+  const encounters = $derived(store.state.encounterLog.filter((e) => e.peer.pubkey === info?.pubkey));
 </script>
 
 <div class="screen">
-  <button class="back" onclick={() => store.closePeer()}><span class="arr">←</span> Friends</button>
+  <button class="back" onclick={() => store.closeLanding()} aria-label="back"><span class="arr">←</span></button>
   <div class="pad center" style="padding:24px">
     <div class="mark">T</div>
     <h1 style="font-size:18px">{info?.name ?? "unknown"}</h1>
@@ -24,9 +21,9 @@
     {/if}
   </div>
 
-  {#if theirEncounters.length}
+  {#if encounters.length}
     <div class="section-label">encounters</div>
-    {#each theirEncounters as e, i (i)}
+    {#each encounters as e, i (i)}
       <div class="kv-row sub">
         <span>{relativeTime(e.at)}</span>
         <span class="value">{e.transport} ·
@@ -37,10 +34,10 @@
   {/if}
 
   <div class="section-label">collected notes</div>
-  {#if theirNotes.length === 0}
+  {#if notes.length === 0}
     <div class="kv-row sub"><span class="dim">no notes from them here yet</span></div>
   {/if}
-  {#each theirNotes as note (note.id)}
+  {#each notes as note (note.id)}
     <NoteRow {store} {note} />
   {/each}
 </div>
