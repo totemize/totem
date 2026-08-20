@@ -12,7 +12,13 @@ from totem.devices.network.errors import (
     UnsupportedFeatureError,
     redact_secrets,
 )
-from totem.devices.network.models import ConcurrentInterfaceCombination, InterfaceLimit
+from totem.devices.network.dbus_runtime import DBusCallError
+from totem.devices.network.models import (
+    BluetoothRadioState,
+    ConcurrentInterfaceCombination,
+    InterfaceLimit,
+    RadioBlockState,
+)
 from totem.managers.network_manager import NetworkManager
 
 
@@ -175,3 +181,42 @@ def test_unsupported_features_have_stable_error_code():
 
     assert error.code == "unsupported_feature"
     assert error.http_status == 501
+
+
+def test_bluez_radio_enable_retries_transient_busy_after_unblock(monkeypatch):
+    from totem.devices.network.drivers.bluez import Driver
+
+    class Runtime:
+        def __init__(self):
+            self.calls = 0
+
+        def set_property(self, *args):
+            self.calls += 1
+            if self.calls == 1:
+                raise DBusCallError("org.bluez.Error.Busy", "")
+
+    runtime = Runtime()
+    driver = Driver(runtime=runtime)
+    driver.initialized = True
+    driver._adapter_path = "/org/bluez/hci0"
+    states = iter(
+        [
+            BluetoothRadioState(
+                False, False, False, False, RadioBlockState(True, False)
+            ),
+            BluetoothRadioState(
+                True, False, False, True, RadioBlockState(False, False)
+            ),
+        ]
+    )
+    monkeypatch.setattr(driver, "get_radio_state", lambda: next(states))
+    unblocks = []
+    monkeypatch.setattr(
+        driver, "_set_rfkill_blocked", lambda blocked, timeout: unblocks.append(blocked)
+    )
+
+    result = driver.set_radio_enabled(True, timeout=2)
+
+    assert result.powered
+    assert runtime.calls == 2
+    assert unblocks == [False]

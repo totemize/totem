@@ -217,15 +217,27 @@ class Driver(BluetoothDeviceInterface):
                 )
             if before.block.soft_blocked:
                 self._set_rfkill_blocked(False, timeout)
-            self._runtime.set_property(
-                BLUEZ_SERVICE,
-                self._adapter_path,
-                ADAPTER,
-                "Powered",
-                "b",
-                True,
-                timeout,
-            )
+            deadline = time.monotonic() + timeout
+            while True:
+                try:
+                    self._runtime.set_property(
+                        BLUEZ_SERVICE,
+                        self._adapter_path,
+                        ADAPTER,
+                        "Powered",
+                        "b",
+                        True,
+                        max(0.1, deadline - time.monotonic()),
+                    )
+                    break
+                except DBusCallError as exc:
+                    if not exc.error_name.endswith("Busy"):
+                        raise
+                    if time.monotonic() >= deadline:
+                        raise RadioTimeoutError(
+                            "Timed out waiting for the Bluetooth controller after rfkill"
+                        ) from exc
+                    time.sleep(0.2)
         else:
             if before.powered:
                 self._runtime.set_property(
