@@ -44,6 +44,8 @@ body {
 .activity { padding: 26px 24px 0; display: flex; flex-direction: column; align-items: center; }
 .activity-title { font-size: 15px; font-weight: 700; margin-bottom: 10px; color: var(--dim); }
 .activity .tiny { display: block; margin-top: 6px; }
+.activity-item { background: none; border: none; cursor: pointer; padding: 0; }
+.activity-item:hover { color: var(--ink); }
 .pets { flex: 1; display: grid; place-items: center; }
 .quick-row { display: flex; padding-bottom: 10px; }
 .quick-row > * { flex: 1; }
@@ -121,7 +123,6 @@ body {
 
 .back { text-align: left; background: none; border: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); cursor: pointer; padding: 16px 20px 12px; display: flex; align-items: center; gap: 6px; }
 .back:hover { color: var(--ink); }
-.back.section-back { font-size: 15px; color: var(--ink); padding: 26px 20px 8px; }
 
 /* advanced disclosure */
 details.advanced { margin-top: 10px; }

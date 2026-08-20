@@ -8,17 +8,17 @@
   const menuOpen = $derived(store.state.noteMenu === note.id);
 </script>
 
-<div class="note">
+<div class="note clickable" onclick={() => store.openNoteDetail(note)} role="button" tabindex="0" onkeydown={(e) => e.key === "Enter" && store.openNoteDetail(note)}>
   <div class="avatar"></div>
   <div class="body">
     <div class="meta">{author} · {relativeTime(note.at)}</div>
     <div class="content">{note.content}</div>
     {#if menuOpen}
       <div class="note-actions">
-        <button class="btn danger" onclick={() => store.removeNote(note.id)}>remove from relay</button>
-        <button class="btn" onclick={() => store.toggleNoteMenu(note.id)}>cancel</button>
+        <button class="btn danger" onclick={(e) => { e.stopPropagation(); store.removeNote(note.id); }}>remove from relay</button>
+        <button class="btn" onclick={(e) => { e.stopPropagation(); store.toggleNoteMenu(note.id); }}>cancel</button>
       </div>
     {/if}
   </div>
-  <button class="more" title="note actions" onclick={() => store.toggleNoteMenu(note.id)}>⋯</button>
+  <button class="more" title="note actions" onclick={(e) => { e.stopPropagation(); store.toggleNoteMenu(note.id); }}>⋯</button>
 </div>

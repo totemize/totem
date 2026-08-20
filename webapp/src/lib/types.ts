@@ -79,6 +79,7 @@ export interface Note {
   content: string;
   at: Date;
   own: boolean; // authored by this node's owner
+  replyTo: string | null; // id of the note this replies to
 }
 
 export type NoteFilter = "all" | "own";

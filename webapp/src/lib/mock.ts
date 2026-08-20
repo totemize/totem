@@ -144,15 +144,25 @@ export class MockRelay implements RelayClient {
     note("n4", lib, "Reading circle moved to Thursdays. The poster wall has the details.", 60 * 26),
     note("n5", park, "Lost: blue scarf, bench by the fountain. It has a story, ask me.", 60 * 30),
     note("n6", null, "Passing through. This town hides its best places well.", 60 * 47),
+    note("r1", lib, "Saved a green piece for the reading circle table.", 9, false, "n1"),
+    note("r2", null, "Took the blue one — left a shell from the north beach.", 4, false, "n1"),
   ];
 
   async listNotes(filter: NoteFilter): Promise<Note[]> {
-    const all = [...this.notes].sort((a, b) => b.at.getTime() - a.at.getTime());
+    const all = [...this.notes]
+      .filter((n) => !n.replyTo)
+      .sort((a, b) => b.at.getTime() - a.at.getTime());
     return filter === "own" ? all.filter((n) => n.own) : all;
   }
 
-  async publishNote(content: string): Promise<Note> {
-    const n = note(`n${this.notes.length + 1}`, self, content, 0, true);
+  async listReplies(noteId: string): Promise<Note[]> {
+    return this.notes
+      .filter((n) => n.replyTo === noteId)
+      .sort((a, b) => a.at.getTime() - b.at.getTime());
+  }
+
+  async publishNote(content: string, replyTo?: string): Promise<Note> {
+    const n = note(`n${this.notes.length + 1}`, self, content, 0, true, replyTo ?? null);
     this.notes.push(n);
     return n;
   }
@@ -168,6 +178,7 @@ function note(
   content: string,
   minutesAgo: number,
   own = false,
+  replyTo: string | null = null,
 ): Note {
-  return { id, author, content, at: minutes(minutesAgo), own };
+  return { id, author, content, at: minutes(minutesAgo), own, replyTo };
 }

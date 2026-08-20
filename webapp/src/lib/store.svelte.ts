@@ -10,7 +10,15 @@ import type {
   Settings,
 } from "./types";
 
-export type Screen = "home" | "peers" | "notes" | "settings" | "encounters" | "landing";
+export type Screen =
+  | "home"
+  | "peers"
+  | "notes"
+  | "settings"
+  | "encounters"
+  | "landing"
+  | "note"
+  | "activity";
 
 export type SetupStep = "welcome" | "identity" | "presence" | "name" | "public";
 
@@ -35,6 +43,9 @@ export interface State {
   /** Totem whose landing page is open (screen "landing") — any totem,
    * friend or not; carries the identity so no list lookup is needed. */
   landing: NodeInfo | null;
+  /** Note open in the detail view (screen "note"), with its replies. */
+  openNote: Note | null;
+  replies: Note[];
 }
 
 /** Reactive app store: Svelte 5 runes state, mutations via methods. */
@@ -54,6 +65,8 @@ export class Store {
     composing: false,
     noteMenu: null,
     landing: null,
+    openNote: null,
+    replies: [],
   });
 
   constructor(
@@ -107,6 +120,49 @@ export class Store {
 
   closeLanding(): void {
     this.show(this.beforeLanding);
+  }
+
+  private beforeNote: Screen = "notes";
+
+  async openNoteDetail(note: Note): Promise<void> {
+    if (this.state.screen !== "note") this.beforeNote = this.state.screen;
+    this.state.openNote = note;
+    this.state.replies = await this.relay.listReplies(note.id);
+    this.show("note");
+  }
+
+  closeNoteDetail(): void {
+    this.state.openNote = null;
+    this.show(this.beforeNote);
+  }
+
+  /** Mixed activity feed, newest first: encounters and notes. */
+  activity(): { at: Date; text: string; note: Note | null; peer: NodeInfo | null }[] {
+    const events: { at: Date; text: string; note: Note | null; peer: NodeInfo | null }[] = [];
+    for (const e of this.state.encounterLog) {
+      events.push({
+        at: e.at,
+        text: e.verdict === "failed" ? "a stranger failed the challenge" : `met ${e.peer.name}`,
+        note: null,
+        peer: e.peer,
+      });
+    }
+    for (const n of this.state.notes) {
+      events.push({
+        at: n.at,
+        text: n.own ? "you posted a note" : `${n.author?.name ?? "a guest"} left a note`,
+        note: n,
+        peer: null,
+      });
+    }
+    return events.sort((a, b) => b.at.getTime() - a.at.getTime());
+  }
+
+  async publishReply(content: string): Promise<void> {
+    const open = this.state.openNote;
+    if (!open) return;
+    await this.relay.publishNote(content, open.id);
+    this.state.replies = await this.relay.listReplies(open.id);
   }
 
   async setNoteFilter(filter: NoteFilter): Promise<void> {

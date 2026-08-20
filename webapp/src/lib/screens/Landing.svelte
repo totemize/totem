@@ -11,7 +11,7 @@
 </script>
 
 <div class="screen">
-  <button class="back" onclick={() => store.closeLanding()} aria-label="back"><span class="arr">←</span></button>
+  <button class="back" onclick={() => store.closeLanding()} ><span class="arr">←</span> back</button>
   <div class="pad center" style="padding:24px">
     <div class="mark">T</div>
     <h1 style="font-size:18px">{info?.name ?? "unknown"}</h1>

@@ -5,23 +5,12 @@
   const { store }: { store: Store } = $props();
   const node = $derived(store.state.node);
 
-  /** Latest activity of all kinds, newest first. */
-  const activity = $derived.by(() => {
-    const events: { at: Date; text: string }[] = [];
-    for (const e of store.state.encounterLog) {
-      events.push({
-        at: e.at,
-        text: e.verdict === "failed" ? "a stranger failed the challenge" : `met ${e.peer.name}`,
-      });
-    }
-    for (const n of store.state.notes) {
-      events.push({
-        at: n.at,
-        text: n.own ? "you posted a note" : `${n.author?.name ?? "a guest"} left a note`,
-      });
-    }
-    return events.sort((a, b) => b.at.getTime() - a.at.getTime()).slice(0, 5);
-  });
+  const activity = $derived(store.activity().slice(0, 3));
+
+  function open(event: ReturnType<Store["activity"]>[number]) {
+    if (event.note) void store.openNoteDetail(event.note);
+    else if (event.peer) store.openLanding(event.peer);
+  }
 </script>
 
 <div class="screen">
@@ -32,9 +21,9 @@
   <div class="activity center">
     <div class="activity-title dim">recent activity</div>
     {#each activity as event, i (i)}
-      <div class="tiny">{event.text}, ~{relativeTime(event.at).replace(/\s+/g, "")}</div>
+      <button class="tiny activity-item" onclick={() => open(event)}>{event.text}, ~{relativeTime(event.at).replace(/\s+/g, "")}</button>
     {/each}
-    <button class="see-all" style="align-self:center; padding:10px 0 0" onclick={() => store.show("encounters")}>view all ›</button>
+    <button class="see-all" style="align-self:center; padding:10px 0 0" onclick={() => store.show("activity")}>view all ›</button>
   </div>
   <div class="pets center dim">no pets yet, soon™</div>
   <div class="quick-row">

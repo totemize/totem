@@ -5,7 +5,9 @@
   import Encounters from "$lib/screens/Encounters.svelte";
   import Home from "$lib/screens/Home.svelte";
   import Notes from "$lib/screens/Notes.svelte";
+  import Activity from "$lib/screens/Activity.svelte";
   import Landing from "$lib/screens/Landing.svelte";
+  import NoteDetail from "$lib/screens/NoteDetail.svelte";
   import Peers from "$lib/screens/Peers.svelte";
   import Settings from "$lib/screens/Settings.svelte";
   import Setup from "$lib/screens/Setup.svelte";
@@ -28,6 +30,8 @@
     {:else if screen === "notes"}<Notes {store} />
     {:else if screen === "encounters"}<Encounters {store} />
     {:else if screen === "landing"}<Landing {store} />
+    {:else if screen === "note"}<NoteDetail {store} />
+    {:else if screen === "activity"}<Activity {store} />
     {:else}<Settings {store} />{/if}
     <TabBar {store} />
   {/if}

@@ -60,8 +60,10 @@ export interface BusClient {
  * there (NIP-98-signed writes for owner actions like deletion).
  */
 export interface RelayClient {
+  /** Top-level notes only. */
   listNotes(filter: NoteFilter): Promise<Note[]>;
-  publishNote(content: string): Promise<Note>;
+  listReplies(noteId: string): Promise<Note[]>;
+  publishNote(content: string, replyTo?: string): Promise<Note>;
   /** Owner moderation: publish a deletion for the given event. */
   removeNote(id: string): Promise<void>;
 }
