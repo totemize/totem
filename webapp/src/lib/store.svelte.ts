@@ -164,6 +164,19 @@ export class Store {
     return events.sort((a, b) => b.at.getTime() - a.at.getTime());
   }
 
+  /**
+   * Rename the totem: an owner-authorized bus request. The daemon signs
+   * the kind 0 with the device key and stores it on the local relay —
+   * the owner key only authorizes (NIP-98), it never signs the profile.
+   */
+  async editName(name: string): Promise<void> {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    await this.bus.setName(trimmed);
+    this.state.node = await this.bus.getNode();
+    if (this.state.landing) this.state.landing = { ...this.state.landing, name: trimmed };
+  }
+
   async publishReply(content: string): Promise<void> {
     const open = this.state.openNote;
     if (!open) return;

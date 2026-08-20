@@ -123,6 +123,10 @@ body {
 
 .back { text-align: left; background: none; border: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); cursor: pointer; padding: 16px 20px 12px; display: flex; align-items: center; gap: 6px; }
 .back:hover { color: var(--ink); }
+.subview-bar { display: flex; align-items: center; justify-content: space-between; }
+.subview-bar .edit-link { padding: 16px 20px 12px; }
+.edit-link { background: none; border: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); cursor: pointer; padding: 10px 0 0; }
+.edit-link:hover { color: var(--ink); }
 
 /* advanced disclosure */
 details.advanced { margin-top: 10px; }

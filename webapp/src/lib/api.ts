@@ -47,7 +47,12 @@ export interface BusClient {
    * device (button press / NFC tap). Rejects on timeout.
    */
   claim(ownerNpub: string): Promise<void>;
-  /** Rename the totem (NIP-11 name after the "!Totem " marker). */
+  /**
+   * Rename the totem. An owner-authorized (NIP-98) bus request; the
+   * daemon signs the kind 0 profile event with the DEVICE key and
+   * stores it on the totem's own local relay — the device key never
+   * leaves the device, and nothing is published to other relays.
+   */
   setName(name: string): Promise<void>;
   /** Factory-reset the config: clears the owner allowlist and name. */
   resetConfig(): Promise<void>;

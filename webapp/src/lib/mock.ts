@@ -81,6 +81,8 @@ export class MockBus implements BusClient {
   }
 
   async setName(name: string): Promise<void> {
+    // Real daemon: signs a kind 0 with the device key, stores it on the
+    // local relay. Mock: just remember the name.
     this.name = name;
     storage()?.setItem("mock.name", name);
   }

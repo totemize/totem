@@ -8,13 +8,40 @@
   const peer = $derived(store.state.peers.find((p) => p.info.pubkey === info?.pubkey));
   const notes = $derived(store.state.notes.filter((n) => n.author?.pubkey === info?.pubkey));
   const encounters = $derived(store.state.encounterLog.filter((e) => e.peer.pubkey === info?.pubkey));
+  const isSelf = $derived(info?.pubkey === store.state.node?.pubkey);
+  let editing = $state(false);
+  let editName = $state("");
+
+  function startEdit() {
+    editName = info?.name ?? "";
+    editing = true;
+  }
+
+  async function saveEdit() {
+    await store.editName(editName);
+    editing = false;
+  }
 </script>
 
 <div class="screen">
-  <button class="back" onclick={() => store.closeLanding()} ><span class="arr">←</span> back</button>
+  <div class="subview-bar">
+    <button class="back" onclick={() => store.closeLanding()}><span class="arr">←</span> back</button>
+    {#if isSelf && !editing}
+      <button class="edit-link" onclick={startEdit}>edit</button>
+    {/if}
+  </div>
   <div class="pad center" style="padding:24px">
     <div class="mark">T</div>
-    <h1 style="font-size:18px">{info?.name ?? "unknown"}</h1>
+    {#if editing}
+      <input class="name-input" type="text" bind:value={editName} spellcheck="false"
+        onkeydown={(e) => e.key === "Enter" && saveEdit()}>
+      <div style="display:flex; gap:10px; justify-content:center; margin-top:10px">
+        <button class="btn" onclick={() => (editing = false)}>cancel</button>
+        <button class="btn primary" onclick={saveEdit}>save</button>
+      </div>
+    {:else}
+      <h1 style="font-size:18px">{info?.name ?? "unknown"}</h1>
+    {/if}
     <div class="tiny" style="margin-top:8px">{info ? shortNpub(info.pubkey) : ""} · {info?.relayUrl ?? ""}</div>
     {#if peer?.connected}
       <div class="tiny" style="margin-top:4px">connected · {peer.connected.transport}</div>
