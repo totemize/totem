@@ -84,11 +84,13 @@ domain registry:
 | Type | Kind | Payload / result |
 |------|------|------------------|
 | `totem.status.get` | request | mesh state, peers, contacts, totems met, relay event count, storage |
-| `totem.peers.get` | request | current mesh peers |
+| `totem.config.get` | request | effective operator engagement policy (read-only in v1) |
+| `totem.peers.get` | request | current mesh peers plus cached NIP-11 probe grade |
 | `totem.contacts.add` / `totem.contacts.remove` | request | npub — the single-writer path for kind 3 updates |
 | `totem.peer.seen` | push | fips authenticated a peer |
 | `totem.peer.gone` | push | peer left the mesh (last authenticated npub) |
-| `totem.recognized` | push | challenge verdict passed (peer is a totem) |
+| `totem.peer.candidate` | push | NIP-11 marker + npub claim matched; signed challenge still pending |
+| `totem.recognized` | push | signed challenge verdict passed (peer is a totem) |
 | `totem.befriended` | push | kind 3 published |
 | `totem.sync.started` / `totem.sync.done` | push | peer, direction, event counts |
 

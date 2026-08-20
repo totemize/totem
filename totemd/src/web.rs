@@ -13,7 +13,7 @@ use axum::{
 use serde_json::{json, Value};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
-use crate::{bus, fips, state::AppState};
+use crate::{bus, config, fips, state::AppState};
 
 fn addr_from_env(var: &str, default: &str) -> SocketAddr {
     std::env::var(var)
@@ -23,7 +23,21 @@ fn addr_from_env(var: &str, default: &str) -> SocketAddr {
 }
 
 pub async fn serve() {
-    let st = Arc::new(AppState::new());
+    let cfg = match config::Config::load(&config::Config::path()) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("totemd: {e}");
+            std::process::exit(2);
+        }
+    };
+    tracing::info!(
+        probe = cfg.probe,
+        befriend = ?cfg.befriend,
+        sync = cfg.sync,
+        verdict_ttl_hours = cfg.verdict_ttl_hours,
+        "effective config"
+    );
+    let st = Arc::new(AppState::new(cfg));
     tokio::spawn(fips::watch(st.clone()));
 
     // Loopback only: the bus is kernel-internal by construction.
@@ -32,14 +46,16 @@ pub async fn serve() {
         .route("/bus/events", get(bus_events))
         .with_state(st.clone());
     // Public: becomes the guest page + owner app + /totem/challenge.
-    let web_router = Router::new()
-        .route("/", get(root))
-        .with_state(st.clone());
+    let web_router = Router::new().route("/", get(root)).with_state(st.clone());
 
     let web_addr = addr_from_env("TOTEMD_WEB_ADDR", "0.0.0.0:8080");
     let bus_addr = addr_from_env("TOTEMD_BUS_ADDR", "127.0.0.1:8081");
-    let web_l = tokio::net::TcpListener::bind(web_addr).await.expect("web bind");
-    let bus_l = tokio::net::TcpListener::bind(bus_addr).await.expect("bus bind");
+    let web_l = tokio::net::TcpListener::bind(web_addr)
+        .await
+        .expect("web bind");
+    let bus_l = tokio::net::TcpListener::bind(bus_addr)
+        .await
+        .expect("bus bind");
 
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),

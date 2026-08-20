@@ -121,14 +121,18 @@ on the web-app port, and the event kind is 27235 (NIP-98's) with an added
    "I am totem npub X" can mean without a transport-authenticated key, and
    impersonating a *specific* totem remains impossible without its key.
    (Checklist step 2 above.)
-5. On a positive verdict, the totem proceeds with totem behavior: open the
-   relay websocket, run sync (`03-network.md`), and update its kind 3 contact
-   list with the peer's npub.
+5. On a positive verdict, the totem applies its operator policy independently:
+   it MAY open the relay websocket and run sync (`03-network.md`), and it MAY
+   update its kind 3 contact list with the peer's npub. Neither action is a
+   prerequisite for the other (`10-control-plane.md`).
 
 The same probe + challenge works on the WiFi AP path: a totem joining another
 totem's AP as a station recognizes it identically.
 
-Recognition verdicts are per-encounter; nothing is cached across encounters.
+Signed recognition verdicts are per-encounter and are never cached across
+encounters. The unsigned NIP-11 prefilter grade MAY be cached per npub to
+avoid repeatedly probing ordinary FIPS peers; its expiry policy lives in
+`10-control-plane.md`, and it never replaces the challenge.
 
 ### Why not alternatives
 

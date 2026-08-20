@@ -7,7 +7,9 @@
 
 mod bus;
 mod cli;
+mod config;
 mod fips;
+mod probe;
 mod state;
 mod web;
 

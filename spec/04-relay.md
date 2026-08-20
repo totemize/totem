@@ -26,7 +26,9 @@ Per `03-network.md`, sync uses NIP-77 over the same websocket, followed by
 REQ/EVENT transfers. The **flatness rule** applies: a totem connecting to
 another totem's relay uses it exactly the way a human user's client does —
 same ports, same protocol, no privileged peer-to-peer path. A totem is simply
-a client whose npub is on the other's contact list.
+another relay client. Sync does **not** require either device to publish the
+other in kind 3: negentropy exchanges relay data, while friendship is a
+separate social claim controlled by each operator (`10-control-plane.md`).
 
 ## Permission and moderation layer
 
@@ -47,14 +49,16 @@ AP guests) are tracked in `09-open-questions.md`.
   layer, so policy lives beside the relay instead of forking it.
 
 Other conforming relays are acceptable; strfry is what we prototype against.
+The bench deployment uses strfry's `router` branch (`5e81e24`), which adds the
+`mesh` commands to the same conforming relay; those commands are a reference-
+deployment detail, not part of the Totem relay protocol.
 
 ## NIP-11 declaration
 
 The relay serves its NIP-11 info document over HTTP at the standard relay
 port. The totem marker and npub ride **standard NIP-11 fields**
 (`07-conventions.md`): no Totem-specific relay customization is required —
-any conforming relay whose operator can set `info.name` and `info.pubkey`
-can
+any conforming relay whose operator can set `info.name` and `info.pubkey` can
 declare totemhood. This document is the recognition surface used by
 `02-identity.md`; the challenge itself is served by the control plane on
 the web port (`10-control-plane.md`), so the relay stays a stock, unproxied

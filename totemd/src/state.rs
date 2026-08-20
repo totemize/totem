@@ -3,19 +3,19 @@
 //! Pushes are lossy by design (`07-conventions.md`): consumers reconcile
 //! against `totem.status.get` on (re)connect.
 
-use std::{
-    collections::HashMap,
-    sync::Mutex,
-    time::Instant,
-};
+use std::{collections::HashMap, sync::Mutex, time::Instant};
 
 use serde_json::Value;
 use tokio::sync::broadcast;
 
-use crate::fips::PeerInfo;
+use crate::{config::Config, fips::PeerInfo, probe::ProbeVerdicts};
 
 pub struct AppState {
     pub started: Instant,
+    /// Effective operator policy (`10-control-plane.md`); read-only.
+    pub config: Config,
+    /// NIP-11 probe verdicts per peer npub.
+    pub verdicts: ProbeVerdicts,
     /// Fan-out for unsolicited `totem.*` pushes; SSE subscribers tap in.
     pub tx: broadcast::Sender<Value>,
     /// Push counters by type — surfaced via `totem.status.get`.
@@ -41,10 +41,12 @@ struct FipsHealth {
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(config: Config) -> Self {
         let (tx, _) = broadcast::channel(256);
         Self {
             started: Instant::now(),
+            config,
+            verdicts: ProbeVerdicts::default(),
             tx,
             counters: Mutex::new(HashMap::new()),
             peers: Mutex::new(HashMap::new()),
@@ -56,7 +58,12 @@ impl AppState {
     /// Publish an unsolicited push; silently dropped when no subscriber.
     pub fn push(&self, msg: Value) {
         if let Some(t) = msg.get("type").and_then(Value::as_str) {
-            *self.counters.lock().unwrap().entry(t.to_string()).or_insert(0) += 1;
+            *self
+                .counters
+                .lock()
+                .unwrap()
+                .entry(t.to_string())
+                .or_insert(0) += 1;
         }
         let _ = self.tx.send(msg);
     }
@@ -73,11 +80,22 @@ impl AppState {
         *self.peers.lock().unwrap() = peers;
     }
 
-    /// Peers sorted by first arrival, then npub — stable output for the bus.
-    pub fn peers_snapshot(&self) -> Vec<PeerInfo> {
+    /// Peers sorted by first arrival, then npub — stable output for the bus —
+    /// joined with their probe verdicts (null = not yet probed).
+    pub fn peers_snapshot(&self) -> Vec<Value> {
         let mut v: Vec<PeerInfo> = self.peers.lock().unwrap().values().cloned().collect();
         v.sort_by(|a, b| a.first_seen.cmp(&b.first_seen).then(a.npub.cmp(&b.npub)));
-        v
+        v.into_iter()
+            .map(|p| {
+                let mut j = serde_json::to_value(&p).unwrap_or(Value::Null);
+                j["probe_verdict"] = self
+                    .verdicts
+                    .get_freshness(&p.npub)
+                    .map(|(verdict, _)| Value::from(verdict.as_str()))
+                    .unwrap_or(Value::Null);
+                j
+            })
+            .collect()
     }
 
     pub fn set_mesh(&self, own_npub: String, size: u64) {
@@ -99,7 +117,9 @@ impl AppState {
         let h = self.fips.lock().unwrap();
         let m = self.mesh.lock().unwrap();
         let age = |t: Option<Instant>| {
-            t.map(|i| i.elapsed().as_secs()).map(Value::from).unwrap_or(Value::Null)
+            t.map(|i| i.elapsed().as_secs())
+                .map(Value::from)
+                .unwrap_or(Value::Null)
         };
         serde_json::json!({
             "connected": h.ok,

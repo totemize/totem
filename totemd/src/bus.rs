@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 
 use crate::state::AppState;
 
+#[allow(clippy::needless_pass_by_value)]
 pub fn handle(msg: Value, st: &AppState) -> Value {
     let typ = msg
         .get("type")
@@ -22,18 +23,22 @@ pub fn handle(msg: Value, st: &AppState) -> Value {
             out["status"] = json!({
                 "version": env!("CARGO_PKG_VERSION"),
                 "uptime_secs": st.started.elapsed().as_secs(),
+                "config": serde_json::to_value(&st.config).unwrap_or(Value::Null),
                 "fips": st.fips_json(),
                 "peers": st.peers_snapshot().len(),
                 "events": st.counters(),
             });
         }
+        "totem.config.get" => {
+            out["config"] = serde_json::to_value(&st.config).unwrap_or(Value::Null);
+        }
         "totem.peers.get" => {
-            out["peers"] = serde_json::to_value(st.peers_snapshot())
-                .unwrap_or_else(|_| json!([]));
+            out["peers"] = serde_json::to_value(st.peers_snapshot()).unwrap_or_else(|_| json!([]));
         }
         "totem.contacts.add" | "totem.contacts.remove" => {
             out["ok"] = json!(false);
-            out["error"] = json!("contacts writer not implemented (kind 3 single writer lands with net code)");
+            out["error"] =
+                json!("contacts writer not implemented (kind 3 single writer lands with net code)");
         }
         _ => {
             out["ok"] = json!(false);
@@ -50,17 +55,27 @@ mod tests {
 
     #[test]
     fn status_round_trip() {
-        let st = AppState::new();
+        let st = AppState::new(crate::config::Config::default());
         let r = handle(json!({"type": "totem.status.get", "id": "a1"}), &st);
         assert_eq!(r["type"], "totem.status.get.result");
         assert_eq!(r["id"], "a1");
         assert_eq!(r["ok"], true);
         assert_eq!(r["status"]["version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(r["status"]["config"]["befriend"], "ask");
+    }
+
+    #[test]
+    fn config_get_reports_policy() {
+        let st = AppState::new(crate::config::Config::default());
+        let r = handle(json!({"type": "totem.config.get"}), &st);
+        assert_eq!(r["config"]["probe"], true);
+        assert_eq!(r["config"]["verdict_ttl_hours"], 24);
+        assert_eq!(r["config"]["befriend"], "ask");
     }
 
     #[test]
     fn unknown_type_is_an_error_result() {
-        let st = AppState::new();
+        let st = AppState::new(crate::config::Config::default());
         let r = handle(json!({"type": "totem.nope", "id": "a2"}), &st);
         assert_eq!(r["type"], "totem.nope.result");
         assert_eq!(r["ok"], false);
@@ -69,7 +84,7 @@ mod tests {
 
     #[test]
     fn push_counts_by_type() {
-        let st = AppState::new();
+        let st = AppState::new(crate::config::Config::default());
         st.push(json!({"type": "totem.peer.seen"}));
         st.push(json!({"type": "totem.peer.seen"}));
         st.push(json!({"type": "totem.sync.done"}));
@@ -82,7 +97,7 @@ mod tests {
     async fn peers_get_returns_watcher_state() {
         use crate::fips::PeerInfo;
         use std::collections::HashMap;
-        let st = AppState::new();
+        let st = AppState::new(crate::config::Config::default());
         let mut m = HashMap::new();
         m.insert(
             "npub1aa".into(),
@@ -95,10 +110,13 @@ mod tests {
             },
         );
         st.set_peers(m);
+        st.verdicts
+            .set("npub1aa", crate::probe::ProbeVerdict::Candidate);
         let r = handle(json!({"type": "totem.peers.get", "id": "p1"}), &st);
         assert_eq!(r["type"], "totem.peers.get.result");
         assert_eq!(r["peers"][0]["npub"], "npub1aa");
         assert_eq!(r["peers"][0]["ipv6_addr"], "fd00::1");
+        assert_eq!(r["peers"][0]["probe_verdict"], "candidate");
         assert_eq!(r["status"], serde_json::Value::Null); // no stale fields
     }
 }

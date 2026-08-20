@@ -42,6 +42,34 @@ splits across the two servers; both ports are pinned in `07-conventions.md`.
 | **Device manager client** | A client of the local device-manager API (`src/totem/api` — display, NFC, storage, network) for hardware actuation (e.g. show sync state); device events are surfaced on the bus |
 | **Encounter log** | Append-only JSONL of verdicts and syncs — the substrate for future encounter records (`09-open-questions.md`) and the source of stats |
 
+## Configuration and engagement policy
+
+Operator policy is read at startup from `/etc/totemd/config.toml`. A missing
+file uses the defaults below; a present but malformed file is a startup error (silently
+running the wrong social policy is worse than no daemon). FIPS rendezvous and
+transport remain in `/etc/fips/fips.yaml`; totemd config controls only what
+happens after FIPS reports an authenticated peer.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `net.probe` | `true` | Run the read-only NIP-11 prefilter on peers |
+| `net.verdict_ttl_hours` | `24` | Minimum delay before re-probing a non-totem or unreachable peer |
+| `policy.befriend` | `"ask"` | `auto`, `ask`, or `never` publish the peer in kind 3 |
+| `policy.sync` | `true` | Opportunistically sync with recognized totems |
+
+The engagement ladder is: FIPS peer seen → NIP-11 candidate → signed
+challenge → recognized totem. **Sync and friendship are independent after
+recognition.** Sync exchanges public relay data; kind 3 is a published social
+claim. `ask` holds a pending request for the owner surface; demo units MAY set
+`auto`, while `ask` is the conservative factory default.
+
+The cheap NIP-11 prefilter is graded per npub: candidates stay cached for the
+daemon lifetime; non-totem/unreachable results expire after the configured
+TTL so a peer that later installs totemd can be discovered. This cache never
+replaces authentication: signed challenge verdicts remain per-encounter and
+are not cached across encounters (`02-identity.md`). Persisted grades and
+escalating backoff are deferred until measurements justify them.
+
 ## Owner authentication
 
 NIP-98 (`06-interaction.md`) against an administrator npub allowlist in the

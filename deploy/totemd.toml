@@ -1,0 +1,16 @@
+# /etc/totemd/config.toml — operator policy.
+# FIPS rendezvous/transports live in /etc/fips/fips.yaml; these switches
+# govern what totemd does after FIPS reports an authenticated peer.
+
+[net]
+probe = true
+# Re-probe a non-totem/unreachable peer at most once per this window.
+# Positive candidates stay cached for the daemon lifetime; the signed
+# recognition challenge still runs per encounter.
+verdict_ttl_hours = 24
+
+[policy]
+# Published kind-3 relationship: "auto", "ask", or "never".
+befriend = "ask"
+# Opportunistic relay sync is independent of friendship.
+sync = true

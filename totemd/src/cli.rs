@@ -29,14 +29,19 @@ fn show(v: Value) {
 pub fn run(args: &[String]) {
     match args.first().map(String::as_str) {
         Some("status") => show(post(json!({"type": "totem.status.get", "id": "1"}))),
+        Some("config") => show(post(json!({"type": "totem.config.get", "id": "1"}))),
         Some("peers") => show(post(json!({"type": "totem.peers.get", "id": "1"}))),
         // `totemctl call <type> [json payload]` — escape hatch for any
         // registered (or future) message.
         Some("call") => {
-            let typ = args.get(1).map(String::as_str).map(str::to_string).unwrap_or_else(|| {
-                eprintln!("usage: totemctl call <type> [json payload]");
-                std::process::exit(2);
-            });
+            let typ = args
+                .get(1)
+                .map(String::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(|| {
+                    eprintln!("usage: totemctl call <type> [json payload]");
+                    std::process::exit(2);
+                });
             let payload: Value = match args.get(2) {
                 Some(p) => serde_json::from_str(p).unwrap_or_else(|e| {
                     eprintln!("totemctl: invalid JSON payload: {e}");
@@ -72,7 +77,7 @@ pub fn run(args: &[String]) {
         }
         other => {
             eprintln!(
-                "usage: totemctl status | peers | events | call <type> [json payload]\nunknown command: {}",
+                "usage: totemctl status | config | peers | events | call <type> [json payload]\nunknown command: {}",
                 other.unwrap_or("(none)")
             );
             std::process::exit(2);

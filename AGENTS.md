@@ -99,6 +99,19 @@ ssh motown.fips          # via FIPS mesh
   strfry upgrade understands it. Footgun: golpe takes the LAST duplicate
   key — set the stock `pubkey = ""` line, don't add a second one.
 
+### totemd (all three bench units)
+
+- Standing install: `/usr/local/bin/totemd`, `totemctl` symlink,
+  `totemd.service` enabled; deploy/update with `deploy/flash.sh [devices]`.
+- Operator policy: `/etc/totemd/config.toml` (created only when absent —
+  flash never clobbers edits); restart totemd after changes.
+
+```bash
+ssh totem 'totemctl status'  # fips health + effective policy + counters
+ssh totem 'totemctl peers'   # direct peers + cached NIP-11 probe grade
+ssh totem 'totemctl config'  # effective engagement policy
+```
+
 ### Device inspection conventions
 
 ```bash
