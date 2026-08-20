@@ -53,8 +53,9 @@ def test_splash_is_large_and_centered():
     assert bounds is not None
     left, top, right, bottom = bounds
     assert right - left >= 100
-    assert abs((left + right) / 2 - image.width / 2) <= 2
-    assert abs((top + bottom) / 2 - image.height / 2) <= 2
+    # Font rasterization varies by a pixel across Pillow/platform builds.
+    assert abs((left + right) / 2 - image.width / 2) <= 3
+    assert abs((top + bottom) / 2 - image.height / 2) <= 3
 
 
 def test_service_frame_changes_when_a_checkmark_appears():
