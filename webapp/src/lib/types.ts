@@ -17,6 +17,7 @@ export interface NodeInfo {
   name: string; // NIP-11 name minus the "!Totem " marker prefix
   relayUrl: string; // ws:// endpoint of the node's relay
   picture?: string; // kind 0 picture URL
+  about?: string; // kind 0 about text
 }
 
 export type Health = "good" | "degraded" | "down";

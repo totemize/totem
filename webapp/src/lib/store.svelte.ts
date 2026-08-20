@@ -169,10 +169,14 @@ export class Store {
    * the kind 0 with the device key and stores it on the local relay —
    * the owner key only authorizes (NIP-98), it never signs the profile.
    */
-  async editProfile(name: string, picture: string): Promise<void> {
+  async editProfile(name: string, picture: string, about: string): Promise<void> {
     const trimmed = name.trim();
     if (!trimmed) return;
-    await this.bus.setProfile({ name: trimmed, picture: picture.trim() || undefined });
+    await this.bus.setProfile({
+      name: trimmed,
+      picture: picture.trim() || undefined,
+      about: about.trim() || undefined,
+    });
     this.state.node = await this.bus.getNode();
     if (this.state.node) this.state.landing = this.state.node;
   }

@@ -12,15 +12,17 @@
   let editing = $state(false);
   let editName = $state("");
   let editPicture = $state("");
+  let editAbout = $state("");
 
   function startEdit() {
     editName = info?.name ?? "";
     editPicture = info?.picture ?? "";
+    editAbout = info?.about ?? "";
     editing = true;
   }
 
   async function saveEdit() {
-    await store.editProfile(editName, editPicture);
+    await store.editProfile(editName, editPicture, editAbout);
     editing = false;
   }
 </script>
@@ -56,6 +58,10 @@
             onkeydown={(e) => e.key === "Enter" && saveEdit()}>
         </div>
       </div>
+      <div class="edit-field">
+        <span class="edit-label">about</span>
+        <textarea class="name-input" rows="3" bind:value={editAbout} style="resize:none; text-align:left"></textarea>
+      </div>
       <div class="save-row">
         <button class="btn primary" onclick={saveEdit}>save</button>
       </div>
@@ -68,6 +74,9 @@
       <h1 style="font-size:18px">{info?.name ?? "unknown"}</h1>
     {/if}
     <div class="tiny" style="margin-top:8px">{info ? shortNpub(info.pubkey) : ""} · {info?.relayUrl ?? ""}</div>
+    {#if info?.about && !editing}
+      <div class="dim about" style="margin-top:12px">{info.about}</div>
+    {/if}
     {#if peer?.connected}
       <div class="tiny" style="margin-top:4px">connected · {peer.connected.transport}</div>
     {/if}

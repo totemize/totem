@@ -43,6 +43,7 @@ export class MockBus implements BusClient {
   private claimed = storage()?.getItem("mock.claimed") === "1";
   private name = storage()?.getItem("mock.name") ?? "totem-a4f2";
   private picture = storage()?.getItem("mock.picture") ?? undefined;
+  private about = storage()?.getItem("mock.about") ?? undefined;
 
   private peers: Peer[] = [
     { info: harbor, relation: { kind: "request" }, lastMet: minutes(35), connected: { transport: "fips" } },
@@ -58,7 +59,7 @@ export class MockBus implements BusClient {
   };
 
   async getNode(): Promise<NodeInfo> {
-    return { ...self, name: this.name, picture: this.picture };
+    return { ...self, name: this.name, picture: this.picture, about: this.about };
   }
 
   async claim(_ownerNpub: string): Promise<void> {
@@ -81,7 +82,7 @@ export class MockBus implements BusClient {
     storage()?.setItem("mock.claimed", "1");
   }
 
-  async setProfile(profile: { name: string; picture?: string }): Promise<void> {
+  async setProfile(profile: { name: string; picture?: string; about?: string }): Promise<void> {
     // Real daemon: signs a kind 0 with the device key, stores it on the
     // local relay. Mock: just remember it.
     this.name = profile.name;
@@ -89,6 +90,9 @@ export class MockBus implements BusClient {
     this.picture = profile.picture || undefined;
     if (profile.picture) storage()?.setItem("mock.picture", profile.picture);
     else storage()?.removeItem("mock.picture");
+    this.about = profile.about || undefined;
+    if (profile.about) storage()?.setItem("mock.about", profile.about);
+    else storage()?.removeItem("mock.about");
   }
 
   async resetConfig(): Promise<void> {
