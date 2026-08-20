@@ -1,4 +1,4 @@
-"""Compatibility alias for Waveshare 2.13-inch V2/Rev 2.1 hardware."""
+"""Compatibility alias for the Waveshare 2.13-inch V2 controller driver."""
 
 from totem.devices.display.drivers.waveshare_2in13_v2 import Driver
 

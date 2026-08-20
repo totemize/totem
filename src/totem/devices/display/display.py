@@ -41,7 +41,7 @@ EINK_DRIVERS = DriverRegistry(
             "waveshare_2in13_v1",
             "totem.devices.display.drivers.waveshare_2in13_v1",
         ),
-        # Historical alias retained for deployed Rev 2.1 hardware.
+        # Historical name retained as an alias for the V2 controller driver.
         DriverSpec("waveshare_2in13", "totem.devices.display.drivers.waveshare_2in13"),
         DriverSpec(
             "waveshare_2in13_v2",

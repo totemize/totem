@@ -2,6 +2,8 @@
 
 import importlib
 import inspect
+import sys
+from types import ModuleType
 
 import pytest
 from PIL import Image
@@ -24,7 +26,10 @@ DRIVERS = (
     ("totem.devices.display.drivers.waveshare_2in13_v3", EInkDeviceInterface),
     ("totem.devices.display.drivers.waveshare_2in13_v4", EInkDeviceInterface),
     ("totem.devices.display.drivers.waveshare_2in13_pi5", EInkDeviceInterface),
-    ("totem.devices.display.drivers.waveshare_2in13_pi5_sw_cs", EInkDeviceInterface),
+    (
+        "totem.devices.display.drivers.waveshare_2in13_pi5_sw_cs",
+        EInkDeviceInterface,
+    ),
     ("totem.devices.display.drivers.waveshare_3in7", EInkDeviceInterface),
     ("totem.devices.display.drivers.waveshare_3in7_pi5", EInkDeviceInterface),
     ("totem.devices.nfc.drivers.acr122", NFCDeviceInterface),
@@ -101,7 +106,7 @@ def test_waveshare_2in13_v4_uses_native_framebuffer_geometry():
     driver.close()
 
 
-def test_waveshare_2in13_v2_uses_rev_2_1_pixel_mapping():
+def test_waveshare_2in13_v2_uses_landscape_pixel_mapping():
     from totem.devices.display.drivers.waveshare_2in13_v2 import Driver
 
     driver = Driver()
@@ -176,30 +181,251 @@ def test_waveshare_2in13_refresh_requires_busy_assertion():
             require_busy=True,
             busy_assert_timeout=0,
         )
+    assert driver.last_refresh_confirmed_by_busy is False
 
 
-def test_waveshare_2in13_v2_does_not_require_busy_leading_edge(monkeypatch):
+def test_waveshare_2in13_required_busy_cycle_records_confirmation():
     from totem.devices.display.drivers.waveshare_2in13_v2 import Driver
 
     driver = Driver()
+    readings = iter((1, 1, 0))
+
+    class BusyGPIO:
+        HIGH = 1
+
+        @staticmethod
+        def input(pin):
+            return next(readings)
+
+    driver.GPIO = BusyGPIO
+    driver.wait_until_idle(
+        timeout=1,
+        poll_interval=0,
+        require_busy=True,
+    )
+
+    assert driver.CONFIRMS_REFRESH_WITH_BUSY is True
+    assert driver.last_refresh_confirmed_by_busy is True
+
+
+def test_waveshare_2in13_v4_waits_for_complete_refresh_cycle(monkeypatch):
+    from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
+
+    driver = Driver()
+    commands = []
+    data = []
     waits = []
-    sleeps = []
-    monkeypatch.setattr(driver, "send_command", lambda command: None)
-    monkeypatch.setattr(driver, "send_data", lambda data: None)
+    monkeypatch.setattr(driver, "send_command", commands.append)
+    monkeypatch.setattr(driver, "send_data", data.append)
     monkeypatch.setattr(
         driver,
-        "wait_until_idle",
-        lambda **kwargs: waits.append(kwargs),
-    )
-    monkeypatch.setattr(
-        "totem.devices.display.drivers.waveshare_2in13_v2.time.sleep",
-        lambda seconds: sleeps.append(seconds),
+        "wait_for_refresh",
+        lambda **kwargs: waits.append(kwargs) or True,
     )
 
     driver._update()
 
-    assert waits == [{}]
-    assert sleeps == [driver.REFRESH_SETTLE_SECONDS]
+    assert commands == [
+        driver.DISPLAY_UPDATE_CONTROL_2,
+        driver.MASTER_ACTIVATION,
+    ]
+    assert data == [0xF7]
+    assert waits == [
+        {
+            "busy_assert_timeout": driver.BUSY_ASSERT_TIMEOUT_SECONDS,
+            "fallback_timeout": driver.REFRESH_FALLBACK_SECONDS,
+        }
+    ]
+    assert driver.last_refresh_confirmed_by_busy is True
+
+
+def test_waveshare_refresh_wait_catches_late_busy_assertion(monkeypatch):
+    from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
+
+    driver = Driver()
+    readings = iter((0, 0, 1, 1, 0))
+
+    class BusyGPIO:
+        HIGH = 1
+
+        @staticmethod
+        def input(pin):
+            return next(readings)
+
+    sleeps = []
+    driver.GPIO = BusyGPIO
+    monkeypatch.setattr(
+        "totem.devices.display.drivers._waveshare_2in13_base.time.sleep",
+        sleeps.append,
+    )
+
+    confirmed = driver.wait_for_refresh(
+        poll_interval=0,
+        busy_assert_timeout=1,
+        fallback_timeout=30,
+    )
+
+    assert confirmed is True
+    assert 30 not in sleeps
+
+
+def test_waveshare_refresh_wait_holds_power_when_busy_is_not_observed(
+    monkeypatch,
+):
+    from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
+
+    driver = Driver()
+
+    class IdleGPIO:
+        HIGH = 1
+
+        @staticmethod
+        def input(pin):
+            return 0
+
+    sleeps = []
+    driver.GPIO = IdleGPIO
+    monkeypatch.setattr(
+        "totem.devices.display.drivers._waveshare_2in13_base.time.sleep",
+        sleeps.append,
+    )
+
+    confirmed = driver.wait_for_refresh(
+        busy_assert_timeout=0,
+        fallback_timeout=30,
+    )
+
+    assert confirmed is False
+    assert sleeps == [30]
+
+
+def test_gpiozero_facade_claims_drives_reads_and_releases_pins(monkeypatch):
+    from totem.devices.display.drivers._waveshare_2in13_base import GPIOZeroGPIO
+
+    events = []
+
+    class FakeDevice:
+        def __init__(self, pin, **kwargs):
+            self.pin = pin
+            self.value = 1
+            events.append(("claim", pin, kwargs))
+
+        def on(self):
+            events.append(("on", self.pin))
+
+        def off(self):
+            events.append(("off", self.pin))
+
+        def close(self):
+            events.append(("close", self.pin))
+
+    gpiozero = ModuleType("gpiozero")
+    gpiozero.LED = FakeDevice
+    gpiozero.Button = FakeDevice
+    gpiozero.DigitalInputDevice = FakeDevice
+    monkeypatch.setitem(sys.modules, "gpiozero", gpiozero)
+
+    gpio = GPIOZeroGPIO()
+    gpio.setup(17, gpio.OUT)
+    gpio.output(17, gpio.HIGH)
+    gpio.output(17, gpio.LOW)
+    gpio.setup(24, gpio.IN, pull_up_down=gpio.PUD_DOWN)
+
+    assert gpio.input(24) == 1
+    gpio.cleanup()
+    assert ("claim", 24, {"pull_up": False}) in events
+    assert ("on", 17) in events
+    assert ("off", 17) in events
+    assert ("close", 17) in events
+    assert ("close", 24) in events
+
+
+def test_gpiozero_claim_failure_falls_back_to_rpi_gpio(monkeypatch):
+    from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
+
+    class FailingGPIO:
+        BCM = 0
+        OUT = 2
+        IN = 3
+        HIGH = 1
+        PUD_DOWN = 21
+
+        def __init__(self):
+            self.cleaned = False
+
+        @staticmethod
+        def setwarnings(enabled):
+            pass
+
+        @staticmethod
+        def setmode(mode):
+            pass
+
+        @staticmethod
+        def setup(pin, mode, **kwargs):
+            raise RuntimeError("gpiochip unavailable")
+
+        def cleanup(self):
+            self.cleaned = True
+
+    class WorkingGPIO:
+        BCM = 0
+        OUT = 2
+        IN = 3
+        HIGH = 1
+        LOW = 0
+        PUD_DOWN = 21
+
+        def __init__(self):
+            self.outputs = []
+
+        @staticmethod
+        def setwarnings(enabled):
+            pass
+
+        @staticmethod
+        def setmode(mode):
+            pass
+
+        @staticmethod
+        def setup(pin, mode, **kwargs):
+            pass
+
+        def output(self, pin, value):
+            self.outputs.append((pin, value))
+
+        @staticmethod
+        def cleanup(pin=None):
+            pass
+
+    class FakeSPI:
+        def __init__(self):
+            self.opened = None
+
+        def open(self, bus, device):
+            self.opened = (bus, device)
+
+        @staticmethod
+        def close():
+            pass
+
+    failing = FailingGPIO()
+    fallback = WorkingGPIO()
+    spi = FakeSPI()
+    driver = Driver()
+    driver.GPIO = failing
+    driver.gpio_backend = "gpiozero"
+    driver.SPI = spi
+    driver.hardware_available = True
+    monkeypatch.setattr(driver, "_load_rpi_gpio", lambda: fallback)
+
+    driver._initialize_transport()
+
+    assert failing.cleaned is True
+    assert driver.GPIO is fallback
+    assert driver.gpio_backend == "RPi.GPIO"
+    assert (driver.power_pin, fallback.HIGH) in fallback.outputs
+    assert spi.opened == (0, 0)
 
 
 @pytest.mark.parametrize(

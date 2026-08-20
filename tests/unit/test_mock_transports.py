@@ -23,6 +23,23 @@ def test_display_manager_uses_explicit_mock_transport():
     assert manager.eink_device.driver.last_image == b"frame"
 
 
+def test_display_manager_uses_configured_driver(monkeypatch):
+    monkeypatch.setenv("TOTEM_EINK_DRIVER", "mock_eink")
+
+    manager = DisplayManager(allow_mock=True)
+
+    assert manager.driver_name == "mock_eink"
+    assert manager.eink_device.driver.is_mock
+
+
+def test_explicit_display_driver_overrides_environment(monkeypatch):
+    monkeypatch.setenv("TOTEM_EINK_DRIVER", "not-a-driver")
+
+    manager = DisplayManager("mock_eink", allow_mock=True)
+
+    assert manager.driver_name == "mock_eink"
+
+
 def test_display_manager_decodes_encoded_images():
     manager = DisplayManager("mock_eink", allow_mock=True)
     encoded = io.BytesIO()

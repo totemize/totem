@@ -30,4 +30,4 @@ working environment.
 | Date | Summary |
 |------|---------|
 | [2026-08-19](journal/2026-08-19.md) | FIPS bring-up triage; metot onboarding; mesh and NIP-77 sync benchmarks; versioned E-ink drivers deployed to the Pi Zero; display blocked by electrically floating BUSY/FPC path |
-| [2026-08-20](journal/2026-08-20.md) | Rev 2.1 display compatibility aligned with the known-working Pwnagotchi V2 path; exact text sent through `DisplayManager`, awaiting visual confirmation |
+| [2026-08-20](journal/2026-08-20.md) | Corrected the display target to `metot`; identified the panel as V4; deployed source-controlled manager configuration and camera-verified two fresh screen updates |

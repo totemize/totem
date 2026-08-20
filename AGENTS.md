@@ -27,6 +27,7 @@ journal into this file or the specs; the journal keeps the story.
 ### totem (test unit #1)
 
 - Raspberry Pi (armv6l, Raspbian 13) at `192.168.8.136`.
+- No e-ink display is attached. Do not use this host for display tests.
 - FIPS npub: `npub1eu0clm0nsxwavcsj07at3sy7v52tuwgw4qpeqsyxgkeqg7krc7ps77c20q`
 - Runs `fips.service` (FIPS mesh daemon, binary at `/usr/local/bin/fips`,
   config at `/etc/fips/fips.yaml`, identity key `/etc/fips/fips.key` —
@@ -51,6 +52,9 @@ ssh npub1eu0clm0nsxwavcsj07at3sy7v52tuwgw4qpeqsyxgkeqg7krc7ps77c20q.fips
 ### metot (test unit #2)
 
 - Host `metot` at `192.168.8.239`, same image/user/pass scheme as totem.
+- Raspberry Pi Zero 2 W with PiSugar2 and a Waveshare 2.13-inch HAT.
+- The HAT PCB is Rev 2.1; the attached panel/controller uses the V4 driver
+  (`waveshare_2in13_v4`). This is the only display test unit.
 - FIPS npub: `npub1j0adney3t3tuvcaz6wv6eahpkhfrl8rwhry58n2u4njuxz0j04lsrudpf6`
 
 ```bash

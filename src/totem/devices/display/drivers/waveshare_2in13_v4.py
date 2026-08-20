@@ -15,6 +15,8 @@ class Driver(Waveshare2in13Base):
     RESET_LOW_SECONDS = 0.002
     SLEEP_VALUE = 0x01
     TEMPERATURE_SENSOR_CONTROL = 0x18
+    BUSY_ASSERT_TIMEOUT_SECONDS = 1.0
+    REFRESH_FALLBACK_SECONDS = 30.0
 
     def init(self):
         logger.info("Initializing Waveshare 2.13in e-Paper HAT V4")
@@ -49,7 +51,10 @@ class Driver(Waveshare2in13Base):
         self.send_command(self.DISPLAY_UPDATE_CONTROL_2)
         self.send_data(0xF7)
         self.send_command(self.MASTER_ACTIVATION)
-        self.wait_until_idle(require_busy=True)
+        self.last_refresh_confirmed_by_busy = self.wait_for_refresh(
+            busy_assert_timeout=self.BUSY_ASSERT_TIMEOUT_SECONDS,
+            fallback_timeout=self.REFRESH_FALLBACK_SECONDS,
+        )
 
     def _image_buffer(self, image: Image.Image) -> bytearray:
         image = image.convert("1")

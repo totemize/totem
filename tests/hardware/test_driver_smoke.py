@@ -25,11 +25,18 @@ def test_display_driver_initializes():
     from totem.devices.display.display import EInk
 
     display = EInk(driver_name)
-    display.initialize()
-    assert display.driver.health().operational
-    # Initialization alone cannot distinguish a connected idle panel from a
-    # floating BUSY line. A refresh must assert and release BUSY.
-    display.clear()
+    try:
+        display.initialize()
+        assert display.driver.health().operational
+        # Initialization alone cannot distinguish a connected idle panel from
+        # a floating BUSY line. A refresh must assert and release BUSY.
+        display.clear()
+        if getattr(display.driver, "CONFIRMS_REFRESH_WITH_BUSY", False):
+            assert display.driver.last_refresh_confirmed_by_busy is True, (
+                "display refresh was not confirmed by BUSY"
+            )
+    finally:
+        display.driver.close()
 
 
 def test_nfc_driver_initializes():

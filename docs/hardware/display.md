@@ -18,7 +18,9 @@ Totem supports these registered display drivers:
 Set `EINK_DISPLAY_TYPE` to `2in13_v1`, `2in13_v2`, `2in13_v3`,
 `2in13_v4`, or `3in7` when using
 auto-detection (`2in13` remains a V2 alias). For
-hardware smoke tests, set `TOTEM_EINK_DRIVER` to an exact registered name.
+normal manager/service operation and hardware smoke tests, set
+`TOTEM_EINK_DRIVER` to an exact registered name. An explicit constructor
+argument takes precedence over the environment.
 
 The versioned drivers use Waveshare's standard HAT assignments: reset GPIO17,
 data/command GPIO25, busy GPIO24, power GPIO18, and SPI0 CE0. Pi 5 drivers use
@@ -32,9 +34,14 @@ Render text through the manager with an explicit revision:
 
 ```bash
 PYTHONPATH=src python examples/display_text.py \
-  --driver waveshare_2in13_v3 \
+  --driver waveshare_2in13_v4 \
   --text $'hello world\n<3 totem'
 ```
+
+`metot` uses the checked-in [`deploy/devices/metot.env`](../../deploy/devices/metot.env)
+profile. Install that file as `/etc/totem/totem.env`; the systemd unit reads it
+on startup. SPI0 must also be enabled persistently in the Raspberry Pi boot
+configuration (`dtparam=spi=on`).
 
 Mock behavior must be explicit:
 
