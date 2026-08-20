@@ -20,7 +20,7 @@ export type Screen =
   | "note"
   | "activity";
 
-export type SetupStep = "welcome" | "presence" | "name" | "public";
+export type SetupStep = "welcome" | "identity" | "presence" | "name" | "public";
 
 export interface State {
   screen: Screen;
@@ -216,20 +216,21 @@ export class Store {
   }
 
   /**
-   * Claim the totem. The owner key is generated on the device for now
-   * (no external signer); the claim is bound by physical presence.
+   * Sign in with a remote signer ("bunker", NIP-46) or a browser
+   * extension (NIP-07): the owner key signs the admin events that
+   * claim and control the totem. Mocked: both resolve a fake identity.
    */
-  async setupClaim(): Promise<void> {
+  async setupConnect(method: "bunker" | "extension"): Promise<void> {
     const setup = this.state.setup;
     if (!setup) return;
-    setup.ownerNpub = "device-generated";
+    setup.ownerNpub = `mock-owner-via-${method}`;
     setup.step = "presence";
     setup.error = null;
     try {
       await this.bus.claim(setup.ownerNpub);
       setup.step = "name";
     } catch {
-      setup.step = "welcome";
+      setup.step = "identity";
       setup.error = "no press detected — try again";
     }
   }
