@@ -70,3 +70,23 @@ def test_storage_driver_initializes():
     driver = Driver(root=os.environ.get("TOTEM_STORAGE_ROOT", "/mnt/nvme"))
     assert driver.init() is True
     assert driver.health().operational
+
+
+def test_ups_driver_initializes_and_reads_status():
+    if not _selected("ups"):
+        pytest.skip("ups excluded by TOTEM_HARDWARE_COMPONENTS")
+    driver_name = os.environ.get("TOTEM_UPS_DRIVER")
+    if not driver_name:
+        pytest.skip("TOTEM_UPS_DRIVER must identify the attached UPS")
+
+    from totem.devices.ups.ups import UPS
+
+    ups = UPS(driver_name)
+    try:
+        ups.initialize()
+        status = ups.get_status()
+        assert ups.driver.health().operational
+        assert 0.0 <= status.battery_percent <= 100.0
+        assert 2.7 <= status.voltage_volts <= 5.0
+    finally:
+        ups.close()

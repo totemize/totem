@@ -1,5 +1,6 @@
 import asyncio
 import base64
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 import pytest
@@ -58,12 +59,24 @@ class FakeNetworkManager:
         self.hotspots.append((ssid, password))
 
 
+class FakeUPSManager:
+    def get_status(self):
+        return SimpleNamespace(
+            model="PiSugar 2",
+            battery_percent=73.5,
+            voltage_volts=3.91,
+            current_amps=-0.18,
+            power_plugged=False,
+        )
+
+
 def make_client():
     managers = {
         "display": FakeDisplayManager(),
         "nfc": FakeNFCManager(),
         "storage": FakeStorageManager(),
         "network": FakeNetworkManager(),
+        "ups": FakeUPSManager(),
     }
     app = create_app({name: lambda value=value: value for name, value in managers.items()})
     return TestClient(app), managers
@@ -117,6 +130,16 @@ def test_api_calls_synchronous_manager_contracts():
         )
         assert response.status_code == 200
         assert managers["network"].connections == [("wifi", "secret")]
+
+        response = client.get("/ups/status")
+        assert response.status_code == 200
+        assert response.json() == {
+            "model": "PiSugar 2",
+            "battery_percent": 73.5,
+            "voltage_volts": 3.91,
+            "current_amps": -0.18,
+            "power_plugged": False,
+        }
 
 
 def test_storage_read_returns_binary_as_base64():

@@ -1,7 +1,7 @@
 """Typed request, response, and event contracts for the Totem API."""
 
 from enum import Enum
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -11,6 +11,7 @@ class DeviceType(str, Enum):
     NFC = "nfc"
     STORAGE = "storage"
     NETWORK = "network"
+    UPS = "ups"
 
 
 class DeviceId(BaseModel):
@@ -25,6 +26,14 @@ class Status(BaseModel):
 
 class StorageReadResponse(Status):
     data_base64: str
+
+
+class UPSStatusResponse(BaseModel):
+    model: str
+    battery_percent: float = Field(ge=0.0, le=100.0)
+    voltage_volts: float
+    current_amps: float
+    power_plugged: Optional[bool] = None
 
 
 class EventType(str, Enum):

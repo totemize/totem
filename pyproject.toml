@@ -20,6 +20,7 @@ raspberry-pi = [
     "spidev>=3.6,<4.0; sys_platform == 'linux'",
     "gpiozero>=2.0,<3.0; sys_platform == 'linux'",
     "gpiod>=1.5,<3.0; sys_platform == 'linux'",
+    "smbus2>=0.4,<1.0; sys_platform == 'linux'",
 ]
 
 [project.scripts]

@@ -8,6 +8,7 @@ totem_service_restarts_enabled: true
 totem_device_manager_enabled: true
 totem_fips_lan_rendezvous_enabled: true
 totem_eink_driver: ""
+totem_ups_driver: ""
 totem_local_artifact_root: >-
   {{ playbook_dir }}/../artifacts/{{ totem_artifact_arch }}
 
@@ -35,6 +36,7 @@ totem_device_manager_packages:
   - python3-spidev
   - python3-gpiozero
   - python3-libgpiod
+  - python3-smbus
 
 totem_device_groups:
   - fips

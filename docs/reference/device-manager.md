@@ -8,7 +8,7 @@ description: FastAPI endpoints, manager lifecycle, driver selection, and library
 # Python device manager
 
 The Python service exposes synchronous hardware managers through FastAPI. It
-supports E-Ink display, NFC, confined storage, and Wi-Fi operations. The API
+supports E-Ink display, NFC, confined storage, Wi-Fi, and UPS telemetry. The API
 creates managers lazily, runs their blocking work in Starlette's thread pool,
 and serializes operations independently per manager.
 
@@ -58,6 +58,8 @@ defaults. Use `totem` when command-line bind or logging options are needed.
 | `TOTEM_ALLOW_MOCK_DRIVERS` | false | Accepts `1`, `true`, `yes`, or `on` (case-insensitive) to permit explicit mock display, NFC, and Wi-Fi transports. |
 | `TOTEM_STORAGE_ROOT` | driver default | Confines storage reads and writes below one directory. The Ansible deployment sets `/var/lib/totem/storage`. |
 | `TOTEM_EINK_DRIVER` | empty | Exact display driver selected when `DisplayManager` receives no explicit name. An explicit constructor argument still wins. |
+| `TOTEM_UPS_DRIVER` | auto-detect | Exact UPS driver selected when `UPSManager` receives no explicit name. Metot is pinned to `pisugar2`. |
+| `TOTEM_I2C_BUS` | `1` | Linux I2C bus used by UPS drivers. |
 | `EINK_DISPLAY_TYPE` | empty | Guides display auto-detection: `2in13` or `3in7`. Without it, detected Raspberry Pi displays default to the 3.7-inch driver family. |
 
 Display drivers have additional pin and transport variables documented in
@@ -82,6 +84,7 @@ The application exposes OpenAPI and Swagger UI using FastAPI's standard paths
 | `POST` | `/storage/read` | `path` | `StorageReadResponse` with `data_base64`. |
 | `POST` | `/storage/write` | `path`, `data_base64` | `Status` |
 | `POST` | `/network/configure` | `ssid`, `password`, optional `is_hotspot` | `Status` |
+| `GET` | `/ups/status` | — | Model, battery percent, voltage, signed current, and external-power state. |
 | WebSocket | `/ws` | client frames are ignored | Typed `DeviceEvent` frames when events are published. |
 
 `Status` has `success: boolean` and `message: string`.
@@ -158,6 +161,25 @@ Create a hotspot through the selected driver:
 
 The HTTP API currently exposes neither scan/status nor stop-hotspot methods;
 those are available on `NetworkManager` for in-process callers.
+
+### UPS status
+
+`GET /ups/status` lazily opens the configured UPS and returns read-only
+telemetry:
+
+```json
+{
+  "model": "PiSugar 2",
+  "battery_percent": 80.0,
+  "voltage_volts": 4.0,
+  "current_amps": -0.25,
+  "power_plugged": false
+}
+```
+
+Current preserves the IP5209's signed reading. Battery percentage is an
+estimate interpolated from PiSugar's published IP5209 voltage curve.
+The driver does not change charging, shutdown, or GPIO policy.
 
 ### Error mapping
 
@@ -247,6 +269,17 @@ the interface names under `/sys/class/net`.
 Both storage drivers use `ConfinedStorage`; the NVMe driver does not bypass
 the configured root to expose arbitrary block-device paths.
 
+### UPS
+
+| Name | Selection |
+|---|---|
+| `pisugar2` | PiSugar 2/IP5209 at I2C address `0x75`; configured for metot. |
+
+Automatic selection requires `/dev/i2c-<TOTEM_I2C_BUS>` to exist;
+initialization confirms that the device returns a plausible battery voltage.
+Install `smbus2` through the `raspberry-pi` extra or provide the Debian
+`python3-smbus` package. The Ansible deployment uses the Debian package.
+
 ## Python manager reference
 
 ### `DisplayManager`
@@ -302,6 +335,16 @@ Methods: `scan_networks()`, `connect_to_network(ssid, password)`,
 `create_hotspot(ssid, password)`, `stop_hotspot()`, `get_wifi_status()`, and
 `close()`.
 
+### `UPSManager`
+
+```python
+UPSManager(driver_name: str | None = None)
+```
+
+Methods: `get_status() -> UPSStatus` and `close()`. `UPSStatus` contains
+`model`, `battery_percent`, `voltage_volts`, `current_amps`, and optional
+`power_plugged` fields.
+
 Direct NFC, storage, and network manager calls do not add their own operation
 locks. The FastAPI layer supplies serialization; other in-process consumers
 must coordinate concurrent access themselves.
@@ -319,7 +362,7 @@ connection alive. Published events have this shape:
 }
 ```
 
-Device types are `display`, `nfc`, `storage`, and `network`. Event types are
+Device types are `display`, `nfc`, `storage`, `network`, and `ups`. Event types are
 `state_change`, `command_completed`, `error`, `data_available`, and
 `hardware_event`.
 

@@ -23,6 +23,7 @@ from totem.api.models import (
     StorageReadRequest,
     StorageReadResponse,
     StorageWriteRequest,
+    UPSStatusResponse,
 )
 from totem.logging import get_logger
 
@@ -67,11 +68,17 @@ def _default_manager_factories() -> Dict[str, ManagerFactory]:
 
         return StorageManager(storage_root=os.environ.get("TOTEM_STORAGE_ROOT"))
 
+    def ups():
+        from totem.managers.ups_manager import UPSManager
+
+        return UPSManager()
+
     return {
         "display": display,
         "nfc": nfc,
         "network": network,
         "storage": storage,
+        "ups": ups,
     }
 
 
@@ -252,6 +259,18 @@ def create_app(
             request, "network", operation, command.ssid, command.password
         )
         return Status(success=True, message="Network configured successfully")
+
+    @application.get("/ups/status", response_model=UPSStatusResponse)
+    async def ups_status(request: Request):
+        manager = await _get_manager(request, "ups")
+        status = await _call_hardware(request, "ups", manager.get_status)
+        return UPSStatusResponse(
+            model=status.model,
+            battery_percent=status.battery_percent,
+            voltage_volts=status.voltage_volts,
+            current_amps=status.current_amps,
+            power_plugged=status.power_plugged,
+        )
 
     return application
 
