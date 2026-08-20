@@ -74,6 +74,10 @@ ssh metot.fips          # via FIPS mesh
 - `fipsctl` works as the `totem` user (member of the `fips` group, control
   socket at `/run/fips/control.sock`). Use `sudo` only for root-only things
   (`systemctl restart fips`, reading `/etc/fips/fips.key`, `sudo fipsctl`).
+- Its strfry remains on the pre-standard-negentropy `router` branch
+  (`5e81e24`) while peripheral work owns the unit. It cannot NIP-77 sync with
+  the protocol-0 totem/motown build; upgrade it only after that work releases
+  the device.
 
 ### motown (test unit #3)
 
@@ -94,19 +98,17 @@ ssh motown               # via LAN
 ssh motown.fips          # via FIPS mesh
 ```
 
-- Runs strfry from an aarch64 alpine-minirootfs under `/opt/strfry`, with
-  `bind = "::"`; relay port 7777 works over LAN and mesh. Live audit on
-  2026-08-20 corrected the artifact claim: this installed binary rejects the
-  router-branch `mesh` command and NIP-11 omits both `negentropy` and NIP 77
-  despite the enabled config. It must be restaged from the intended
-  `references/strfry` `router` baseline; Ansible verification now fails closed
-  on this drift.
+- Runs strfry master `5d89a62` (aarch64 build, Alpine minirootfs runtime
+  under `/opt/strfry`, `bind = "::"`): relay on port 7777, verified over LAN,
+  mesh, and bidirectional protocol-0/NIP-77 sync with totem. The original
+  `router`-branch build was replaced after live wire testing proved its
+  pre-standard negentropy format incompatible despite the same `sync` CLI;
+  Ansible verification fails closed on this contract.
 - NIP-11 markers per 07 conventions (2026-08-20): `info.name =
-  "!Totem motown"`, `info.pubkey` = hex npub `19bd90fd…2008d` (renders,
-  verified over mesh — `pubkey` is the load-bearing claim, present since
-  strfry's first commit); `info.self` kept as dormant duplicate until a
-  strfry upgrade understands it. Footgun: golpe takes the LAST duplicate
-  key — set the stock `pubkey = ""` line, don't add a second one.
+  "!Totem motown"`, `info.pubkey` and `info.self` = hex npub
+  `19bd90fd…2008d`; NIP 77 and `negentropy = 1` render over the mesh.
+  Footgun: golpe takes the LAST duplicate key — set the stock `pubkey = ""`
+  line, don't add a second one.
 
 ### totemd (all three bench units)
 
@@ -120,6 +122,9 @@ ssh motown.fips          # via FIPS mesh
 - Challenge signing key on enabled units: source remains
   `/etc/fips/fips.key` root:root 0600; `totemd.service` passes it to `User=totem` with systemd `LoadCredential=`.
   Do not copy it, print it, or loosen its mode.
+- Relay CLI runner: `/usr/local/libexec/totem-strfry`; `totem` belongs to the
+  `strfry` group and `/etc/strfry.conf` + `/var/lib/strfry` are group-scoped,
+  never world-writable. `deploy/flash.sh` maintains this integration.
 
 ```bash
 ssh totem 'totemctl status'  # fips health + effective policy + counters

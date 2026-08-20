@@ -15,7 +15,9 @@ TOTEMD_KEY_PATH=/path/to/test-nsec cargo run -- serve
 ```
 
 Production does not copy or loosen the root-only FIPS key: systemd
-`LoadCredential=` supplies it privately to `User=totem`.
+`LoadCredential=` supplies it privately to `User=totem`. Relay commands use
+root-owned `/usr/local/libexec/totem-strfry`; group-scoped config/LMDB access
+keeps the daemon unprivileged.
 
 ## Configuration
 

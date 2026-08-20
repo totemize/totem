@@ -25,8 +25,9 @@ splits across the two servers; both ports are pinned in `07-conventions.md`.
   FIPS identity key (`/etc/fips/fips.key`, root:root 0600 by design) and
   exposes only a private read-only service credential; source permissions
   are never loosened. The key stays in zeroizing memory and signs challenge
-  responses with the device identity (`02-identity.md`). Relay sync privilege
-  is handled separately when the sync supervisor lands.
+  responses with the device identity (`02-identity.md`). A root-owned runner
+  invokes strfry through its bundled musl loader; `totem` belongs to the
+  `strfry` group and LMDB stays group-writable, so sync needs no root process.
 - Web assets are embedded in the binary; deployment is one binary plus one
   systemd unit.
 
