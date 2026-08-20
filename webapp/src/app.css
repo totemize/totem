@@ -127,6 +127,8 @@ body {
 .subview-bar .edit-link { padding: 16px 20px 12px; }
 .edit-link { background: none; border: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); cursor: pointer; padding: 10px 0 0; }
 .edit-link:hover { color: var(--ink); }
+.save-row { margin: 22px 0; }
+.mark-img { object-fit: cover; }
 
 /* advanced disclosure */
 details.advanced { margin-top: 10px; }

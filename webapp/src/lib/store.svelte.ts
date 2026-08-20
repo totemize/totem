@@ -165,16 +165,16 @@ export class Store {
   }
 
   /**
-   * Rename the totem: an owner-authorized bus request. The daemon signs
+   * Update the profile: an owner-authorized bus request. The daemon signs
    * the kind 0 with the device key and stores it on the local relay —
    * the owner key only authorizes (NIP-98), it never signs the profile.
    */
-  async editName(name: string): Promise<void> {
+  async editProfile(name: string, picture: string): Promise<void> {
     const trimmed = name.trim();
     if (!trimmed) return;
-    await this.bus.setName(trimmed);
+    await this.bus.setProfile({ name: trimmed, picture: picture.trim() || undefined });
     this.state.node = await this.bus.getNode();
-    if (this.state.landing) this.state.landing = { ...this.state.landing, name: trimmed };
+    if (this.state.node) this.state.landing = this.state.node;
   }
 
   async publishReply(content: string): Promise<void> {
@@ -280,7 +280,7 @@ export class Store {
   async setupSetName(name: string): Promise<void> {
     if (!this.state.setup) return;
     const trimmed = name.trim();
-    if (trimmed) await this.bus.setName(trimmed);
+    if (trimmed) await this.bus.setProfile({ name: trimmed });
     this.state.node = await this.bus.getNode();
     this.state.setup.step = "public";
   }

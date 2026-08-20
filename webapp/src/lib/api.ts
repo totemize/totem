@@ -48,12 +48,13 @@ export interface BusClient {
    */
   claim(ownerNpub: string): Promise<void>;
   /**
-   * Rename the totem. An owner-authorized (NIP-98) bus request; the
-   * daemon signs the kind 0 profile event with the DEVICE key and
-   * stores it on the totem's own local relay — the device key never
-   * leaves the device, and nothing is published to other relays.
+   * Update the totem's profile (name, picture). An owner-authorized
+   * (NIP-98) bus request; the daemon signs the kind 0 profile event
+   * with the DEVICE key and stores it on the totem's own local relay —
+   * the device key never leaves the device, and nothing is published
+   * to other relays.
    */
-  setName(name: string): Promise<void>;
+  setProfile(profile: { name: string; picture?: string }): Promise<void>;
   /** Factory-reset the config: clears the owner allowlist and name. */
   resetConfig(): Promise<void>;
   /** Subscribe to pushes; returns unsubscribe. */

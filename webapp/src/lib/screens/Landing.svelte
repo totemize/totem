@@ -11,14 +11,16 @@
   const isSelf = $derived(info?.pubkey === store.state.node?.pubkey);
   let editing = $state(false);
   let editName = $state("");
+  let editPicture = $state("");
 
   function startEdit() {
     editName = info?.name ?? "";
+    editPicture = info?.picture ?? "";
     editing = true;
   }
 
   async function saveEdit() {
-    await store.editName(editName);
+    await store.editProfile(editName, editPicture);
     editing = false;
   }
 </script>
@@ -26,17 +28,27 @@
 <div class="screen">
   <div class="subview-bar">
     <button class="back" onclick={() => store.closeLanding()}><span class="arr">←</span> back</button>
-    {#if isSelf && !editing}
-      <button class="edit-link" onclick={startEdit}>edit</button>
+    {#if isSelf}
+      {#if editing}
+        <button class="edit-link" onclick={() => (editing = false)}>cancel</button>
+      {:else}
+        <button class="edit-link" onclick={startEdit}>edit</button>
+      {/if}
     {/if}
   </div>
   <div class="pad center" style="padding:24px">
-    <div class="mark">T</div>
+    {#if info?.picture}
+      <img class="mark mark-img" src={info.picture} alt="">
+    {:else}
+      <div class="mark">T</div>
+    {/if}
     {#if editing}
       <input class="name-input" type="text" bind:value={editName} spellcheck="false"
         onkeydown={(e) => e.key === "Enter" && saveEdit()}>
-      <div style="display:flex; gap:10px; justify-content:center; margin-top:10px">
-        <button class="btn" onclick={() => (editing = false)}>cancel</button>
+      <input class="name-input" type="text" bind:value={editPicture} placeholder="picture url…"
+        spellcheck="false" autocapitalize="off" autocomplete="off" style="margin-top:10px"
+        onkeydown={(e) => e.key === "Enter" && saveEdit()}>
+      <div class="save-row">
         <button class="btn primary" onclick={saveEdit}>save</button>
       </div>
     {:else}

@@ -42,6 +42,7 @@ export class MockBus implements BusClient {
   /** Claim state persists across reloads; resetConfig() clears it. */
   private claimed = storage()?.getItem("mock.claimed") === "1";
   private name = storage()?.getItem("mock.name") ?? "totem-a4f2";
+  private picture = storage()?.getItem("mock.picture") ?? undefined;
 
   private peers: Peer[] = [
     { info: harbor, relation: { kind: "request" }, lastMet: minutes(35), connected: { transport: "fips" } },
@@ -57,7 +58,7 @@ export class MockBus implements BusClient {
   };
 
   async getNode(): Promise<NodeInfo> {
-    return { ...self, name: this.name };
+    return { ...self, name: this.name, picture: this.picture };
   }
 
   async claim(_ownerNpub: string): Promise<void> {
@@ -80,11 +81,14 @@ export class MockBus implements BusClient {
     storage()?.setItem("mock.claimed", "1");
   }
 
-  async setName(name: string): Promise<void> {
+  async setProfile(profile: { name: string; picture?: string }): Promise<void> {
     // Real daemon: signs a kind 0 with the device key, stores it on the
-    // local relay. Mock: just remember the name.
-    this.name = name;
-    storage()?.setItem("mock.name", name);
+    // local relay. Mock: just remember it.
+    this.name = profile.name;
+    storage()?.setItem("mock.name", profile.name);
+    this.picture = profile.picture || undefined;
+    if (profile.picture) storage()?.setItem("mock.picture", profile.picture);
+    else storage()?.removeItem("mock.picture");
   }
 
   async resetConfig(): Promise<void> {

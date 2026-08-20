@@ -15,7 +15,11 @@
 
 <div class="screen">
   <div class="home-hero center clickable-plain" onclick={() => node && store.openLanding(node)} role="button" tabindex="0" onkeydown={(e) => e.key === "Enter" && node && store.openLanding(node)}>
-    <div class="mark">T</div>
+    {#if node?.picture}
+      <img class="mark mark-img" src={node.picture} alt="">
+    {:else}
+      <div class="mark">T</div>
+    {/if}
     <h1>{node?.name ?? "…"}</h1>
   </div>
   <div class="activity center">
