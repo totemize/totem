@@ -31,10 +31,14 @@ Read these rules before a deployment:
   during a no-restart window.
 - The Python device-manager role and its checks are enabled by default.
   Disable them when another workstream owns Python managers or drivers.
-- Existing `/etc/fips/fips.yaml`, FIPS identity files,
-  `/etc/strfry.conf`, and `/var/lib/strfry/` are preserved.
+- Existing `/etc/fips/fips.yaml`, FIPS identity files, strfry operator policy,
+  `/etc/totemd/config.toml`, and `/var/lib/strfry/` are preserved. The role
+  still reconciles strfry's mesh bind and NIP-11 name/public key, plus managed
+  service environment files.
+- Inventory stores only each device's public npub/hex identity. Never put a
+  private FIPS key or nsec in inventory, vars, or staged artifacts.
 - Staged binaries are architecture-specific. The base role stops early if the
-  discovered architecture does not match inventory.
+  discovered system architecture does not match `totem_system_arch`.
 - `--check` is not a complete safety proof for this play: local builds,
   checksum-based artifact installation, service facts, ports, and live health
   checks need a real run. Use syntax check plus a tightly limited real run.
@@ -43,16 +47,19 @@ Read these rules before a deployment:
 
 The repository currently defines:
 
-| Inventory host | Address | Artifact architecture | Rust target | strfry loader |
-|---|---|---|---|---|
-| `metot` | `192.168.8.136` | `armv6l` | `arm-unknown-linux-musleabihf` | `ld-musl-armhf.so.1` |
-| `totem` | `192.168.8.239` | `armv6l` | `arm-unknown-linux-musleabihf` | `ld-musl-armhf.so.1` |
-| `motown` | `192.168.8.196` | `aarch64` | `aarch64-unknown-linux-musl` | `ld-musl-aarch64.so.1` |
+| Inventory host | Address | System arch | Artifact class | Rust target | strfry loader |
+|---|---|---|---|---|---|
+| `metot` | `192.168.8.239` | `armv7l` | `armv6l` | `arm-unknown-linux-musleabihf` | `ld-musl-armhf.so.1` |
+| `totem` | `192.168.8.136` | `armv6l` | `armv6l` | `arm-unknown-linux-musleabihf` | `ld-musl-armhf.so.1` |
+| `motown` | `motown.local` (DHCP) | `aarch64` | `aarch64` | `aarch64-unknown-linux-musl` | `ld-musl-aarch64.so.1` |
 
-Treat `deploy/ansible/inventory/hosts.yml` as authoritative for Ansible. The
-bench has previously had an inventory alias whose target reported a different
-OS hostname; that is expected and must not be “fixed” implicitly during a
-deployment.
+Treat `deploy/ansible/inventory/hosts.yml` as authoritative for Ansible. Its
+per-host `totem_npub` and `totem_npub_hex` values are public identity claims,
+not secrets; verification rejects a relay or challenge response that does not
+match them. Motown uses mDNS because its numeric DHCP address is not stable.
+Metot's 32-bit Zero 2 W kernel reports `armv7l` but intentionally consumes the
+backward-compatible armv6 artifact set; `totem_system_arch` and
+`totem_artifact_arch` must therefore remain separate.
 
 All hosts use SSH user `totem`, sudo become, and host-key
 `StrictHostKeyChecking=accept-new`.
@@ -63,7 +70,8 @@ The controller needs:
 
 - `ansible-playbook` with the built-in modules used by the roles;
 - SSH access to the selected target and sudo credentials when required;
-- Cargo/rustup and the inventory's musl Rust targets for local `totemd` builds;
+- Cargo/rustup, Clang, and the inventory's musl Rust targets for local `totemd`
+  builds;
 - a locked FIPS source checkout;
 - a prebuilt strfry runtime root for each target architecture;
 - enough local space for staged archives and Rust targets.
@@ -126,7 +134,10 @@ deploy/ansible/artifacts/<architecture>/
 └── SHA256SUMS
 ```
 
-The script runs `cargo build --release --locked` for FIPS. Set
+The script runs `cargo build --release --locked` for FIPS. Cross-compiling
+FIPS still requires the target linker, C headers, and bindgen sysroot expected
+by that checkout; installing the Rust target alone is not a complete aarch64
+toolchain. Set
 `TOTEM_SKIP_FIPS_BUILD=1` only when all three already-built executables are
 known to match the locked source; the script still validates and stages them.
 
@@ -135,6 +146,11 @@ Current provenance recorded by the repository:
 - FIPS: `23ec0a7b811a0e986fe2d2cb51fffe8f10f7a57d`;
 - strfry router lineage: `5e81e24`, with armv6 build/alignment details in
   `.journey/journal/2026-08-20.md`.
+
+Do not treat the `mesh` subcommand or branch name as proof of NIP-77. A live
+2026-08-20 check found motown's installed aarch64 relay returned neither
+`negentropy: 1` nor NIP `77`; the artifact must be restaged until the verifier
+below passes.
 
 Verify `SHA256SUMS` and the target architecture before any remote run.
 
@@ -224,7 +240,8 @@ obtain the appropriate maintenance authorization first.
 
 - requires all three local FIPS binaries and copies changed content;
 - creates `/etc/fips` with group access but preserves an existing config;
-- seeds a persistent, TUN-enabled, unwired config only on a bare host;
+- seeds a persistent, TUN-enabled config with LAN rendezvous on and no static
+  peers only on a bare host;
 - installs/enables `fips.service`;
 - records migration `0010-fips-layout.complete`.
 
@@ -234,7 +251,8 @@ See [FIPS configuration and implementation](/reference/fips).
 
 - requires a checksum-addressed runtime archive and expected musl loader;
 - creates the `strfry` service account and durable LMDB directory;
-- preserves an existing config/database and seeds IPv6 bind on a bare host;
+- preserves an existing database and operator limits while reconciling the
+  IPv6 bind plus the inventory host's `!Totem` name/public identity;
 - extracts only a runtime checksum not already marked installed;
 - installs/enables `strfry.service`;
 - records migration `0020-strfry-layout.complete`.
@@ -244,9 +262,11 @@ See [strfry configuration and implementation](/reference/strfry).
 ### `totemd`
 
 - builds locally with `cargo build --release --locked --target <target>`;
-- seeds `/etc/totemd/totemd.env` only if absent;
+- manages the IPv6-capable `/etc/totemd/totemd.env` and seeds operator policy
+  `/etc/totemd/config.toml` only if absent;
 - installs `/usr/local/bin/totemd` and the `totemctl` symlink;
-- installs/enables `totemd.service`;
+- installs/enables `totemd.service`, passing the root-only FIPS key through
+  systemd `LoadCredential=` without changing its source permissions;
 - records migration `0030-totemd-layout.complete`.
 
 See [`totemd` CLI and message bus](/reference/totemd).
@@ -258,9 +278,16 @@ See [`totemd` CLI and message bus](/reference/totemd).
 - extracts a versioned release below `/opt/totem/releases/<revision>`;
 - creates a system-site-packages virtual environment and installs the Totem
   package without rebuilding platform dependencies;
-- updates `/opt/totem/current`, seeds `/etc/totem/totem.env`, and
+- updates `/opt/totem/current`, manages `/etc/totem/totem.env`, and
   installs/enables `totem.service`;
+- writes the per-host `TOTEM_EINK_DRIVER` when configured; metot is pinned to
+  `waveshare_2in13_v4`;
 - records migration `0040-device-manager-layout.complete`.
+
+The role does not edit Raspberry Pi boot firmware or reboot the host. Metot's
+`deploy/devices/metot.boot-config.txt` fragment must already be present under
+the active boot configuration before `/dev/spidev0.0` and the real display can
+be verified.
 
 See [Python device manager](/reference/device-manager).
 
@@ -268,15 +295,20 @@ See [Python device manager](/reference/device-manager).
 
 The final role checks the enabled scope:
 
-1. ports `7777`, `8080`, and `8081` accept connections;
+1. IPv6 ports `7777` and `8080`, plus loopback bus port `8081`, accept
+   connections;
 2. port `8000` accepts connections when Python is enabled;
 3. core units, plus optional `totem.service`, are enabled and running;
-4. `fipsctl show status` reports running state, active TUN, and persistent
-   identity;
-5. NIP-11 reports negentropy and supported NIP `77`;
-6. `totemctl status` reports `ok` and a connected FIPS watcher;
-7. Python `/health` returns HTTP `200` when enabled;
-8. the expected migration checkpoint count exists.
+4. `fipsctl show status` reports running state, active TUN, and the exact
+   persistent inventory npub;
+5. NIP-11 reports negentropy, supported NIP `77`, the exact `!Totem` name, and
+   the inventory public key;
+6. `/totem/challenge` returns a no-store kind-27235 event signed by that same
+   FIPS identity, proving the systemd credential and IPv6 web bind;
+7. `totemctl status` reports `ok`, a connected FIPS watcher, and valid
+   operator policy;
+8. Python `/health` returns HTTP `200` when enabled;
+9. the expected migration checkpoint count exists.
 
 These are live contract checks. A passing port check alone is not treated as
 service health.
@@ -312,13 +344,15 @@ After a successful initial deployment, repeat the same guarded command. With
 unchanged source, artifacts, inventory, and host state, Ansible should report
 `changed=0`.
 
-The first validated armv6 deployment recorded:
+An earlier armv6 deployment, before the identity/challenge checks were added,
+recorded:
 
 - initial run: `ok=79 changed=32 failed=0`;
 - core-only no-restart convergence: `ok=48 changed=0 failed=0`.
 
-Those counts are evidence for that exact role scope and revision, not fixed
-API guarantees. New tasks or enabled roles legitimately change the totals.
+Those counts are historical evidence for that exact role scope and revision,
+not current expected totals. The identity, policy, and challenge tasks in this
+revision legitimately change them.
 
 ## Tags and partial runs
 
@@ -343,8 +377,10 @@ ansible-playbook playbooks/deploy.yml --limit metot --list-tasks
 
 ### Target architecture assertion fails
 
-Correct the inventory or stage the matching artifacts. Never bypass the
-assertion to install an armv6 runtime on aarch64 or vice versa.
+Correct `totem_system_arch` when the reported OS architecture is wrong, or
+stage the matching `totem_artifact_arch` artifacts. Metot's explicit
+`armv7l`/`armv6l` pairing is intentional compatibility; never reuse that
+exception to install an armv6 runtime on aarch64.
 
 ### “Missing FIPS artifact” or strfry archive
 
@@ -367,7 +403,16 @@ same header. Then confirm strfry binds IPv6 with `bind = "::"`.
 
 Check `fipsctl show status`, control-socket permissions, `totemd`'s
 supplementary `fips` group, and `TOTEMD_FIPS_SOCK`. `totemd` polls the socket
-directly and does not use the private identity key.
+directly. Challenge signing separately receives the same root-owned identity
+through systemd's private credential directory; it must never read a loosened
+source key.
+
+### Signed challenge verification fails
+
+Confirm `/etc/fips/fips.key` is still `root:root` mode `0600`, then inspect
+`systemctl cat totemd` for `LoadCredential=fips.key:/etc/fips/fips.key` and
+confirm port `8080` listens on IPv6. A stale `TOTEMD_WEB_ADDR=0.0.0.0:8080`
+environment file makes LAN IPv4 appear healthy while mesh challenges fail.
 
 ### A no-restart run reports changes
 

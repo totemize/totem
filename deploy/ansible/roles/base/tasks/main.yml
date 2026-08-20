@@ -4,11 +4,13 @@
     that:
       - ansible_facts.system == 'Linux'
       - ansible_facts.service_mgr == 'systemd'
-      - ansible_facts.architecture == totem_artifact_arch
+      - ansible_facts.architecture == totem_system_arch
+      - totem_npub is match('^npub1[023456789acdefghjklmnpqrstuvwxyz]+$')
+      - totem_npub_hex is match('^[0-9a-f]{64}$')
     fail_msg: >-
       {{ inventory_hostname }} reported {{ ansible_facts.system }}/
       {{ ansible_facts.service_mgr }}/{{ ansible_facts.architecture }}, expected
-      Linux/systemd/{{ totem_artifact_arch }}.
+      Linux/systemd/{{ totem_system_arch }} with a valid npub/hex identity.
 
 - name: Install bare-device runtime dependencies
   ansible.builtin.apt:

@@ -17,7 +17,9 @@ identify the current bench artifact as router lineage revision `5e81e24`, plus
 the armv6 alignment/build work recorded in the journey journal. That pinned
 revision is provenance for the staged artifact; it is not present in this
 repository and should not be inferred from the current upstream default
-branch.
+branch. Capability is still tested, not inferred from a branch name: a live
+2026-08-20 audit found motown's installed aarch64 build omitted NIP-77 from
+NIP-11 and requires restaging.
 
 ## Deployed layout
 
@@ -77,7 +79,7 @@ relay {
     info {
         name = "!Totem <inventory-hostname>"
         description = "This is a strfry instance."
-        pubkey = ""
+        pubkey = "<inventory-host-public-key-hex>"
         contact = ""
         icon = ""
         nips = ""
@@ -113,8 +115,10 @@ relay {
 }
 ```
 
-Ansible writes this only if `/etc/strfry.conf` is absent. Existing relay
-identity metadata, operator limits, plugins, and database paths are preserved.
+Ansible writes the full template only if `/etc/strfry.conf` is absent. On
+every run it surgically reconciles the load-bearing `bind`, `info.name`, and
+`info.pubkey` lines. Other operator limits, plugins, and database paths are
+preserved.
 
 ## Configuration guide
 
@@ -145,9 +149,10 @@ Ansible deployment.
 ### NIP-11 identity
 
 The name prefix `!Totem` is the recognition hint specified by Totem. The bare
-template leaves `relay.info.pubkey` empty, so it does not yet make a complete
-device-identity claim. Populate it with the device public identity according
-to the project's recognition policy before depending on NIP-11 recognition.
+template fills `relay.info.pubkey` from the inventory host's public FIPS
+identity. `totemd` treats the document only as a cheap prefilter: the marker
+and key must match, then a per-encounter signed challenge proves the claim.
+Ansible inventory contains no private identity material.
 
 Retrieve NIP-11 with the required media type:
 
@@ -160,8 +165,10 @@ curl --silent \
 A plain `curl http://127.0.0.1:7777/` may return an empty body; that is not a
 valid NIP-11 health check.
 
-The Ansible verification role requires `negentropy` to equal `1` and
-`supported_nips` to contain `77`.
+The Ansible verification role requires `negentropy` to equal `1`,
+`supported_nips` to contain `77`, and `name`/`pubkey` to equal the selected
+inventory host's identity. It then checks the same key against totemd's signed
+challenge.
 
 ### Event limits
 
@@ -288,7 +295,8 @@ The Ansible strfry role:
 
 1. hashes the architecture-specific runtime archive on the controller;
 2. creates the `strfry` user and durable database directory;
-3. seeds an IPv6-capable config only when absent;
+3. seeds a complete config when absent, then always reconciles its IPv6 bind
+   and inventory-backed NIP-11 name/public identity;
 4. copies the archive into a checksum-addressed remote cache;
 5. extracts only an artifact whose installation sentinel is absent;
 6. verifies the architecture-specific musl loader;

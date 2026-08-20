@@ -5,8 +5,8 @@
     port: "{{ item.port }}"
     timeout: 30
   loop:
-    - {host: '127.0.0.1', port: 7777}
-    - {host: '127.0.0.1', port: 8080}
+    - {host: '::1', port: 7777}
+    - {host: '::1', port: 8080}
     - {host: '127.0.0.1', port: 8081}
 
 - name: Wait for the Python device-manager port
@@ -50,14 +50,16 @@
       - (fips_status_command.stdout | from_json).state == 'running'
       - (fips_status_command.stdout | from_json).tun_state == 'active'
       - (fips_status_command.stdout | from_json).persistent
+      - (fips_status_command.stdout | from_json).npub == totem_npub
 
 - name: Read strfry NIP-11 information
   ansible.builtin.uri:
-    url: http://127.0.0.1:7777/
+    url: http://[::1]:7777/
     headers:
       Accept: application/nostr+json
     return_content: true
     status_code: 200
+    use_proxy: false
   register: strfry_nip11
 
 - name: Validate the strfry relay contract
@@ -65,6 +67,24 @@
     that:
       - strfry_nip11.json.negentropy | int == 1
       - 77 in strfry_nip11.json.supported_nips
+      - strfry_nip11.json.name == '!Totem ' ~ inventory_hostname
+      - strfry_nip11.json.pubkey == totem_npub_hex
+
+- name: Exercise the signed challenge responder over IPv6
+  ansible.builtin.uri:
+    url: >-
+      http://[::1]:8080/totem/challenge?nonce=000102030405060708090a0b0c0d0e0f
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: totemd_challenge
+
+- name: Validate the signed challenge identity and cache policy
+  ansible.builtin.assert:
+    that:
+      - totemd_challenge.json.event.kind | int == 27235
+      - totemd_challenge.json.event.pubkey == totem_npub_hex
+      - totemd_challenge.cache_control == 'no-store'
 
 - name: Read totemd status
   ansible.builtin.command:
@@ -77,12 +97,19 @@
     that:
       - (totemd_status_command.stdout | from_json).ok
       - (totemd_status_command.stdout | from_json).status.fips.connected
+      - (totemd_status_command.stdout | from_json).status.fips.npub == totem_npub
+      - (totemd_status_command.stdout | from_json).status.config.probe
+      - (totemd_status_command.stdout | from_json).status.config.sync
+      - >-
+        (totemd_status_command.stdout | from_json).status.config.befriend
+        in ['auto', 'ask', 'never']
 
 - name: Read Python device-manager health
   ansible.builtin.uri:
     url: http://127.0.0.1:8000/health
     return_content: true
     status_code: 200
+    use_proxy: false
   when: totem_device_manager_enabled | bool
 
 - name: Find completed migration checkpoints

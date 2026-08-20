@@ -46,6 +46,28 @@
     force: false
   notify: Restart strfry
 
+- name: Reconcile the mesh-facing strfry bind
+  ansible.builtin.lineinfile:
+    path: /etc/strfry.conf
+    regexp: '^\s*bind\s*='
+    line: '    bind = "::"'
+  notify: Restart strfry
+
+- name: Reconcile the NIP-11 Totem name
+  ansible.builtin.lineinfile:
+    path: /etc/strfry.conf
+    regexp: '^\s*name\s*='
+    line: '        name = "!Totem {{ inventory_hostname }}"'
+  notify: Restart strfry
+
+- name: Reconcile the NIP-11 public identity
+  ansible.builtin.lineinfile:
+    path: /etc/strfry.conf
+    regexp: '^\s*pubkey\s*='
+    line: '        pubkey = "{{ totem_npub_hex }}"'
+    insertbefore: '^\s*contact\s*='
+  notify: Restart strfry
+
 - name: Cache the strfry runtime archive on the device
   ansible.builtin.copy:
     src: "{{ totem_local_artifact_root }}/strfry-rootfs.tar.gz"

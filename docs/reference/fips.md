@@ -31,8 +31,9 @@ The Ansible artifact notes pin the current bench baseline to upstream revision
 
 `fips.service` runs as root because it creates the TUN interface and reads the
 root-only identity. `totemd.service` runs as `totem` with supplementary group
-`fips`, which is enough to query the control socket without weakening key-file
-permissions.
+`fips`, which is enough to query the control socket. For challenge signing,
+systemd's `LoadCredential=` exposes a private read-only copy to that service;
+the source key remains `root:root` mode `0600`.
 
 Do not launch `/usr/local/bin/fips` manually while systemd owns the daemon.
 Running it as `totem` should fail to read the identity key, and a second root
@@ -49,7 +50,7 @@ node:
     persistent: true
   rendezvous:
     lan:
-      enabled: false
+      enabled: true
 
 tun:
   enabled: true
@@ -69,16 +70,17 @@ transports:
 peers: []
 ```
 
-This is intentionally an isolated seed, not a fleet topology. It enables the
-local interfaces but configures no static peers and disables LAN rendezvous.
-A later wiring step must decide how the device discovers or dials peers.
+This is the ordinary self-forming bench/home seed. It configures no static
+peers, but LAN rendezvous lets nearby FIPS nodes discover and authenticate one
+another. Set `totem_fips_lan_rendezvous_enabled=false` for an intentionally
+isolated deployment.
 
 ### Important configuration fields
 
 | Key | Totem value | Operational meaning |
 |---|---|---|
 | `node.identity.persistent` | `true` | Load or create `fips.key` beside the selected configuration, retaining the same npub across starts. |
-| `node.rendezvous.lan.enabled` | `false` | Do not enroll a bare device into LAN rendezvous automatically. |
+| `node.rendezvous.lan.enabled` | `true` | Discover nearby FIPS nodes on the LAN; authentication still uses FIPS identities. |
 | `tun.enabled` | `true` | Create the IPv6 adaptation interface. |
 | `tun.name` | `fips0` | Stable interface name used by operations and health checks. |
 | `tun.mtu` | `1280` | IPv6 minimum MTU and Totem deployment value. |
@@ -101,7 +103,8 @@ documentation, logs, or a staged artifact.
 Ansible deliberately preserves both the existing configuration and identity.
 `force: false` on the seed template prevents a normal convergence run from
 overwriting an enrolled node's peers, discovery settings, or other operator
-choices.
+choices. The inventory's npub/hex fields are public verification claims; the
+private key never enters Ansible inventory or an artifact.
 
 ## Architecture
 
@@ -219,7 +222,9 @@ address.
 ```
 
 It converts that data into `totem.status.get`, `totem.peers.get`,
-`totem.peer.seen`, and `totem.peer.gone`. See the
+`totem.peer.seen`, and `totem.peer.gone`. Candidate peers are then probed over
+NIP-11 and challenged over the mesh. The responder signs with the same FIPS
+identity received through systemd credentials. See the
 [`totemd` bus reference](/reference/totemd).
 
 FIPS transports relay traffic as ordinary IPv6. It has no Nostr relay logic;
