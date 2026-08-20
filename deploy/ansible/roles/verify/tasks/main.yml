@@ -38,6 +38,26 @@
     fail_msg: totem.service is not enabled and running
   when: totem_device_manager_enabled | bool
 
+- name: Require the screen state service to be enabled and running
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services['totem-screen.service'].state == 'running'
+      - ansible_facts.services['totem-screen.service'].status == 'enabled'
+    fail_msg: totem-screen.service is not enabled and running
+  when:
+    - totem_device_manager_enabled | bool
+    - totem_screen_enabled | bool
+
+- name: Require the screen state service to be disabled off display hosts
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services['totem-screen.service'].state != 'running'
+      - ansible_facts.services['totem-screen.service'].status == 'disabled'
+    fail_msg: totem-screen.service is active on a host without screen enablement
+  when:
+    - totem_device_manager_enabled | bool
+    - not (totem_screen_enabled | bool)
+
 - name: Read FIPS status
   ansible.builtin.command:
     argv: [fipsctl, show, status]

@@ -26,6 +26,7 @@ raspberry-pi = [
 [project.scripts]
 totem = "totem.__main__:main"
 totem-api = "totem.api.app:start_server"
+totem-screen = "totem.screen.__main__:main"
 
 [tool.poetry]
 packages = [{ include = "totem", from = "src" }]
