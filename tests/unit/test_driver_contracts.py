@@ -276,16 +276,15 @@ def test_waveshare_2in13_v4_full_refresh_seeds_both_ram_planes(monkeypatch):
     assert driver.partial_refresh_ready is True
 
 
-def test_waveshare_2in13_v4_partial_refresh_uses_differential_sequence(
+def test_waveshare_2in13_v4_partial_refresh_uses_high_contrast_sequence(
     monkeypatch,
 ):
     from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
 
     driver = Driver()
     driver.initialized = True
-    previous = bytes([0xFF]) * driver.FRAME_BYTES
     payload = bytes([0x00]) * driver.FRAME_BYTES
-    driver._previous_frame = previous
+    driver._previous_frame = bytes([0xFF]) * driver.FRAME_BYTES
     events = []
 
     class FakeGPIO:
@@ -327,8 +326,6 @@ def test_waveshare_2in13_v4_partial_refresh_uses_differential_sequence(
         ("cmd", driver.DATA_ENTRY_MODE_SETTING),
         ("data", 0x03),
         ("prepare",),
-        ("cmd", driver.WRITE_RAM_PREVIOUS),
-        ("data", previous),
         ("cmd", driver.WRITE_RAM),
         ("data", payload),
         ("partial",),
@@ -337,7 +334,7 @@ def test_waveshare_2in13_v4_partial_refresh_uses_differential_sequence(
     assert driver._partial_mode_active is True
 
 
-def test_waveshare_2in13_v4_resets_only_when_entering_partial_burst(
+def test_waveshare_2in13_v4_resets_before_every_partial_frame(
     monkeypatch,
 ):
     from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
@@ -369,6 +366,8 @@ def test_waveshare_2in13_v4_resets_only_when_entering_partial_burst(
     driver.display_bytes_partial(bytes([0x55]) * driver.FRAME_BYTES)
 
     assert outputs == [
+        (driver.reset_pin, FakeGPIO.LOW),
+        (driver.reset_pin, FakeGPIO.HIGH),
         (driver.reset_pin, FakeGPIO.LOW),
         (driver.reset_pin, FakeGPIO.HIGH),
     ]

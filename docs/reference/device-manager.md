@@ -58,7 +58,7 @@ defaults. Use `totem` when command-line bind or logging options are needed.
 | `TOTEM_ALLOW_MOCK_DRIVERS` | false | Accepts `1`, `true`, `yes`, or `on` (case-insensitive) to permit explicit mock display, NFC, and Wi-Fi transports. |
 | `TOTEM_STORAGE_ROOT` | driver default | Confines storage reads and writes below one directory. The Ansible deployment sets `/var/lib/totem/storage`. |
 | `TOTEM_EINK_DRIVER` | empty | Exact display driver selected when `DisplayManager` receives no explicit name. An explicit constructor argument still wins. |
-| `TOTEM_EINK_FULL_REFRESH_EVERY` | `20` | Positive integer cadence for panel hygiene. On a partial-capable driver, every Nth requested partial frame is promoted to a full refresh. Invalid or non-positive values fail manager initialization. |
+| `TOTEM_EINK_FULL_REFRESH_EVERY` | `0` | Optional non-negative full-refresh cadence. `0` disables scheduled full flashes; a positive value promotes every Nth requested partial frame. Invalid or negative values fail manager initialization. |
 | `TOTEM_UPS_DRIVER` | PiSugar2 fallback | Exact UPS driver selected when `UPSManager` receives no explicit name. Metot is pinned to `pisugar2`; set `waveshare_ups_hat_c` for a Waveshare UPS HAT (C). |
 | `TOTEM_I2C_BUS` | `1` | Linux I2C bus used by UPS drivers. |
 | `EINK_DISPLAY_TYPE` | empty | Guides display auto-detection: `2in13` or `3in7`. Without it, detected Raspberry Pi displays default to the 3.7-inch driver family. |

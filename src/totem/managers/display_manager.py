@@ -20,7 +20,7 @@ from totem.logging import logger
 class DisplayManager:
     """Render text and images through one selected display driver."""
 
-    DEFAULT_FULL_REFRESH_EVERY = 20
+    DEFAULT_FULL_REFRESH_EVERY = 0
     FULL_REFRESH_EVERY_ENV = "TOTEM_EINK_FULL_REFRESH_EVERY"
 
     def __init__(
@@ -53,13 +53,15 @@ class DisplayManager:
         if value == "" or value is None:
             return cls.DEFAULT_FULL_REFRESH_EVERY
         if isinstance(value, bool):
-            raise ValueError("full_refresh_every must be a positive integer")
+            raise ValueError("full_refresh_every must be a non-negative integer")
         try:
             parsed = int(value)
         except (TypeError, ValueError) as exc:
-            raise ValueError("full_refresh_every must be a positive integer") from exc
-        if parsed <= 0:
-            raise ValueError("full_refresh_every must be a positive integer")
+            raise ValueError(
+                "full_refresh_every must be a non-negative integer"
+            ) from exc
+        if parsed < 0:
+            raise ValueError("full_refresh_every must be a non-negative integer")
         return parsed
 
     def _effective_refresh_mode(self, requested, *, raw: bool = False) -> str:
@@ -77,7 +79,10 @@ class DisplayManager:
         if not self.eink_device.partial_refresh_ready():
             logger.debug("Using a full refresh to establish the partial baseline")
             return FULL_REFRESH
-        if self._partial_refreshes + 1 >= self.full_refresh_every:
+        if (
+            self.full_refresh_every
+            and self._partial_refreshes + 1 >= self.full_refresh_every
+        ):
             logger.info(
                 "Promoting partial refresh %s to full refresh for panel hygiene",
                 self.full_refresh_every,

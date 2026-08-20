@@ -82,12 +82,12 @@ class Driver(Waveshare2in13Base):
         self._activate_update(self.PARTIAL_UPDATE_CONTROL)
 
     def _configure_partial_refresh(self):
-        # Waveshare's V4 reference pulses reset before every partial frame.
-        # This long-lived driver needs that transition only once per burst.
-        if not self._partial_mode_active:
-            self.GPIO.output(self.reset_pin, self.GPIO.LOW)
-            time.sleep(self.PARTIAL_RESET_SECONDS)
-            self.GPIO.output(self.reset_pin, self.GPIO.HIGH)
+        # The V4 controller needs this short pulse for every partial update.
+        # Keeping reset high across a burst leaves fine strokes pale and lets
+        # the nominally white plane accumulate a visible gray cast.
+        self.GPIO.output(self.reset_pin, self.GPIO.LOW)
+        time.sleep(self.PARTIAL_RESET_SECONDS)
+        self.GPIO.output(self.reset_pin, self.GPIO.HIGH)
 
         self.send_command(self.BORDER_WAVEFORM_CONTROL)
         self.send_data(self.PARTIAL_BORDER_WAVEFORM)
@@ -131,7 +131,7 @@ class Driver(Waveshare2in13Base):
         return True
 
     def display_bytes_partial(self, image_bytes):
-        """Differential full-frame refresh without reinitializing each frame."""
+        """High-contrast V4 partial refresh without a full-screen flash."""
         payload = self._frame_payload(image_bytes)
         if not self.partial_refresh_ready:
             # A retained panel does not imply valid controller RAM after boot.
@@ -139,10 +139,11 @@ class Driver(Waveshare2in13Base):
             self.display_bytes(payload)
             return
 
-        previous = self._previous_frame
         try:
             self._configure_partial_refresh()
-            self._write_frame(self.WRITE_RAM_PREVIOUS, previous)
+            # The controller's partial waveform consumes the new 0x24 plane
+            # directly. Rewriting 0x26 on every frame visibly weakens black
+            # and dirties white on the physical Rev 2.1 HAT used by metot.
             self._write_frame(self.WRITE_RAM, payload)
             self._update_partial()
         except Exception:

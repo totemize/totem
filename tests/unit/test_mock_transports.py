@@ -122,9 +122,9 @@ def test_display_manager_full_request_restarts_partial_cadence():
     assert manager._partial_refreshes == 1
 
 
-@pytest.mark.parametrize("value", (0, -1, "never", True))
+@pytest.mark.parametrize("value", (-1, "never", True))
 def test_display_manager_rejects_unsafe_full_refresh_cadence(value):
-    with pytest.raises(ValueError, match="positive integer"):
+    with pytest.raises(ValueError, match="non-negative integer"):
         DisplayManager(
             "mock_eink",
             allow_mock=True,
@@ -140,10 +140,29 @@ def test_display_manager_reads_full_refresh_cadence_from_environment(monkeypatch
     assert manager.full_refresh_every == 7
 
 
-def test_display_manager_defaults_to_twenty_partial_requests_per_full_refresh():
+def test_display_manager_defaults_to_no_scheduled_full_refresh():
     manager = DisplayManager("mock_eink", allow_mock=True)
 
-    assert manager.full_refresh_every == 20
+    assert manager.full_refresh_every == 0
+
+
+def test_display_manager_zero_cadence_never_promotes_partial_refresh():
+    manager = DisplayManager(
+        "mock_eink",
+        allow_mock=True,
+        full_refresh_every=0,
+    )
+    driver = manager.eink_device.driver
+    calls = []
+    driver.partial_refresh_ready = True
+    driver.display_image = lambda image: calls.append("full")
+    driver.display_image_partial = lambda image: calls.append("partial")
+    image = Image.new("1", (2, 2), 255)
+
+    for _ in range(100):
+        manager.display_image(image, "partial")
+
+    assert calls == ["partial"] * 100
 
 
 def test_display_manager_rejects_unknown_refresh_mode_before_draw():

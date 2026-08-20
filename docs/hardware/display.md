@@ -68,27 +68,28 @@ setting for metot and verifies `/dev/spidev0.0` after any required reboot.
 
 `POST /display/image` and the display-manager image methods accept `full` and
 `partial` refresh modes. Full remains the default for compatibility. The V4
-driver uses differential full-frame partial updates: a full update first seeds
-controller RAM planes `0x24` and `0x26`; later partial updates retain the prior
-frame, select update control `0xFF`, and do not clear or reinitialize the panel
-between animation frames. The reset pin is pulsed only when entering a partial
-burst.
+driver uses high-contrast full-frame partial updates: a full update first seeds
+controller RAM planes `0x24` and `0x26`; each later partial update pulses reset
+for 1 ms, writes only the new `0x24` plane, and selects update control `0xFF`.
+It does not clear or fully reinitialize the panel between animation frames.
+This is the same runtime path used by Pwnagotchi on the V4 panel and avoids the
+gray background and weak fine strokes observed when rewriting `0x26` on every
+frame.
 
-Set `TOTEM_EINK_FULL_REFRESH_EVERY` to a positive integer. The default and
-metot deployment value are `20`; the twentieth requested partial frame is
-promoted to a full refresh, so no burst exceeds nineteen consecutive partial
-waveforms. The cadence remains configurable so field testing can balance
-ghosting against disruptive full-panel flashes. Drivers that do not implement
-partial refresh safely fall back to full updates, and a controller restart or
-failed update forces a new full baseline.
+`TOTEM_EINK_FULL_REFRESH_EVERY=0` disables scheduled full-screen flashes and
+is both the application default and metot deployment value. Set a positive
+integer only when a particular panel needs every Nth requested partial frame
+promoted to full. Drivers that do not implement partial refresh safely fall
+back to full updates, and a controller restart or failed update forces a new
+full baseline.
 
 The command sequence follows Waveshare's
 [V4 Python driver](https://github.com/waveshareteam/e-Paper/blob/a794fbc39656b0f93938d1ffb3fdc77eaed9e9fc/RaspberryPi_JetsonNano/python/lib/waveshare_epd/epd2in13_V4.py)
-and
-[V4 demo](https://github.com/waveshareteam/e-Paper/blob/a794fbc39656b0f93938d1ffb3fdc77eaed9e9fc/RaspberryPi_JetsonNano/python/examples/epd_2in13_V4_test.py).
-Previous-plane tracking incorporates the hardware-tested correction described
-in the upstream repository's
-[ghosting fix PR #416](https://github.com/waveshareteam/e-Paper/pull/416).
+and Pwnagotchi's
+[V4 display implementation](https://github.com/jayofelony/pwnagotchi/blob/6e31b26fe76d1b2efaec7cc9fb85429507850c17/pwnagotchi/ui/hw/libs/waveshare/epaper/v2in13_V4/epd2in13_V4.py).
+Totem retains its last successfully submitted frame only to know whether a safe
+full baseline exists; the retained bytes are not rewritten during partial
+updates.
 
 Mock behavior must be explicit:
 

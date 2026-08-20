@@ -9,7 +9,7 @@ totem_device_manager_enabled: true
 totem_screen_enabled: false
 totem_fips_lan_rendezvous_enabled: true
 totem_eink_driver: ""
-totem_eink_full_refresh_every: 20
+totem_eink_full_refresh_every: 0
 totem_screen_rotation: 0
 totem_screen_snapshot_poll_seconds: 15
 totem_screen_reconnect_seconds: 2
