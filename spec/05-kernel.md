@@ -57,7 +57,7 @@ The parts identified so far:
 |------|------|
 | **Shell** | What "shell" means on a headless device is an open question (`09-open-questions.md`); tentatively the composition/entry layer. |
 | **Runtime** | Hosts happlets: dispatch, sessions, capability enforcement (mirroring Kehto's runtime). |
-| **Control plane** | Management surface: state, configuration, the backend for the owner's web app (`06-interaction.md`). |
+| **Control plane** | Management surface: state, configuration, the backend for the owner's web app (`06-interaction.md`). Implemented by the **totemd** daemon (`10-control-plane.md`). |
 | **Device manager** | enumerates and manages hardware peripherals. |
 | **Drivers** | hardware-specific implementations behind the kernel's abstractions. |
 
@@ -72,4 +72,6 @@ web app. Nothing more is required for the demo milestone (`08-stories.md`).
 
 The **happlet model and the IPC projection are future directions**: kept in
 this document as design intent, specified when a use case demands them. The
-v1 kernel MUST NOT block on them.
+v1 kernel MUST NOT block on them. The totem bus (`10-control-plane.md`) is
+the v1 seed: NIP-5D-shaped messages over plain HTTP, with no napplet
+machinery — the IPC projection is expected to build on it, not replace it.

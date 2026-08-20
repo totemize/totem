@@ -1,6 +1,7 @@
 """High-level, serialized access to an E-Ink display."""
 
 import io
+import os
 from pathlib import Path
 import threading
 from typing import Optional
@@ -12,16 +13,19 @@ from totem.logging import logger
 
 
 class DisplayManager:
-    """Render text and images through one explicitly selected display driver."""
+    """Render text and images through one selected display driver."""
 
     def __init__(
         self, driver_name: Optional[str] = None, *, allow_mock: bool = False
     ):
         self._lock = threading.RLock()
-        self.eink_device = EInk(driver_name, allow_mock=allow_mock)
+        environment_driver = os.environ.get("TOTEM_EINK_DRIVER", "").strip()
+        self.driver_name = driver_name or environment_driver or None
+        self.eink_device = EInk(self.driver_name, allow_mock=allow_mock)
         self.eink_device.initialize()
         logger.info(
-            "Initialized display with dimensions %sx%s",
+            "Initialized display driver %s with dimensions %sx%s",
+            type(self.eink_device.driver).__module__,
             self.width,
             self.height,
         )

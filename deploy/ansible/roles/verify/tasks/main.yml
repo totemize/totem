@@ -1,0 +1,193 @@
+---
+- name: Wait for service ports
+  ansible.builtin.wait_for:
+    host: "{{ item.host }}"
+    port: "{{ item.port }}"
+    timeout: 30
+  loop:
+    - {host: '::1', port: 7777}
+    - {host: '::1', port: 8080}
+    - {host: '127.0.0.1', port: 8081}
+
+- name: Wait for the Python device-manager port
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: 8000
+    timeout: 30
+  when: totem_device_manager_enabled | bool
+
+- name: Read systemd service facts
+  ansible.builtin.service_facts:
+
+- name: Require enabled core services to be running
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services[item].state == 'running'
+      - ansible_facts.services[item].status == 'enabled'
+    fail_msg: "{{ item }} is not enabled and running"
+  loop:
+    - fips.service
+    - strfry.service
+    - totemd.service
+
+- name: Require the Python device manager to be enabled and running
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services['totem.service'].state == 'running'
+      - ansible_facts.services['totem.service'].status == 'enabled'
+    fail_msg: totem.service is not enabled and running
+  when: totem_device_manager_enabled | bool
+
+- name: Require the screen state service to be enabled and running
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services['totem-screen.service'].state == 'running'
+      - ansible_facts.services['totem-screen.service'].status == 'enabled'
+    fail_msg: totem-screen.service is not enabled and running
+  when:
+    - totem_device_manager_enabled | bool
+    - totem_screen_enabled | bool
+
+- name: Require the screen state service to be disabled off display hosts
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.services['totem-screen.service'].state != 'running'
+      - ansible_facts.services['totem-screen.service'].status == 'disabled'
+    fail_msg: totem-screen.service is active on a host without screen enablement
+  when:
+    - totem_device_manager_enabled | bool
+    - not (totem_screen_enabled | bool)
+
+- name: Read FIPS status
+  ansible.builtin.command:
+    argv: [fipsctl, show, status]
+  register: fips_status_command
+  changed_when: false
+
+- name: Validate FIPS runtime health
+  ansible.builtin.assert:
+    that:
+      - (fips_status_command.stdout | from_json).state == 'running'
+      - (fips_status_command.stdout | from_json).tun_state == 'active'
+      - (fips_status_command.stdout | from_json).persistent
+      - (fips_status_command.stdout | from_json).npub == totem_npub
+
+- name: Read strfry NIP-11 information
+  ansible.builtin.uri:
+    url: http://[::1]:7777/
+    headers:
+      Accept: application/nostr+json
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: strfry_nip11
+
+- name: Read the derived NIP-11 name
+  ansible.builtin.slurp:
+    path: /var/lib/totemd/nip11-name
+  register: strfry_nip11_name
+
+- name: Validate the strfry relay contract
+  ansible.builtin.assert:
+    that:
+      - strfry_nip11.json.negentropy | int == 1
+      - 77 in strfry_nip11.json.supported_nips
+      - "strfry_nip11.json.name is match('^!Totem(?: |$)')"
+      - strfry_nip11.json.name == (strfry_nip11_name.content | b64decode)
+      - strfry_nip11.json.pubkey == totem_npub_hex
+
+- name: Exercise an LMDB scan as the unprivileged control-plane user
+  ansible.builtin.command:
+    argv:
+      - /usr/local/libexec/totem-strfry
+      - scan
+      - '{"ids":["0000000000000000000000000000000000000000000000000000000000000000"]}'
+  become_user: totem
+  changed_when: false
+
+- name: Validate the control-plane strfry access boundary
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/test
+      - "{{ item.mode }}"
+      - "{{ item.path }}"
+  become_user: totem
+  changed_when: false
+  loop:
+    - {mode: -r, path: /etc/strfry.conf}
+    - {mode: -w, path: /var/lib/strfry}
+    - {mode: -x, path: /usr/local/libexec/totem-strfry}
+
+- name: Exercise the signed challenge responder over IPv6
+  ansible.builtin.uri:
+    url: >-
+      http://[::1]:8080/totem/challenge?nonce=000102030405060708090a0b0c0d0e0f
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: totemd_challenge
+
+- name: Validate the signed challenge identity and cache policy
+  ansible.builtin.assert:
+    that:
+      - totemd_challenge.json.event.kind | int == 27235
+      - totemd_challenge.json.event.pubkey == totem_npub_hex
+      - totemd_challenge.cache_control == 'no-store'
+
+- name: Read totemd status
+  ansible.builtin.command:
+    argv: [totemctl, status]
+  register: totemd_status_command
+  changed_when: false
+
+- name: Validate totemd status
+  ansible.builtin.assert:
+    that:
+      - (totemd_status_command.stdout | from_json).ok
+      - (totemd_status_command.stdout | from_json).status.fips.connected
+      - (totemd_status_command.stdout | from_json).status.fips.npub == totem_npub
+      - (totemd_status_command.stdout | from_json).status.config.probe
+      - (totemd_status_command.stdout | from_json).status.config.sync
+      - >-
+        (totemd_status_command.stdout | from_json).status.config.befriend
+        in ['auto', 'ask', 'never']
+
+- name: Read recent totemd event history
+  ansible.builtin.command:
+    argv: [totemctl, history]
+  register: totemd_history_command
+  changed_when: false
+
+- name: Validate the totemd event-history surface
+  ansible.builtin.assert:
+    that:
+      - (totemd_history_command.stdout | from_json).ok
+      - >-
+        (totemd_history_command.stdout | from_json).type ==
+        'totem.events.get.result'
+      - (totemd_history_command.stdout | from_json).events is sequence
+
+- name: Read Python device-manager health
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8000/health
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  when: totem_device_manager_enabled | bool
+
+- name: Find completed migration checkpoints
+  ansible.builtin.find:
+    paths: "{{ totem_migration_root }}"
+    patterns: '*.complete'
+    file_type: file
+  register: migration_checkpoints
+
+- name: Require the complete migration chain
+  ansible.builtin.assert:
+    that:
+      - >-
+        migration_checkpoints.matched | int >=
+        (5 if totem_device_manager_enabled | bool else 4)
+    fail_msg: >-
+      Expected the enabled roles' migration checkpoints, found
+      {{ migration_checkpoints.matched }}.

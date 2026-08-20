@@ -1,0 +1,231 @@
+---
+- name: Inspect the local strfry runtime artifact
+  ansible.builtin.stat:
+    path: "{{ totem_local_artifact_root }}/strfry-rootfs.tar.gz"
+    checksum_algorithm: sha256
+  register: strfry_local_artifact
+  delegate_to: localhost
+  become: false
+
+- name: Require the strfry runtime artifact
+  ansible.builtin.assert:
+    that:
+      - strfry_local_artifact.stat.exists
+      - strfry_local_artifact.stat.isreg
+    fail_msg: >-
+      Missing strfry-rootfs.tar.gz for {{ totem_artifact_arch }}. Run
+      deploy/ansible/scripts/stage-artifacts.sh before deploying.
+
+- name: Ensure the strfry service account exists
+  ansible.builtin.user:
+    name: strfry
+    system: true
+    home: /var/lib/strfry
+    shell: /usr/sbin/nologin
+    create_home: false
+    state: present
+
+- name: Allow the Totem control plane to run strfry sync
+  ansible.builtin.user:
+    name: totem
+    groups: strfry
+    append: true
+    state: present
+
+- name: Create strfry runtime directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /opt/strfry, owner: root, group: root, mode: "0755"}
+    - {path: /usr/local/libexec, owner: root, group: root, mode: "0755"}
+    - {path: /etc/systemd/system/strfry.service.d, owner: root, group: root, mode: "0755"}
+    - {path: /var/lib/strfry, owner: strfry, group: strfry, mode: "2770"}
+    - {path: /var/lib/totemd, owner: totem, group: totem, mode: "0755"}
+
+- name: Seed the public derived NIP-11 name
+  ansible.builtin.copy:
+    dest: /var/lib/totemd/nip11-name
+    owner: totem
+    group: totem
+    mode: "0644"
+    content: "!Totem {{ inventory_hostname }}"
+    force: false
+
+- name: Seed an IPv6-capable strfry configuration on bare devices
+  ansible.builtin.template:
+    src: strfry.conf.j2
+    dest: /etc/strfry.conf
+    owner: root
+    group: strfry
+    mode: "0640"
+    force: false
+  notify: Restart strfry
+
+- name: Reconcile the mesh-facing strfry bind
+  ansible.builtin.lineinfile:
+    path: /etc/strfry.conf
+    regexp: '^\s*bind\s*='
+    line: '    bind = "::"'
+  notify: Restart strfry
+
+- name: Reconcile the dynamic NIP-11 Totem name
+  ansible.builtin.lineinfile:
+    path: /etc/strfry.conf
+    regexp: '^\s*name\s*='
+    line: '        name = (string (read "/var/lib/totemd/nip11-name"))'
+  notify: Hot-reload strfry configuration
+
+- name: Reconcile the NIP-11 public identity
+  ansible.builtin.lineinfile:
+    path: /etc/strfry.conf
+    regexp: '^\s*pubkey\s*='
+    line: '        pubkey = "{{ totem_npub_hex }}"'
+    insertbefore: '^\s*contact\s*='
+  notify: Restart strfry
+
+- name: Cache the strfry runtime archive on the device
+  ansible.builtin.copy:
+    src: "{{ totem_local_artifact_root }}/strfry-rootfs.tar.gz"
+    dest: >-
+      {{ totem_remote_cache }}/strfry-{{ strfry_local_artifact.stat.checksum }}.tar.gz
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Read the strfry artifact checkpoint
+  ansible.builtin.stat:
+    path: >-
+      {{ totem_artifact_state_root }}/strfry-{{ strfry_local_artifact.stat.checksum }}.installed
+  register: strfry_artifact_checkpoint
+
+- name: Install a changed strfry runtime
+  when: not strfry_artifact_checkpoint.stat.exists
+  block:
+    - name: Extract the strfry runtime
+      ansible.builtin.unarchive:
+        src: >-
+          {{ totem_remote_cache }}/strfry-{{ strfry_local_artifact.stat.checksum }}.tar.gz
+        dest: /opt/strfry
+        remote_src: true
+        owner: root
+        group: root
+      notify: Restart strfry
+
+    - name: Record the installed strfry artifact
+      ansible.builtin.copy:
+        dest: >-
+          {{ totem_artifact_state_root }}/strfry-{{ strfry_local_artifact.stat.checksum }}.installed
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          sha256={{ strfry_local_artifact.stat.checksum }}
+          architecture={{ totem_artifact_arch }}
+
+- name: Require the architecture-specific strfry loader
+  ansible.builtin.stat:
+    path: "/opt/strfry/lib/{{ strfry_loader }}"
+  register: strfry_loader_state
+
+- name: Validate the extracted strfry runtime
+  ansible.builtin.assert:
+    that:
+      - strfry_loader_state.stat.exists
+    fail_msg: >-
+      The {{ totem_artifact_arch }} strfry artifact does not contain
+      /opt/strfry/lib/{{ strfry_loader }}.
+
+- name: Install the unprivileged strfry command runner
+  ansible.builtin.copy:
+    src: "{{ totem_repo_root }}/deploy/totem-strfry"
+    dest: /usr/local/libexec/totem-strfry
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install strfry sync permission policy
+  ansible.builtin.copy:
+    src: "{{ totem_repo_root }}/deploy/systemd/strfry-sync.conf"
+    dest: /etc/systemd/system/strfry.service.d/totemd-sync.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd for strfry
+    - Restart strfry
+
+- name: Install NIP-11 name hot-reload units
+  ansible.builtin.copy:
+    src: "{{ totem_repo_root }}/deploy/systemd/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - strfry-nip11-name.path
+    - strfry-nip11-name.service
+
+- name: Enable the NIP-11 name watcher
+  ansible.builtin.systemd_service:
+    name: strfry-nip11-name.path
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Find existing top-level strfry database files
+  ansible.builtin.find:
+    paths: /var/lib/strfry
+    file_type: file
+    recurse: false
+  register: strfry_database_files
+
+- name: Preserve group access to existing strfry database files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    group: strfry
+    mode: "0660"
+  loop: "{{ strfry_database_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Install the strfry systemd unit
+  ansible.builtin.template:
+    src: strfry.service.j2
+    dest: /etc/systemd/system/strfry.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd for strfry
+    - Restart strfry
+
+- name: Read the strfry layout migration checkpoint
+  ansible.builtin.stat:
+    path: "{{ totem_migration_root }}/0020-strfry-layout.complete"
+  register: strfry_layout_checkpoint
+
+- name: Record strfry layout adoption
+  ansible.builtin.copy:
+    dest: "{{ totem_migration_root }}/0020-strfry-layout.complete"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      migration=0020-strfry-layout
+      config_policy=preserve-existing-seed-ipv6
+      database_policy=preserve
+  when: not strfry_layout_checkpoint.stat.exists
+
+- name: Enable and start strfry
+  ansible.builtin.systemd_service:
+    name: strfry.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply strfry changes before verification
+  ansible.builtin.meta: flush_handlers

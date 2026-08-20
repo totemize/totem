@@ -37,7 +37,24 @@ class EInkDeviceInterface(DeviceDriver):
 EINK_DRIVERS = DriverRegistry(
     EInkDeviceInterface,
     (
+        DriverSpec(
+            "waveshare_2in13_v1",
+            "totem.devices.display.drivers.waveshare_2in13_v1",
+        ),
+        # Historical name retained as an alias for the V2 controller driver.
         DriverSpec("waveshare_2in13", "totem.devices.display.drivers.waveshare_2in13"),
+        DriverSpec(
+            "waveshare_2in13_v2",
+            "totem.devices.display.drivers.waveshare_2in13_v2",
+        ),
+        DriverSpec(
+            "waveshare_2in13_v3",
+            "totem.devices.display.drivers.waveshare_2in13_v3",
+        ),
+        DriverSpec(
+            "waveshare_2in13_v4",
+            "totem.devices.display.drivers.waveshare_2in13_v4",
+        ),
         DriverSpec(
             "waveshare_2in13_pi5", "totem.devices.display.drivers.waveshare_2in13_pi5"
         ),
@@ -107,9 +124,18 @@ class EInk:
             if spi_devices:
                 # Determine which display is connected on non-Pi 5 systems
                 display_type = os.environ.get('EINK_DISPLAY_TYPE', '').lower()
-                if display_type == '2in13':
+                if display_type == '2in13_v1':
+                    logger.info("Using 2.13 inch V1 driver")
+                    return 'waveshare_2in13_v1'
+                elif display_type in {'2in13', '2in13_v2'}:
                     logger.info("Using 2.13 inch driver")
-                    return 'waveshare_2in13'
+                    return 'waveshare_2in13_v2'
+                elif display_type == '2in13_v3':
+                    logger.info("Using 2.13 inch V3 driver")
+                    return 'waveshare_2in13_v3'
+                elif display_type == '2in13_v4':
+                    logger.info("Using 2.13 inch V4 driver")
+                    return 'waveshare_2in13_v4'
                 elif display_type == '3in7':
                     logger.info("Using 3.7 inch driver")
                     return 'waveshare_3in7'
