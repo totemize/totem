@@ -1,0 +1,29 @@
+[package]
+name = "totemd"
+version = "0.1.0"
+edition = "2021"
+license = "Unlicense"
+description = "Totem control-plane daemon and net code (spec/10-control-plane.md)"
+publish = false
+
+[profile.release]
+strip = true
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "signal", "io-util", "process", "sync"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Plain HTTP only: loopback bus client + mesh probes. No TLS stack on links
+# already protected by FIPS or carrying signed public data.
+ureq = { version = "2", default-features = false, features = ["json"] }
+# Configuration + canonical Nostr key/event/signature handling.
+toml = "1.1.4"
+nostr = { version = "0.45.3", default-features = false, features = ["std", "os-rng"] }
+base64 = "0.22"
+bitcoin_hashes = "1.1"
+# Clear the credential read buffer immediately after `nostr::Keys` parses it.
+zeroize = "1"

@@ -1,0 +1,10 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart fips
+  ansible.builtin.systemd_service:
+    name: fips.service
+    state: restarted
+  when: totem_service_restarts_enabled | bool

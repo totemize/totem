@@ -4,12 +4,16 @@ Status: Draft
 
 ## One identity everywhere
 
-A totem has a single Nostr keypair. The same npub is:
+A totem has a single **device** Nostr keypair. The same npub is:
 
-- its **internal (device) identity** — the actor that signs events, owns the
-  contact list, and is granted administrative meaning, and
-- its **FIPS network identity** — the keypair FIPS uses to authenticate the
-  node on the mesh.
+- its internal identity — the actor that signs its public profile and contact
+  list, and
+- its FIPS network identity — the keypair FIPS uses to authenticate the node
+  on the mesh.
+
+Ownership is separate: one user npub authorizes control-plane mutations, while
+the device key never leaves the totem. The owner authorizes an action; the
+device signs the resulting device event.
 
 FIPS nodes authenticate each other with nostr keypairs, so when two totems
 meet over the mesh they each already know the other's npub — authenticated,
@@ -24,9 +28,17 @@ Consequences that MUST hold:
   relay serves events from many pubkeys. The spec's vocabulary keeps these
   separate.
 
-Key management (owner key vs. device key, rotation) is an open question — see
-`09-open-questions.md`. Until resolved, the assumption above stands: one
-device keypair, one identity.
+Device-key rotation and lost-owner recovery remain open questions
+(`09-open-questions.md`); they do not merge the two identities.
+
+## Public profile
+
+A totem's public name and metadata are its latest valid NIP-01 kind-0 event,
+authored by the device npub. `totemd` is the device-event writer: an owner may
+authorize a metadata change, but only the device key signs and imports it into
+the local relay. In the absence of kind 0, deployment configuration supplies
+the fallback name. The effective short name is mirrored into the relay's
+unsigned NIP-11 marker; kind 0 remains the canonical signed profile.
 
 ## Totem recognition
 
@@ -35,11 +47,14 @@ regular user peer.
 
 ### Declaration (the hint)
 
-A totem advertises itself in its relay's NIP-11 info document: a **totem
-marker** — a boolean field (schema in `07-conventions.md`). This is an
-unsigned **hint**: a cheap pre-filter so peers only run the authentication
-challenge at things that look like totems. It authenticates nothing by
-itself.
+A totem advertises itself in its relay's NIP-11 info document using
+**standard NIP-11 fields only** (`07-conventions.md`): the relay `name`
+carries the totem marker (a `!Totem` prefix), and `pubkey` carries the
+device npub. This is an unsigned **hint**: a cheap pre-filter so peers only run the
+authentication challenge at things that look like totems. It authenticates
+nothing by itself — and because both fields are standard, any conforming
+relay whose operator can set them can declare totemhood: no relay fork, no
+proxy in front of the relay, no custom schema.
 
 ### Challenge (the proof)
 
@@ -51,15 +66,15 @@ serves NIP-11:
 ```
 Totem A (prober)                         Totem B (peer)
       │                                        │
- 1.   │ GET /  (Accept: nostr+json)            │
+ 1.   │ GET /  (Accept: nostr+json)            │  ← relay port
       │───────────────────────────────────────▶│
  2.   │ 200 NIP-11 doc with totem marker       │  ← unsigned hint
       │◀───────────────────────────────────────│
  3.   │ A mints a nonce (16 random bytes hex)  │
-      │ GET /totem/challenge?nonce=9a3f..c1    │
+      │ GET /totem/challenge?nonce=9a3f..c1    │  ← web port (totemd)
       │───────────────────────────────────────▶│
- 4.   │ B signs an event over the nonce:       │
-      │ 200 { "event": {...} }                 │
+ 4.   │ B's control plane signs an event over │
+      │ the nonce: 200 { "event": {...} }      │
       │◀───────────────────────────────────────│
  5.   │ A verifies, then discards nonce+event  │
 ```
@@ -83,22 +98,30 @@ The signed event is never published or stored anywhere:
 
 The prober's verification checklist:
 
-1. the signature is valid for `pubkey` (proof of key control);
+1. the event ID and signature are valid for `pubkey` (proof of key control);
 2. `pubkey` matches the expected npub — over FIPS the transport-authenticated
    peer npub, over AP the npub claimed in the NIP-11 document;
-3. the `nonce` tag equals the nonce sent (binds response to this exchange);
-4. `created_at` is fresh (window **TBD**, `07-conventions.md`).
+3. kind is 27235, content is empty, and the exact `nonce`, `u`, and `method`
+   tags bind the proof to this GET and endpoint.
 
-Pass → totem. Anything else → not a totem; ignore.
+`created_at` remains a normal signed Nostr event field but is **not an
+acceptance clock**. Totems are offline devices without guaranteed RTC/NTP;
+a wall-clock window would reject valid peers after cold boots. Freshness and
+replay resistance come from the verifier's unpredictable 128-bit nonce,
+used for one request and then discarded.
+
+Pass → recognized for this encounter. Anything else → no recognition.
 
 Properties: the challenge is one-way (mutual recognition is the symmetric
-exchange, both directions in parallel during pairing); stateless on both
-sides; replay-proof by construction (single-use nonce + freshness window);
-and it rides the HTTP server already required for NIP-11 — no new listener.
+exchange, both directions in parallel during pairing); has no persisted
+challenge state on either side; is replay-proof by construction (an old
+proof cannot match a new random nonce); and rides the totem's web server
+(`10-control-plane.md`) — no listener beyond the web port a totem serves
+anyway, and no involvement of the relay server at all.
 
-Values to pin in `07-conventions.md` after the spike: the endpoint path, the
-kind number (NIP-98's 27235 with an added `nonce` tag, or a NIP-01
-ephemeral kind 20000–29999), and the freshness window.
+Values are pinned in `07-conventions.md`: the endpoint is `/totem/challenge`
+on the web-app port, and the event kind is 27235 (NIP-98's) with an added
+`nonce` tag.
 
 ### Recognition flow
 
@@ -116,14 +139,18 @@ ephemeral kind 20000–29999), and the freshness window.
    "I am totem npub X" can mean without a transport-authenticated key, and
    impersonating a *specific* totem remains impossible without its key.
    (Checklist step 2 above.)
-5. On a positive verdict, the totem proceeds with totem behavior: open the
-   relay websocket, run sync (`03-network.md`), and update its kind 3 contact
-   list with the peer's npub.
+5. On a positive verdict, the totem applies its operator policy independently:
+   it MAY open the relay websocket and run sync (`03-network.md`), and it MAY
+   update its kind 3 contact list with the peer's npub. Neither action is a
+   prerequisite for the other (`10-control-plane.md`).
 
 The same probe + challenge works on the WiFi AP path: a totem joining another
 totem's AP as a station recognizes it identically.
 
-Recognition verdicts are per-encounter; nothing is cached across encounters.
+Signed recognition verdicts are per-encounter and are never cached across
+encounters. The unsigned NIP-11 prefilter grade MAY be cached per npub to
+avoid repeatedly probing ordinary FIPS peers; its expiry policy lives in
+`10-control-plane.md`, and it never replaces the challenge.
 
 ### Why not alternatives
 
@@ -142,8 +169,8 @@ Recognition verdicts are per-encounter; nothing is cached across encounters.
 
 Inter-totem relations use standard **NIP-02 kind 3** contact/follow lists:
 
-- When totems meet and recognize each other, each follows the other by
-  publishing a kind 3 event (signed by its npub) to its own relay.
+- After recognition, each totem MAY follow the other by publishing a kind 3
+  event according to its operator policy (`10-control-plane.md`).
 - **Mutual follows = friends.**
 - This is deliberately plain nostr — flat, self-signed, stored in the relay
   like any other event. No contact-database format is invented; storage is

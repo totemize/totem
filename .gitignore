@@ -18,3 +18,15 @@ __pycache__
 logs
 venv
 references/
+
+# totemd (Rust + embedded web app)
+totemd/target/
+node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+totemd/web/.svelte-kit/
+
+# Locally built deployment inputs. Keep provenance/checksums in the Ansible
+# inventory; do not put architecture-specific binaries in git.
+deploy/ansible/artifacts/*/
+deploy/ansible/.cache/

@@ -18,10 +18,11 @@ It is a set of focused documents, iterated as we design and build.
 | [07-conventions.md](07-conventions.md) | Normative registry: ports, addresses, marker, sync behavior | Draft |
 | [08-stories.md](08-stories.md) | User stories and the demo milestone (acceptance test) | Draft |
 | [09-open-questions.md](09-open-questions.md) | Non-goals, future directions, open questions | Draft |
+| [10-control-plane.md](10-control-plane.md) | totemd: control-plane daemon, net code host, web server, bus | Draft |
 
-Reading order for newcomers: 01 → 06 → 02 → 03 → 04 → 05, then 07 as the
-compliance checklist. 08 validates the whole; 09 records what is deliberately
-not decided.
+Reading order for newcomers: 01 → 06 → 02 → 03 → 04 → 05 → 10, then 07 as
+the compliance checklist. 08 validates the whole; 09 records what is
+deliberately not decided.
 
 ## Rules
 

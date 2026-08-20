@@ -41,9 +41,14 @@ Useful environment variables:
 
 - `TOTEM_ALLOW_MOCK_DRIVERS=1`: explicitly permit mock transports.
 - `TOTEM_STORAGE_ROOT=/var/lib/totem/storage`: confine filesystem storage.
-- `TOTEM_EINK_DRIVER=waveshare_3in7_pi5`: select a display in hardware tests.
-- `EINK_DISPLAY_TYPE=2in13|3in7`: guide display auto-detection.
+- `TOTEM_EINK_DRIVER=waveshare_2in13_v4`: select an exact display driver for `DisplayManager`, the API service, and hardware tests.
+- `TOTEM_SCREEN_ROTATION=0|180`: orient presentation frames for the physical panel mount.
+- `EINK_DISPLAY_TYPE=2in13_v1|2in13_v2|2in13_v3|2in13_v4|3in7`: guide display auto-detection.
 - `TOTEM_HARDWARE_COMPONENTS=display,nfc,network,storage`: select hardware tests.
+
+On display-equipped devices, `totem-screen.service` owns presentation state
+while the device-manager API retains exclusive ownership of SPI/GPIO. Replay
+the boot state machine without rebooting with `totem-screen replay-boot`.
 
 ## Test
 
@@ -59,6 +64,10 @@ Physical hardware checks are opt-in:
 pytest tests/hardware -m hardware --run-hardware
 ```
 
+The source-controlled `metot` hardware profile is
+[`deploy/devices/metot.env`](deploy/devices/metot.env). See
+[`deploy/README.md`](deploy/README.md) for installation and SPI setup.
+
 ## Layout
 
 ```text
@@ -68,6 +77,8 @@ src/totem/
 ├── managers/      # Serialized high-level device operations
 ├── __main__.py    # CLI entry point
 └── logging.py     # stdout-first logging
+totemd/            # Rust control-plane daemon (spec/10-control-plane.md);
+│                  # same binary serves as `totemctl` in client mode
 tests/
 ├── unit/          # deterministic mock-transport tests
 └── hardware/      # explicit physical-device smoke tests

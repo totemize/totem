@@ -1,0 +1,91 @@
+---
+- name: Inspect local FIPS artifacts
+  ansible.builtin.stat:
+    path: "{{ totem_local_artifact_root }}/fips/{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - fips
+    - fipsctl
+    - fipstop
+  register: fips_local_artifacts
+  delegate_to: localhost
+  become: false
+
+- name: Require the complete FIPS artifact set
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: >-
+      Missing {{ item.item }} for {{ totem_artifact_arch }}. Run
+      deploy/ansible/scripts/stage-artifacts.sh before deploying.
+  loop: "{{ fips_local_artifacts.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Create FIPS configuration directory
+  ansible.builtin.file:
+    path: /etc/fips
+    state: directory
+    owner: root
+    group: fips
+    mode: "0750"
+
+- name: Seed an isolated FIPS configuration on bare devices
+  ansible.builtin.template:
+    src: fips.yaml.j2
+    dest: /etc/fips/fips.yaml
+    owner: root
+    group: fips
+    mode: "0640"
+    force: false
+  notify: Restart fips
+
+- name: Install FIPS executables
+  ansible.builtin.copy:
+    src: "{{ totem_local_artifact_root }}/fips/{{ item.item }}"
+    dest: "/usr/local/bin/{{ item.item }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ fips_local_artifacts.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  notify: Restart fips
+
+- name: Install the FIPS systemd unit
+  ansible.builtin.template:
+    src: fips.service.j2
+    dest: /etc/systemd/system/fips.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart fips
+
+- name: Read the FIPS migration checkpoint
+  ansible.builtin.stat:
+    path: "{{ totem_migration_root }}/0010-fips-layout.complete"
+  register: fips_checkpoint
+
+- name: Record FIPS layout adoption
+  ansible.builtin.copy:
+    dest: "{{ totem_migration_root }}/0010-fips-layout.complete"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      migration=0010-fips-layout
+      config_policy=preserve-existing-seed-isolated
+  when: not fips_checkpoint.stat.exists
+
+- name: Enable and start FIPS
+  ansible.builtin.systemd_service:
+    name: fips.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply FIPS changes before dependent services
+  ansible.builtin.meta: flush_handlers

@@ -1,0 +1,21 @@
+---
+- name: Deploy the Totem service stack
+  hosts: totems
+  serial: 1
+  gather_facts: true
+  become: true
+
+  roles:
+    - role: base
+      tags: [base]
+    - role: fips
+      tags: [fips]
+    - role: strfry
+      tags: [strfry]
+    - role: totemd
+      tags: [totemd]
+    - role: device_manager
+      tags: [device_manager]
+      when: totem_device_manager_enabled | bool
+    - role: verify
+      tags: [verify]

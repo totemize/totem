@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+cd /var/lib/strfry
+for loader in /opt/strfry/lib/ld-musl-*.so.1; do
+    [ -x "$loader" ] || continue
+    exec "$loader" --library-path /opt/strfry/lib:/opt/strfry/usr/lib \
+        /opt/strfry/bin/strfry --config=/etc/strfry.conf "$@"
+done
+echo "totem-strfry: musl loader not found" >&2
+exit 127
