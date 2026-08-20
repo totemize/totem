@@ -151,6 +151,15 @@
     - Restart device manager
     - Restart screen state service
 
+- name: Install least-privilege NetworkManager radio authorization
+  ansible.builtin.template:
+    src: 50-totem-radio.rules.j2
+    dest: /etc/polkit-1/rules.d/50-totem-radio.rules
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart device manager
+
 - name: Install the device-manager systemd unit
   ansible.builtin.template:
     src: totem.service.j2
