@@ -38,7 +38,13 @@ class UPSDeviceInterface(DeviceDriver):
 
 UPS_DRIVERS = DriverRegistry(
     UPSDeviceInterface,
-    (DriverSpec("pisugar2", "totem.devices.ups.drivers.pisugar2"),),
+    (
+        DriverSpec("pisugar2", "totem.devices.ups.drivers.pisugar2"),
+        DriverSpec(
+            "waveshare_ups_hat_c",
+            "totem.devices.ups.drivers.waveshare_ups_hat_c",
+        ),
+    ),
 )
 
 
@@ -56,9 +62,9 @@ class UPS:
     def _detect_hardware() -> Optional[str]:
         bus_number = os.environ.get("TOTEM_I2C_BUS", "1").strip() or "1"
         if Path("/dev/i2c-{}".format(bus_number)).exists():
-            # PiSugar does not bind a kernel driver, so the stable deployment
-            # selection is preferred. Probe the only registered I2C driver and
-            # let initialization verify address 0x75 before reporting success.
+            # Preserve PiSugar2 as the legacy fallback. Other I2C UPS models
+            # must be selected explicitly because a bus node alone cannot
+            # identify which HAT is attached.
             return "pisugar2"
         return None
 

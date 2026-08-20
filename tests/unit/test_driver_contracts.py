@@ -42,6 +42,7 @@ DRIVERS = (
     ("totem.devices.network.drivers.rpi5_onboard_wifi", WiFiDeviceInterface),
     ("totem.devices.network.drivers.usb_wifi_adapter", WiFiDeviceInterface),
     ("totem.devices.ups.drivers.pisugar2", UPSDeviceInterface),
+    ("totem.devices.ups.drivers.waveshare_ups_hat_c", UPSDeviceInterface),
 )
 
 
