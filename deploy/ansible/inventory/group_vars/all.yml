@@ -27,7 +27,7 @@ totem_device_manager_packages:
   - rfkill
   - ethtool
   - iproute2
-  - policykit-1
+  - polkitd
   - python3-venv
   - python3-pip
   - python3-poetry-core
