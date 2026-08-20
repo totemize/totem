@@ -9,7 +9,7 @@
 </script>
 
 <div class="screen">
-  <button class="back" onclick={() => store.closePeer()}>‹ Peers</button>
+  <button class="back" onclick={() => store.closePeer()}>‹ Friends</button>
   <div class="pad center" style="padding:24px">
     <div class="mark">T</div>
     <h1 style="font-size:18px">{peer?.info.name ?? "unknown"}</h1>

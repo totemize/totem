@@ -12,10 +12,9 @@
 </script>
 
 <div class="screen">
-  <button class="back" onclick={() => store.show("peers")}>‹ Peers</button>
+  <button class="back" onclick={() => store.show("peers")}>‹ Friends</button>
   <div class="note-filters" style="padding-top:6px">
-    <button class:on={filter === "all"} onclick={() => store.setContactFilter("all")}>All peers</button>
-    <button class:on={filter === "friends"} onclick={() => store.setContactFilter("friends")}>Friends</button>
+    <button class:on={filter === "all"} onclick={() => store.setContactFilter("all")}>All friends</button>
     <button class="search">Search</button>
   </div>
   {#each shown as peer (peer.info.pubkey)}

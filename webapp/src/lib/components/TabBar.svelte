@@ -3,7 +3,7 @@
 
   const { store }: { store: Store } = $props();
   const tabs: { screen: Screen; label: string }[] = [
-    { screen: "peers", label: "Peers" },
+    { screen: "peers", label: "Friends" },
     { screen: "home", label: "Home" },
     { screen: "notes", label: "Notes" },
   ];

@@ -19,7 +19,7 @@
       <div class="name">{node?.name ?? "…"}</div>
       <div class="tiny">{node ? shortNpub(node.pubkey) : ""}</div>
     </div>
-    <button class="peer-count" onclick={() => store.show("contacts")}>{active.length} / {peers.length} peers ›</button>
+    <button class="peer-count" onclick={() => store.show("contacts")}>{active.length} / {peers.length} friends ›</button>
   </div>
 
   {#if requests.length}
