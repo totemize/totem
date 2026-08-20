@@ -37,17 +37,26 @@
     group: totem
     mode: "0750"
 
-- name: Seed totemd environment on bare devices
+- name: Install the managed totemd runtime environment
   ansible.builtin.copy:
     dest: /etc/totemd/totemd.env
     owner: root
     group: totem
     mode: "0640"
-    force: false
     content: |
       RUST_LOG=info
-      TOTEMD_WEB_ADDR=0.0.0.0:8080
+      TOTEMD_WEB_ADDR=[::]:8080
       TOTEMD_BUS_ADDR=127.0.0.1:8081
+  notify: Restart totemd
+
+- name: Seed totemd operator policy on bare devices
+  ansible.builtin.copy:
+    src: "{{ totem_repo_root }}/deploy/totemd.toml"
+    dest: /etc/totemd/config.toml
+    owner: root
+    group: root
+    mode: "0644"
+    force: false
   notify: Restart totemd
 
 - name: Install totemd

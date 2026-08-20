@@ -57,6 +57,8 @@ ssh npub1eu0clm0nsxwavcsj07at3sy7v52tuwgw4qpeqsyxgkeqg7krc7ps77c20q.fips
 
 - Host `metot` at `192.168.8.239`, same image/user/pass scheme as totem.
 - Raspberry Pi Zero 2 W with PiSugar2 and a Waveshare 2.13-inch HAT.
+- Reports `armv7l` on its 32-bit OS but runs the fleet's compatible armv6l
+  artifacts; Ansible models system architecture and artifact class separately.
 - The HAT PCB is Rev 2.1; the attached panel/controller uses the V4 driver
   (`waveshare_2in13_v4`). This is the only display test unit.
 - FIPS npub: `npub1j0adney3t3tuvcaz6wv6eahpkhfrl8rwhry58n2u4njuxz0j04lsrudpf6`
@@ -92,10 +94,13 @@ ssh motown               # via LAN
 ssh motown.fips          # via FIPS mesh
 ```
 
-- Runs the same strfry as totem (`references/strfry` `router` branch — has
-  the `mesh` app; aarch64 build, alpine-minirootfs runtime under
-  `/opt/strfry`, `bind = "::"` set): relay on port 7777, verified over LAN
-  and over the mesh from totem.
+- Runs strfry from an aarch64 alpine-minirootfs under `/opt/strfry`, with
+  `bind = "::"`; relay port 7777 works over LAN and mesh. Live audit on
+  2026-08-20 corrected the artifact claim: this installed binary rejects the
+  router-branch `mesh` command and NIP-11 omits both `negentropy` and NIP 77
+  despite the enabled config. It must be restaged from the intended
+  `references/strfry` `router` baseline; Ansible verification now fails closed
+  on this drift.
 - NIP-11 markers per 07 conventions (2026-08-20): `info.name =
   "!Totem motown"`, `info.pubkey` = hex npub `19bd90fd…2008d` (renders,
   verified over mesh — `pubkey` is the load-bearing claim, present since

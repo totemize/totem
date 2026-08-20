@@ -1,6 +1,6 @@
 ---
-title: totemd CLI and message bus
-description: Daemon modes, totemctl commands, bus envelopes, event streams, and FIPS polling
+title: totemd control plane, CLI, and message bus
+description: Daemon policy, signed recognition, totemctl commands, bus envelopes, and FIPS polling
 ---
 
 <!-- generated-by: gsd-doc-writer -->
@@ -13,10 +13,10 @@ description: Daemon modes, totemctl commands, bus envelopes, event streams, and 
 - `totemctl …` runs a synchronous client of the daemon's loopback HTTP/SSE
   bus. Deployment creates `totemctl` as a symlink to the same binary.
 
-The implementation is intentionally small in this revision: it watches FIPS,
-maintains peer and health state, exposes status/peer requests, and publishes
-peer arrival/departure events. It does not yet implement recognition,
-contact-list writes, relay sync supervision, or the owner application.
+The implemented encounter ladder watches authenticated FIPS peers, applies a
+cached NIP-11 identity prefilter, and proves candidates with a signed
+per-encounter challenge. Contact-list writes, relay sync supervision, and the
+owner application are not implemented yet.
 
 ## Daemon command
 
@@ -31,20 +31,45 @@ Starting `totemd` without a mode, or with a mode other than `serve` or
 
 | Variable | Default | Effect |
 |---|---|---|
-| `TOTEMD_WEB_ADDR` | `0.0.0.0:8080` | Public HTTP listener. Only `/` exists currently. |
+| `TOTEMD_WEB_ADDR` | `[::]:8080` | Public HTTP listener for `/` and `/totem/challenge`. The IPv6 wildcard is required by the FIPS overlay. |
 | `TOTEMD_BUS_ADDR` | `127.0.0.1:8081` | Bus listener used by both daemon and `totemctl`. Keep it loopback-only. |
 | `TOTEMD_FIPS_SOCK` | `/run/fips/control.sock` | FIPS Unix control-socket path. |
 | `TOTEMD_FIPS_POLL_MS` | `2000` | FIPS status/peer polling interval in milliseconds. Invalid values fall back to `2000`. |
+| `TOTEMD_CONFIG` | `/etc/totemd/config.toml` | Operator engagement-policy file. Missing means defaults; malformed content stops startup. |
+| `TOTEMD_KEY_PATH` | systemd credential `fips.key`, else `/etc/fips/fips.key` | Explicit challenge-signing key override, primarily for local tests/development. |
 | `RUST_LOG` | `info` directive added | tracing filter for daemon logs. |
 
-The deployed defaults live in `/etc/totemd/totemd.env`; the service runs
-`/usr/local/bin/totemd serve` as user `totem` with supplementary group
-`fips`.
+The deployed defaults live in `/etc/totemd/totemd.env`; operator policy lives
+in `/etc/totemd/config.toml`. The service runs `/usr/local/bin/totemd serve`
+as user `totem` with supplementary group `fips`. systemd
+`LoadCredential=fips.key:/etc/fips/fips.key` supplies a private read-only key
+to the unprivileged daemon without loosening the root-owned source.
+
+### Operator policy
+
+```toml
+[net]
+probe = true
+verdict_ttl_hours = 24
+
+[policy]
+befriend = "ask"
+sync = true
+```
+
+`probe` enables the read-only NIP-11 prefilter. Positive candidates remain
+cached for the daemon lifetime; `not_totem` and `unreachable` grades are
+retried after `verdict_ttl_hours`. `befriend` accepts `auto`, `ask`, or
+`never`. Sync policy is independent of friendship, although the sync executor
+itself has not landed yet.
 
 ## `totemctl` reference
 
 ```text
+totemctl help
+totemctl version
 totemctl status
+totemctl config
 totemctl peers
 totemctl events
 totemctl call <type> [json-object]
@@ -52,7 +77,10 @@ totemctl call <type> [json-object]
 
 | Command | Bus operation | Output |
 |---|---|---|
+| `help`, `-h`, `--help` | none | Usage and command descriptions. |
+| `version`, `-V`, `--version` | none | `totemctl` package version. |
 | `status` | `totem.status.get` | Pretty-printed result object with daemon, FIPS, peer, and push-counter state. |
+| `config` | `totem.config.get` | Effective operator engagement policy. |
 | `peers` | `totem.peers.get` | Pretty-printed result object containing the current peer array. |
 | `events` | `GET /bus/events` | Long-running SSE stream; prints non-empty `event:` and `data:` lines and suppresses keep-alive comments. |
 | `call` | caller-selected type | Generic escape hatch for any current or future bus message. |
@@ -145,12 +173,14 @@ Result field `status`:
 |---|---|---|
 | `version` | string | `totemd` Cargo package version. |
 | `uptime_secs` | integer | Seconds since the in-memory `AppState` was created. |
+| `config` | object | Effective flattened policy: `probe`, `verdict_ttl_hours`, `befriend`, and `sync`. |
 | `fips.connected` | boolean | Whether the latest FIPS control-socket poll succeeded. |
 | `fips.npub` | string or `null` | Local FIPS npub from the latest successful status poll. |
 | `fips.mesh_size` | integer | FIPS `estimated_mesh_size`, or `0` before a successful poll. |
 | `fips.last_ok_secs_ago` | integer or `null` | Age of the latest successful poll. |
 | `fips.last_error` | string or `null` | Latest polling error; cleared after recovery. |
 | `peers` | integer | Current authenticated peer count in `totemd`'s snapshot. |
+| `recognized` | integer | Peers whose signed proof passed in their current encounter. |
 | `events` | object | Count of emitted pushes, keyed by event type. |
 
 Example request without the CLI:
@@ -159,6 +189,12 @@ Example request without the CLI:
 curl --silent http://127.0.0.1:8081/bus \
   --data '{"type":"totem.status.get","id":"health-1"}'
 ```
+
+### `totem.config.get`
+
+Request payload: none. The result's `config` object contains the effective
+flattened policy fields `probe`, `verdict_ttl_hours`, `befriend`, and `sync`.
+This is the same object embedded in `totem.status.get`.
 
 ### `totem.peers.get`
 
@@ -174,8 +210,13 @@ Each entry contains:
 | `transport_type` | string | Direct peer transport reported by FIPS. |
 | `first_seen` | integer | Unix seconds when this `totemd` process first observed the peer. |
 | `last_seen` | integer | Unix seconds assigned during the latest snapshot. |
+| `probe_verdict` | string or `null` | Cached `candidate`, `not_totem`, or `unreachable` NIP-11 grade. |
+| `nip11_name` | string or `null` | Bounded, control-safe unsigned display hint retained for candidates. |
+| `recognized` | boolean | Whether the signed challenge passed for this current encounter. |
 
-State is process-local: restarting `totemd` resets timestamps and counters.
+State is process-local: restarting `totemd` resets timestamps, counters,
+probe caches, and recognition. A FIPS departure clears that peer's recognition
+even without a daemon restart.
 
 ### `totem.contacts.add` / `totem.contacts.remove`
 
@@ -203,6 +244,8 @@ Implemented pushes:
 |---|---|---|
 | `totem.peer.seen` | `npub` | A peer appears in a new FIPS snapshot. The first successful poll emits this for already-connected peers. |
 | `totem.peer.gone` | `npub` | A peer from the prior snapshot is absent. |
+| `totem.peer.candidate` | `npub` | NIP-11 name and public-key claim match the authenticated FIPS npub. |
+| `totem.recognized` | `npub` | A strict kind-27235 signed proof passes for the same current encounter. |
 
 SSE example:
 
@@ -215,8 +258,8 @@ Broadcast lag is dropped by the SSE adapter. Consumers must treat the stream
 as notification only and reconcile by calling `totem.status.get` and
 `totem.peers.get` after every connection or reconnection.
 
-The spec reserves additional push names such as `totem.recognized`,
-`totem.befriended`, and `totem.sync.*`; this revision does not emit them.
+The spec reserves additional push names such as `totem.befriended` and
+`totem.sync.*`; this revision does not emit them.
 
 ## FIPS watcher behavior
 
@@ -229,12 +272,35 @@ The watcher logs the first failure at warning level, repeats at debug level,
 and logs recovery once a later poll succeeds. The last peer snapshot remains
 available until a successful poll replaces it.
 
+For each new authenticated peer, the watcher probes NIP-11 over its mesh IPv6
+address on port `7777`. A candidate requires an `!Totem` name and `pubkey`
+matching the FIPS npub. Candidate metadata is unsigned and never sufficient
+for recognition. The daemon then sends one fresh random 128-bit nonce to the
+peer's challenge responder on port `8080`; a slow response cannot cross a
+disconnect/reconnect because recognition also checks the captured
+`first_seen` encounter token.
+
+## Public challenge endpoint
+
+`GET /totem/challenge?nonce=<32-hex-characters>` returns a Nostr event with:
+
+- kind `27235` and empty content;
+- signer equal to the device's FIPS public key;
+- exact nonce, endpoint URL, and `GET` tags;
+- `Cache-Control: no-store`.
+
+The responder accepts no wall-clock freshness window because offline devices
+cannot rely on RTC/NTP. Replay resistance comes from the one-request random
+nonce. Signing is bounded by a global eight-signatures-per-second burst
+limit. The prover verifies the canonical event ID, Schnorr signature, FIPS
+identity, exact shape, and all request bindings.
+
 ## Local development
 
 ```bash
 cd totemd
 cargo test --locked
-cargo run --locked -- serve
+TOTEMD_KEY_PATH=/path/to/test-fips.key cargo run --locked -- serve
 ```
 
 In another terminal:
@@ -245,6 +311,7 @@ cargo run --locked -- totemctl status
 cargo run --locked -- totemctl events
 ```
 
-The daemon can start without FIPS, but its watcher will report a disconnected
-control socket until one appears. These commands are local-only and do not
-restart any system service.
+The daemon requires a readable signing key at startup. It can run without a
+live FIPS daemon once `TOTEMD_KEY_PATH` is supplied, but its watcher reports a
+disconnected control socket until one appears. These commands are local-only
+and do not restart any system service.

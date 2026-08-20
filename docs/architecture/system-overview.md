@@ -58,7 +58,7 @@ is LAN, access point, or FIPS.
 |---|---|---|---|
 | `fips.service` | root | Mesh transport, authentication, routing, TUN, local DNS, control socket | `/etc/fips/fips.yaml`, `/etc/fips/fips.key` |
 | `strfry.service` | `strfry` | Nostr relay, NIP-11, NIP-77/negentropy | `/etc/strfry.conf`, `/var/lib/strfry/` |
-| `totemd.service` | `totem`, supplementary group `fips` | FIPS watcher, control-plane state, public web bind, loopback message bus | `/etc/totemd/totemd.env`; current state is in memory |
+| `totemd.service` | `totem`, supplementary group `fips` | FIPS watcher, NIP-11 prefilter, signed recognition, public web bind, loopback message bus | `/etc/totemd/totemd.env`, `/etc/totemd/config.toml`; current encounter state is in memory |
 | `totem.service` | `totem`, supplementary groups `gpio`, `i2c`, `spi` | FastAPI hardware service and lazy manager/driver lifecycle | `/etc/totem/totem.env`, `/var/lib/totem/storage` |
 
 The systemd definitions are generated from `deploy/ansible/roles/*/templates`.
@@ -66,8 +66,8 @@ The role order is `base → fips → strfry → totemd → device_manager → ve
 
 ## Network surfaces
 
-The numbered spec still marks standardized ports as TBD. The current
-deployment uses these concrete defaults:
+The port registry in `spec/07-conventions.md` pins the current deployment
+defaults:
 
 | Surface | Default bind | Exposure | Owner |
 |---|---|---|---|
@@ -76,7 +76,7 @@ deployment uses these concrete defaults:
 | FIPS DNS responder | `[::1]:5354` | loopback | FIPS |
 | FIPS control socket | `/run/fips/control.sock` | local Unix socket, `fips` group | FIPS |
 | Relay WebSocket and NIP-11 | `[::]:7777` | IPv6 wildcard (including the FIPS overlay; IPv4-mapped behavior is host-dependent) | strfry |
-| Public control-plane placeholder | `0.0.0.0:8080` | all interfaces | `totemd` |
+| Public control plane and `/totem/challenge` | `[::]:8080` | IPv6 wildcard, dual-stack on the bench images | `totemd` |
 | Totem message bus | `127.0.0.1:8081` | loopback only | `totemd` |
 | Hardware API and WebSocket | `0.0.0.0:8000` | all interfaces | Python service |
 
@@ -90,15 +90,18 @@ device-side resolver support from `.fips` resolution on a development host.
   client of that bus; it is not a privileged back door.
 - FIPS uses the filesystem permissions on its Unix socket for local control
   access. Its identity key remains root-owned and mode `0600`.
+- systemd passes that key to unprivileged `totemd` as a private read-only
+  credential for challenge signing. Inventory contains only the public
+  identity, and the service account cannot read the source key directly.
 - strfry is directly reachable on the mesh. Its write policy is currently
   empty in the bare-device template, so normal relay validation—not a Totem
   authorization plugin—governs writes.
 - The Python API currently binds all interfaces, enables permissive CORS, and
   has no authentication layer. Treat port `8000` as a trusted-network or
   development surface until an explicit authorization boundary lands.
-- The `totemd` public bind currently serves only a version object at `/`.
-  Owner authentication, the owner UI, and the challenge endpoint described in
-  the specs are not implemented yet.
+- The `totemd` public bind serves a version object at `/` and the rate-limited
+  signed responder at `/totem/challenge`. Owner authentication and the owner UI
+  are not implemented yet.
 
 ## Control and data flows
 
@@ -108,19 +111,24 @@ device-side resolver support from `.fips` resolution on a development host.
 2. Every `TOTEMD_FIPS_POLL_MS` milliseconds (default `2000`), `totemd`
    queries `show_peers` and `show_status` over the FIPS control socket.
 3. `totemd` diffs the new npub-keyed snapshot against its in-memory state.
-4. Arrivals emit `totem.peer.seen`; departures emit `totem.peer.gone`.
-5. SSE clients receive those pushes from `/bus/events`. Push delivery is
+4. Arrivals emit `totem.peer.seen` and trigger a cached NIP-11 prefilter.
+5. A matching `!Totem` name/public-key claim emits `totem.peer.candidate` and
+   starts a fresh-nonce signed challenge against the peer's port `8080`.
+6. A valid kind-27235 proof emits `totem.recognized` for the current FIPS
+   encounter; departure clears recognition and emits `totem.peer.gone`.
+7. SSE clients receive those pushes from `/bus/events`. Push delivery is
    intentionally lossy, so clients query `totem.status.get` and
    `totem.peers.get` after connecting or reconnecting.
 
 ### Nostr storage and sync
 
 strfry accepts standard Nostr WebSocket traffic and commits accepted events to
-LMDB. It supports NIP-77 negentropy and the `strfry sync` client. The current
-Totem deployment verifies that the relay advertises NIP-77, but `totemd` does
-not yet run the recognition/challenge/sync-supervisor loop described in
-`spec/10-control-plane.md`. Relay-to-relay encounter sync is therefore design
-intent, not a completed daemon path in this revision.
+LMDB. The required artifact supports NIP-77 negentropy and the `strfry sync`
+client. The Ansible contract verifies NIP-77 and the NIP-11 identity used by
+totemd's implemented recognition/challenge loop; a 2026-08-20 live audit
+found motown's then-installed aarch64 relay failed that NIP-77 contract and
+must be restaged. `totemd` does not yet invoke the sync supervisor, so
+relay-to-relay encounter sync remains design intent.
 
 ### Hardware calls
 
@@ -141,9 +149,9 @@ channel and the Rust `totemd` bus are separate transports.
 
 FIPS uses a Nostr secp256k1 keypair as the device's mesh identity. From that
 public key it derives a routing `node_addr` and an IPv6 ULA in `fd00::/8`.
-The same identity is intended to anchor Totem recognition and NIP-11 metadata,
-but the bare strfry template leaves `relay.info.pubkey` empty. An operator must
-populate the relay identity claim before recognition can work.
+The same identity anchors Totem recognition and NIP-11 metadata. Ansible's
+bare strfry template fills `relay.info.pubkey` from the inventory's public
+identity and verifies it against both NIP-11 and the signed challenge.
 
 FIPS applies hop-by-hop Noise IK encryption between direct peers and
 end-to-end Noise XK encryption between session endpoints. Intermediate mesh
@@ -155,14 +163,14 @@ session plaintext.
 | Capability | State in this revision |
 |---|---|
 | FIPS service, persistent identity, TUN, DNS, control socket | Implemented and deployment-verified |
-| IPv6-capable strfry relay and NIP-77 advertisement | Implemented and deployment-verified |
+| IPv6-capable strfry relay and NIP-77 advertisement | Implemented; enforced by Ansible (motown's audited aarch64 artifact needs restaging) |
 | `totemd` FIPS polling, peer snapshot, seen/gone pushes | Implemented |
-| `totemctl` status, peers, events, generic call | Implemented |
+| `totemctl` help/version/status/config/peers/events/generic call | Implemented |
 | Python display/NFC/storage/network API | Implemented; hardware availability depends on the device |
-| NIP-11 probe and Totem challenge | Planned in spec, not implemented in `totemd` |
+| NIP-11 candidate probe and per-encounter signed Totem challenge | Implemented |
 | Kind-3 contact writer | Bus message names reserved; writer returns “not implemented” |
 | Automatic encounter sync supervisor | Planned in spec, not implemented in `totemd` |
-| Owner UI, NIP-98 administration, `/totem/challenge` | Planned in spec |
+| Owner UI and NIP-98 administration | Planned in spec |
 | Happlet/NAP IPC runtime | Deferred beyond the v1 kernel |
 
 ## Source map

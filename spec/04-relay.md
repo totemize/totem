@@ -49,9 +49,10 @@ AP guests) are tracked in `09-open-questions.md`.
   layer, so policy lives beside the relay instead of forking it.
 
 Other conforming relays are acceptable; strfry is what we prototype against.
-The bench deployment uses strfry's `router` branch (`5e81e24`), which adds the
-`mesh` commands to the same conforming relay; those commands are a reference-
-deployment detail, not part of the Totem relay protocol.
+The bench deployment baseline is strfry's `router` branch (`5e81e24`), which
+adds the `mesh` commands to the same conforming relay; those commands are a
+reference-deployment detail, not part of the Totem relay protocol. Deployment
+verification MUST test NIP-77 rather than infer capability from this lineage.
 
 ## NIP-11 declaration
 

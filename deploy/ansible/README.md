@@ -12,10 +12,23 @@ device has crossed. Normal Ansible tasks still enforce binaries, packages,
 units, permissions, and service state on every run; a sentinel never hides
 configuration drift.
 
-Existing `/etc/fips/fips.yaml`, FIPS identity keys, `/etc/strfry.conf`, and the
-strfry database are preserved. A bare host receives an intentionally isolated
-FIPS configuration (`peers: []`, LAN rendezvous disabled). No fleet wiring is
-performed by this deployment.
+Existing `/etc/fips/fips.yaml`, FIPS identity keys, strfry policy/database
+settings, `/etc/totemd/config.toml`, and the strfry database are preserved.
+Ansible still reconciles strfry's load-bearing IPv6 bind and NIP-11
+name/public key, plus the managed service environment files. A bare host
+receives a persistent FIPS configuration with LAN rendezvous enabled and no
+static peers. This matches the ordinary self-forming bench/home topology; set
+`totem_fips_lan_rendezvous_enabled=false` only for an intentionally isolated
+seed.
+
+Inventory pins each bench unit's FIPS npub and hex public key. That public
+identity is written into the bare strfry NIP-11 seed and verified against both
+the relay document and totemd's signed challenge. Private identity material is
+never stored in inventory or artifacts.
+
+Metot's inventory also seeds `TOTEM_EINK_DRIVER=waveshare_2in13_v4`. The
+playbook does not edit Raspberry Pi boot firmware or reboot a device; apply
+`deploy/devices/metot.boot-config.txt` separately before expecting real SPI.
 
 ## Prepare artifacts
 
@@ -38,7 +51,7 @@ architecture-tested Python packages, avoiding native compilation on armv6.
 ## Deploy only metot in this sprint
 
 The inventory contains all three devices, but the guarded wrapper always adds
-`--limit metot` (currently `192.168.8.136`):
+`--limit metot` (currently `192.168.8.239`):
 
 ```bash
 read -rs TOTEM_SSH_PASSWORD && export TOTEM_SSH_PASSWORD
@@ -48,7 +61,8 @@ deploy/ansible/scripts/deploy-metot.sh
 Run the same command a second time. A converged deployment must report
 `changed=0`, and the verification role checks all four services, FIPS TUN
 health, strfry NIP-77 support, `totemd`, the Python health endpoint, and the
-migration chain.
+migration chain. The verification also requires the `!Totem metot` NIP-11
+identity and a kind-27235 challenge signed by metot's FIPS key.
 
 For an operational no-restart window, keep enforcing files and state while
 suppressing all service restart handlers:

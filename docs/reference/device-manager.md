@@ -57,12 +57,14 @@ defaults. Use `totem` when command-line bind or logging options are needed.
 |---|---|---|
 | `TOTEM_ALLOW_MOCK_DRIVERS` | false | Accepts `1`, `true`, `yes`, or `on` (case-insensitive) to permit explicit mock display, NFC, and Wi-Fi transports. |
 | `TOTEM_STORAGE_ROOT` | driver default | Confines storage reads and writes below one directory. The Ansible deployment sets `/var/lib/totem/storage`. |
+| `TOTEM_EINK_DRIVER` | empty | Exact display driver selected when `DisplayManager` receives no explicit name. An explicit constructor argument still wins. |
 | `EINK_DISPLAY_TYPE` | empty | Guides display auto-detection: `2in13` or `3in7`. Without it, detected Raspberry Pi displays default to the 3.7-inch driver family. |
 
 Display drivers have additional pin and transport variables documented in
-[E-Ink displays](/hardware/display). The API does not provide an environment
-variable for selecting an exact driver name; exact selection is available
-through the Python manager constructors.
+[E-Ink displays](/hardware/display). The production API constructs
+`DisplayManager` without an explicit name, so `TOTEM_EINK_DRIVER` is its exact
+per-device selection path. Metot's Ansible inventory pins
+`waveshare_2in13_v4`.
 
 ## HTTP API
 
@@ -199,7 +201,11 @@ Mocks are never an implicit success path. A mock registry entry requires
 
 | Name | Selection |
 |---|---|
-| `waveshare_2in13` | Non-Pi-5 SPI device with `EINK_DISPLAY_TYPE=2in13`. |
+| `waveshare_2in13_v1` | Waveshare 2.13-inch V1 controller. |
+| `waveshare_2in13` | Compatibility alias for the V2 controller. |
+| `waveshare_2in13_v2` | Waveshare 2.13-inch V2 controller. |
+| `waveshare_2in13_v3` | Waveshare 2.13-inch V3 controller. |
+| `waveshare_2in13_v4` | Waveshare 2.13-inch V4 controller; configured for metot. |
 | `waveshare_2in13_pi5` | Raspberry Pi 5 with `EINK_DISPLAY_TYPE=2in13`. |
 | `waveshare_2in13_pi5_sw_cs` | Explicit Python selection for Pi 5 software chip select. |
 | `waveshare_3in7` | Non-Pi-5 SPI device; default when display type is omitted. |

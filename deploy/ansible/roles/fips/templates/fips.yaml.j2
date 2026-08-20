@@ -1,11 +1,11 @@
 # Ansible seed for a new Totem. Existing configurations and identity keys are
-# deliberately preserved. Discovery is off until a later wiring phase.
+# deliberately preserved. LAN rendezvous forms the ordinary bench/home mesh.
 node:
   identity:
     persistent: true
   rendezvous:
     lan:
-      enabled: false
+      enabled: {{ totem_fips_lan_rendezvous_enabled | bool | lower }}
 
 tun:
   enabled: true

@@ -123,14 +123,13 @@
     force: true
   notify: Restart device manager
 
-- name: Seed device-manager environment on bare devices
+- name: Install the managed device-manager environment
   ansible.builtin.template:
     src: totem.env.j2
     dest: /etc/totem/totem.env
     owner: root
     group: totem
     mode: "0640"
-    force: false
   notify: Restart device manager
 
 - name: Install the device-manager systemd unit

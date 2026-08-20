@@ -6,6 +6,8 @@ totem_artifact_state_root: "{{ totem_deploy_root }}/artifacts"
 totem_remote_cache: /var/cache/totem-deploy
 totem_service_restarts_enabled: true
 totem_device_manager_enabled: true
+totem_fips_lan_rendezvous_enabled: true
+totem_eink_driver: ""
 totem_local_artifact_root: >-
   {{ playbook_dir }}/../artifacts/{{ totem_artifact_arch }}
 
