@@ -74,7 +74,7 @@ body {
 .note-filters button.on { color: var(--ink); }
 .note-filters .search { margin-left: auto; }
 .note { padding: 14px 20px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; }
-.avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--fill); flex-shrink: 0; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; background: #dfe2e5; flex-shrink: 0; }
 .note .body { flex: 1; min-width: 0; }
 .note .meta { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-bottom: 4px; }
 .note .content { font-size: 13px; line-height: 1.45; }
