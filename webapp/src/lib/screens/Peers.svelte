@@ -1,5 +1,5 @@
 <script lang="ts">
-  import EncounterRow from "$lib/components/EncounterRow.svelte";
+  import FriendRow from "$lib/components/FriendRow.svelte";
   import RequestRow from "$lib/components/RequestRow.svelte";
   import { relativeTime } from "$lib/format";
   import type { Store } from "$lib/store.svelte";
@@ -23,27 +23,19 @@
 
   {#if filter === "all"}
     {#each friends as peer (peer.info.pubkey)}
-      <div class="item clickable" onclick={() => store.openPeer(peer.info.pubkey)} role="button" tabindex="0" onkeydown={(e) => e.key === "Enter" && store.openPeer(peer.info.pubkey)}>
-        <div class="avatar"></div>
-        <span class="label">{peer.info.name}</span>
-        <span class="hint">{peer.lastMet ? `met ${relativeTime(peer.lastMet)}` : ""}</span>
-        <span class="chev">›</span>
-      </div>
+      <FriendRow {store} info={peer.info} hint={peer.lastMet ? `met ${relativeTime(peer.lastMet)}` : ""} />
     {/each}
   {:else if filter === "active"}
     {#if active.length === 0}
       <div class="kv-row sub"><span class="dim">no one connected right now</span></div>
     {/if}
     {#each active as peer (peer.info.pubkey)}
-      <div class="kv-row sub clickable" onclick={() => store.openPeer(peer.info.pubkey)} role="button" tabindex="0" onkeydown={(e) => e.key === "Enter" && store.openPeer(peer.info.pubkey)}>
-        <span>{peer.info.name}</span>
-        <span class="value">{peer.connected?.transport}</span>
-      </div>
+      <FriendRow {store} info={peer.info} hint="connected" />
     {/each}
 
     <div class="section-label">recently connected</div>
     {#each recent as entry, i (i)}
-      <EncounterRow {store} {entry} />
+      <FriendRow {store} info={entry.peer} hint={relativeTime(entry.at)} />
     {/each}
     <button class="see-all" onclick={() => store.show("encounters")}>view all ›</button>
   {:else}
@@ -51,7 +43,7 @@
       <div class="kv-row sub"><span class="dim">no pending requests</span></div>
     {/if}
     {#each requests as peer (peer.info.pubkey)}
-      <RequestRow {store} {peer} />
+      <RequestRow {store} peer={peer} />
     {/each}
   {/if}
 
