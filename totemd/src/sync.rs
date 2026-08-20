@@ -2,6 +2,7 @@
 
 use std::{
     collections::HashMap,
+    io::Write,
     path::{Path, PathBuf},
     process::Stdio,
     sync::{
@@ -12,7 +13,11 @@ use std::{
 };
 
 use serde_json::{json, Value};
-use tokio::{process::Command, sync::oneshot};
+use tokio::{
+    io::{AsyncBufReadExt, BufReader},
+    process::{ChildStderr, Command},
+    sync::oneshot,
+};
 
 use crate::state::AppState;
 
@@ -40,6 +45,12 @@ impl SyncState {
             Self::Cancelled => "cancelled",
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ReconcileDelta {
+    missing_remote: u64,
+    missing_local: u64,
 }
 
 struct Job {
@@ -218,6 +229,32 @@ fn relay_url(ip: &str) -> Option<String> {
     Some(format!("ws://{host}:{RELAY_PORT}"))
 }
 
+fn parse_reconcile_delta(line: &str) -> Option<ReconcileDelta> {
+    let (_, counts) = line.split_once("Set reconcile complete. Have ")?;
+    let (have, need) = counts.split_once(" need ")?;
+    Some(ReconcileDelta {
+        missing_remote: have.parse().ok()?,
+        missing_local: need.split_whitespace().next()?.parse().ok()?,
+    })
+}
+
+fn parse_reconcile_summary(line: &str) -> Option<String> {
+    // ponytail: pinned strfry has no machine report; keep its readable summary
+    // authoritative and make parsed counts optional until upstream emits JSON.
+    let start = line.find("Set reconcile complete.")?;
+    Some(line[start..].trim().to_owned())
+}
+
+async fn drain_stderr(stderr: ChildStderr) -> Option<String> {
+    let mut lines = BufReader::new(stderr).lines();
+    let mut summary = None;
+    while let Ok(Some(line)) = lines.next_line().await {
+        summary = parse_reconcile_summary(&line).or(summary);
+        let _ = writeln!(std::io::stderr().lock(), "{line}");
+    }
+    summary
+}
+
 fn timeout() -> Duration {
     Duration::from_secs(
         std::env::var("TOTEMD_SYNC_TIMEOUT_SECS")
@@ -317,9 +354,10 @@ async fn run_loop(
     mut cancelled: oneshot::Receiver<()>,
 ) {
     loop {
-        let (state, exit_code, error) = run_attempt(&runner, &url, timeout, &mut cancelled).await;
+        let (state, exit_code, error, summary) =
+            run_attempt(&runner, &url, timeout, &mut cancelled).await;
         complete_attempt(
-            &st, encounter, attempt, &npub, state, started, exit_code, error,
+            &st, encounter, attempt, &npub, state, started, exit_code, error, summary,
         );
         if state == SyncState::Cancelled {
             break;
@@ -347,14 +385,14 @@ async fn run_attempt(
     url: &str,
     timeout: Duration,
     cancelled: &mut oneshot::Receiver<()>,
-) -> (SyncState, Option<i32>, Option<String>) {
+) -> (SyncState, Option<i32>, Option<String>, Option<String>) {
     let mut command = Command::new(runner);
     command
         .args(["sync", url, "--dir=both"])
         .env_clear()
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::piped())
         .kill_on_drop(true);
     let mut child = match command.spawn() {
         Ok(child) => child,
@@ -363,11 +401,14 @@ async fn run_attempt(
                 SyncState::Failed,
                 None,
                 Some(format!("start {}: {error}", runner.display())),
+                None,
             );
         }
     };
+    let stderr = child.stderr.take().expect("piped child stderr");
+    let stderr_task = tokio::spawn(drain_stderr(stderr));
 
-    tokio::select! {
+    let result = tokio::select! {
         biased;
         _ = cancelled => {
             let _ = child.kill().await;
@@ -384,9 +425,14 @@ async fn run_attempt(
                 status.code(),
                 Some(format!("strfry sync {status}")),
             ),
-            Err(error) => (SyncState::Failed, None, Some(format!("wait: {error}"))),
+            Err(error) => {
+                let _ = child.kill().await;
+                (SyncState::Failed, None, Some(format!("wait: {error}")))
+            }
         }
-    }
+    };
+    let summary = stderr_task.await.unwrap_or(None);
+    (result.0, result.1, result.2, summary)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -399,8 +445,12 @@ fn complete_attempt(
     started: Instant,
     exit_code: Option<i32>,
     error: Option<String>,
+    summary: Option<String>,
 ) {
     let duration_ms = millis(started.elapsed());
+    let delta = summary.as_deref().and_then(parse_reconcile_delta);
+    let missing_remote = delta.map(|delta| delta.missing_remote);
+    let missing_local = delta.map(|delta| delta.missing_local);
     st.syncs.finish_attempt(
         npub,
         encounter,
@@ -429,6 +479,9 @@ fn complete_attempt(
         "duration_ms": duration_ms,
         "exit_code": exit_code,
         "error": error,
+        "summary": summary,
+        "missing_remote": missing_remote,
+        "missing_local": missing_local,
     }));
 }
 
@@ -581,6 +634,7 @@ mod tests {
 touch "{lock}"
 n=0; [ ! -e "{marker}" ] || n=$(cat "{marker}")
 echo $((n + 1)) > "{marker}"
+echo 'test INFO| Set reconcile complete. Have 3 need 2' >&2
 sleep 0.02
 rm "{lock}""#,
             lock = lock.display(),
@@ -616,6 +670,11 @@ rm "{lock}""#,
             let push = pushes.try_recv().unwrap();
             assert_eq!(push["type"], typ);
             assert_eq!(push["attempt"], attempt);
+            if typ == "totem.sync.done" {
+                assert_eq!(push["summary"], "Set reconcile complete. Have 3 need 2");
+                assert_eq!(push["missing_remote"], 3);
+                assert_eq!(push["missing_local"], 2);
+            }
         }
         assert!(pushes.try_recv().is_err());
         let _ = fs::remove_file(marker);
@@ -762,6 +821,27 @@ rm "{lock}""#,
         assert_eq!(fields(&st, "npub1b", 6)["sync_state"], "cancelled");
         let _ = fs::remove_file(marker);
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn reconciliation_summary_survives_count_format_changes() {
+        let summary =
+            parse_reconcile_summary("2026-08-20 INFO| Set reconcile complete. Have 12 need 3")
+                .unwrap();
+        assert_eq!(summary, "Set reconcile complete. Have 12 need 3");
+        assert_eq!(
+            parse_reconcile_delta(&summary),
+            Some(ReconcileDelta {
+                missing_remote: 12,
+                missing_local: 3,
+            })
+        );
+
+        let summary =
+            parse_reconcile_summary("INFO| Set reconcile complete. format changed").unwrap();
+        assert_eq!(summary, "Set reconcile complete. format changed");
+        assert_eq!(parse_reconcile_delta(&summary), None);
+        assert!(parse_reconcile_summary("INFO| unrelated").is_none());
     }
 
     #[test]

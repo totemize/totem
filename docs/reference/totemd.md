@@ -305,7 +305,7 @@ Implemented pushes:
 | `totem.peer.candidate` | `npub` | NIP-11 name and public-key claim match the authenticated FIPS npub. |
 | `totem.recognized` | `npub` | A strict kind-27235 signed proof passes for the same current encounter. |
 | `totem.sync.started` | `npub`, `encounter`, `attempt`, `direction` | A policy-permitted periodic reconciliation round starts. |
-| `totem.sync.done` | started fields plus `outcome`, `duration_ms`, `exit_code`, `error` | The round exits, times out, or is cancelled by departure/shutdown. |
+| `totem.sync.done` | started fields plus `outcome`, `duration_ms`, `exit_code`, `error`, `summary`, `missing_remote`, `missing_local` | The round exits, times out, or is cancelled; the readable summary survives if optional numeric parsing fails. |
 | `totem.owner.claimed` | none | The first valid signer was persisted as owner. |
 | `totem.metadata.changed` | `event_id`, `name` | A new device-signed kind 0 was imported. |
 | `totem.config.changed` | `config` | Owner policy overrides were persisted and applied. |
@@ -347,9 +347,13 @@ permits. After each round finishes, the supervisor waits five minutes and
 repeats while the same peer encounter remains recognized and eligible. Rounds
 never overlap for one peer; failures and timeouts retry after the same delay.
 Duplicate recognition for the encounter is ignored; departure and daemon
-shutdown cancel a running child or a waiting loop. Child output goes to
-journald and its environment is cleared so signing-credential paths are not
-inherited.
+shutdown cancel a running child or a waiting loop. Child output is forwarded
+to journald and its `Set reconcile complete` line is retained as the round's
+human-readable summary. Totemd optionally parses `Have` as events missing on
+the remote and `need` as events missing locally; these are set differences,
+not acceptance/storage guarantees. A format change leaves the summary intact
+and numeric fields null. The child environment remains cleared so signing-
+credential paths are not inherited.
 
 ## Public challenge endpoint
 

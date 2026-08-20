@@ -42,7 +42,9 @@ the daemon lifetime; negative/unreachable results use
 as `nip11_name`; npub remains the authenticated identity. `policy.befriend`
 is `auto|ask|never`. `policy.sync = true` syncs every recognized Totem;
 `false` restricts sync to known friends. Eligible peers reconcile immediately
-and every five minutes while the encounter remains connected.
+and every five minutes while the encounter remains connected. Completed rounds
+retain strfry's readable `Have … need …` summary; parsed set-difference counts
+are optional and never affect the sync outcome.
 
 ## Bus
 

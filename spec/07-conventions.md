@@ -116,7 +116,7 @@ domain registry:
 | `totem.peer.candidate` | push | NIP-11 marker + npub claim matched; signed challenge still pending |
 | `totem.recognized` | push | signed challenge verdict passed (peer is a totem) |
 | `totem.befriended` | push | kind 3 published |
-| `totem.sync.started` / `totem.sync.done` | push | npub, encounter, periodic attempt, direction; done adds outcome, duration, exit/error, and event counts when the relay runner exposes them reliably |
+| `totem.sync.started` / `totem.sync.done` | push | npub, encounter, periodic attempt, direction; done adds outcome, duration, exit/error, the runner's readable reconciliation summary, and optional parsed missing-remote/local counts |
 | `totem.owner.claimed` | push | the previously unclaimed device persisted its owner |
 | `totem.metadata.changed` | push | device-signed kind-0 event ID and effective name |
 | `totem.config.changed` | push | newly persisted effective engagement policy |
