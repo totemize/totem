@@ -32,28 +32,51 @@ current signal.
 | **Derived** | A display-friendly state that can be computed from current fields without adding authority. |
 | **Gap** | A meaningful product state that cannot yet be distinguished reliably; it needs a new field, event, or persisted record. |
 
-## State axes at a glance
+## Flat state table
 
-| Axis | Examples | Cardinality |
-|---|---|---|
-| System lifecycle | off, booting, ready, degraded, shutting down | one device-wide value |
-| Service health | device API, FIPS, relay, control plane, screen | one value per service |
-| Hardware lifecycle | new, ready, mock, closed, failed | one value per driver |
-| Power | charge, source, current, telemetry health | one device-wide snapshot |
-| Host health | thermal, undervoltage, CPU, memory, filesystem, clock | several independent values |
-| Radio and reachability | station/AP, BLE, IP overlay, upstream reach | several independent values |
-| Mesh | FIPS control health, TUN health, mesh size, peer count | one aggregate snapshot |
-| Self-identity | unprovisioned, loaded, unknown, declaration mismatch | one device-wide value |
-| Encounter | seen, candidate, recognized, gone | one value per peer encounter |
-| Relationship | stranger, following, followed-by, friend, pending | one value per peer identity |
-| Synchronization | not attempted, running, succeeded, failed, timed out, cancelled | one value per peer encounter |
-| Relay and storage | ready, active, low space, full, error | one value per subsystem |
-| Human activity | guest present, owner present, note posted | zero or more concurrent activities |
-| Presentation | boot, idle, peer, sync, error scene | one selected scene plus badges/overlays |
+This is the compact index. The detailed sections below identify each value as
+observable, defined, derived, or a gap.
 
-The cross-product is intentionally not enumerated. For example, charging is
-valid during boot, idle, peer recognition, sync, degraded service, and
-shutdown. These are combinations, not new canonical states.
+| Axis | States |
+|---|---|
+| System lifecycle | `powered_off`, `powering_on`, `waiting_for_display_api`, `booting`, `ready`, `degraded`, `maintenance`, `updating`, `shutting_down`, `rebooting`, `failed` |
+| systemd unit | `inactive`, `activating`, `active`, `deactivating`, `failed`, restart delay |
+| Boot readiness (`device`, `fips`, `relay`, `totemd`) | waiting, ready, timed out, retrying |
+| Screen | `booting`, `idle`, `new_peer`, `existing_peer`, `error`, `synchronizing` |
+| Driver | `new`, `ready`, `mock`, `closed`, `failed` |
+| Display activity | idle, rendering, refreshing, sleeping, waking, refresh failed |
+| NFC activity | idle, waiting for card, card present, reading, writing, completed, error |
+| Storage activity | idle, reading, writing, near capacity, full, read-only, I/O error |
+| Network activity | disconnected, scanning, connecting, station connected, hotspot active, disconnecting, failed |
+| UPS telemetry | unavailable, readable, read error |
+| Power source | `external_power`, `on_battery`, `source_unknown`, `telemetry_unavailable` |
+| Charge band | `full`, `high`, `normal`, `low`, `critical`, `empty` |
+| Charge flow | `charging`, `discharging`, `near_zero_current`, `critical_shutdown_pending`, `safe_to_remove`, `charge_complete` |
+| Temperature | unknown, normal, warm, hot, throttled, thermal shutdown imminent |
+| Input supply | normal, current undervoltage, historical undervoltage/throttle |
+| CPU | idle, normal, busy, saturated |
+| Memory | normal, pressure, swapping, OOM/recovering |
+| Filesystem | read-write, low space, critical, full, read-only, I/O error |
+| Clock | unknown/unset, plausible but unsynchronized, synchronized |
+| Kernel/device tree | normal, required interface absent, driver/module error |
+| Wi-Fi role | `infra_station`, `ap_host`, `disconnected`, `configuring`, `failed` |
+| BLE | off, beaconing/discovering, linked, error |
+| FIPS overlay | unavailable, available without upstream, internet-reachable |
+| Upstream | absent, local-only, internet-reachable |
+| Guest AP | no guests, one guest, multiple guests |
+| Mesh mood | `alone`, `peer_nearby`, `small_mesh`, `busy_mesh`, `mesh_degraded` |
+| `totemd` | `starting`, `running`, `running_fips_degraded`, `shutting_down`, `failed_config`, `failed_identity`, `failed_bind`, `failed_server`, `restarting` |
+| Identity | `unprovisioned`, `identity_loaded`, `identity_unknown`, `declaration_valid`, `declaration_missing`, `identity_mismatch`, `key_rotation_pending` |
+| Bus consumer | `disconnected`, `connecting`, `subscribed`, `lagged`, `reconnecting`, `reconciling` |
+| Peer encounter | `absent`, `seen`, `probe_disabled`, `probe_pending`, `not_a_totem`, `unreachable`, `candidate`, `challenge_pending`, `challenge_failed`, `challenge_stale`, `recognized`, `departing`, `gone` |
+| Relationship | `stranger`, `following`, `followed_by`, `friend`, `approval_pending`, `publishing_follow`, `befriend_failed`, `befriended` |
+| Sync | `null`, `running`, `succeeded`, `failed`, `timed_out`, `cancelled`, `eligible_waiting`, `policy_blocked`, `friends_only_blocked`, `interrupted_resumable` |
+| Relay/content | unavailable, listening, client connected/disconnected, note received/published, sync import/export active/result |
+| Human activity | guest joined/left, owner authenticated, policy changed, friendship approved, NFC presented/read/written |
+| `totemd` event | `totem.peer.seen`, `totem.peer.gone`, `totem.peer.candidate`, `totem.recognized`, `totem.sync.started`, `totem.sync.done`, `totem.befriended` |
+
+Axes combine freely: charging while syncing is two simultaneous states, not a
+new compound state.
 
 ## 1. System lifecycle
 
