@@ -152,6 +152,21 @@
         (totemd_status_command.stdout | from_json).status.config.befriend
         in ['auto', 'ask', 'never']
 
+- name: Read recent totemd event history
+  ansible.builtin.command:
+    argv: [totemctl, history]
+  register: totemd_history_command
+  changed_when: false
+
+- name: Validate the totemd event-history surface
+  ansible.builtin.assert:
+    that:
+      - (totemd_history_command.stdout | from_json).ok
+      - >-
+        (totemd_history_command.stdout | from_json).type ==
+        'totem.events.get.result'
+      - (totemd_history_command.stdout | from_json).events is sequence
+
 - name: Read Python device-manager health
   ansible.builtin.uri:
     url: http://127.0.0.1:8000/health

@@ -12,14 +12,12 @@ persists events in an embedded LMDB database, publishes a NIP-11 information
 document, and provides NIP-77 negentropy reconciliation. Totem does not fork
 the relay protocol or proxy relay traffic through `totemd`.
 
-Architecture-specific binaries are staged outside Git. The deployment notes
-identify the current bench artifact as router lineage revision `5e81e24`, plus
-the armv6 alignment/build work recorded in the journey journal. That pinned
-revision is provenance for the staged artifact; it is not present in this
-repository and should not be inferred from the current upstream default
-branch. Capability is still tested, not inferred from a branch name: a live
-2026-08-20 audit found motown's installed aarch64 build omitted NIP-77 from
-NIP-11 and requires restaging.
+Architecture-specific binaries are staged outside Git. The armv6 lineage and
+alignment work are recorded in the journey journal; motown runs strfry master
+`5d89a62`, compatible with NIP-77 protocol 0. These revisions are artifact
+provenance, not a
+substitute for verification: every deployed relay must advertise NIP 77 and
+`negentropy = 1` and complete protocol-0 reconciliation.
 
 ## Deployed layout
 
@@ -29,7 +27,7 @@ NIP-11 and requires restaging.
 | `/opt/strfry/lib/` | Architecture-specific musl loader and libraries | root-owned runtime artifact |
 | `/opt/strfry/usr/lib/` | Additional runtime libraries | root-owned runtime artifact |
 | `/etc/strfry.conf` | Relay configuration | `root:strfry`, `0640` |
-| `/var/lib/strfry/` | LMDB environment and relay state | `strfry:strfry`, `0750` directory |
+| `/var/lib/strfry/` | LMDB environment and relay state | group-scoped setgid directory, `2770` |
 | `/var/cache/totem-deploy/strfry-<sha256>.tar.gz` | Content-addressed deployment cache | root |
 
 `strfry.service` runs as the `strfry` system user with

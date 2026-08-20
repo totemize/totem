@@ -23,8 +23,8 @@ Read these rules before a deployment:
 
 - Inventory name and OS hostname are independent. Ansible targets the address
   in `inventory/hosts.yml` and does not rename the machine.
-- The supplied `deploy-metot.sh` wrapper always adds `--limit metot`. Use it
-  for a one-device rollout; it cannot target another inventory host.
+- `deploy/ansible/scripts/deploy.sh` is fleet-generic. Always pass an explicit
+  `--limit <host>` for a one-device rollout; omitting it authorizes the fleet.
 - The play uses `serial: 1`, so a fleet run completes one host before starting
   the next.
 - Service restart handlers are enabled by default. Disable them explicitly
@@ -145,22 +145,21 @@ known to match the locked source; the script still validates and stages them.
 Current provenance recorded by the repository:
 
 - FIPS: `23ec0a7b811a0e986fe2d2cb51fffe8f10f7a57d`;
-- strfry router lineage: `5e81e24`, with armv6 build/alignment details in
-  `.journey/journal/2026-08-20.md`.
+- the armv6 strfry lineage and motown's protocol-0 master replacement are
+  recorded in `.journey/journal/2026-08-20.md`.
 
-Do not treat the `mesh` subcommand or branch name as proof of NIP-77. A live
-2026-08-20 check found motown's installed aarch64 relay returned neither
-`negentropy: 1` nor NIP `77`; the artifact must be restaged until the verifier
-below passes.
+Do not treat the `mesh` subcommand or branch name as proof of NIP-77. Motown's
+original incompatible aarch64 artifact was replaced with protocol-0 master;
+the verifier below remains authoritative for every staged artifact.
 
 Verify `SHA256SUMS` and the target architecture before any remote run.
 
 ## Run one guarded deployment
 
-The wrapper below is hard-limited to inventory host `metot`:
+Use the fleet-generic wrapper with an explicit host limit:
 
 ```bash
-deploy/ansible/scripts/deploy-metot.sh
+deploy/ansible/scripts/deploy.sh --limit metot
 ```
 
 Key-based SSH needs no password variable. If both SSH and sudo require a
@@ -169,7 +168,7 @@ password, read it without echoing and export it only for the command's shell:
 ```bash
 read -rs TOTEM_SSH_PASSWORD
 export TOTEM_SSH_PASSWORD
-deploy/ansible/scripts/deploy-metot.sh
+deploy/ansible/scripts/deploy.sh --limit metot
 unset TOTEM_SSH_PASSWORD
 ```
 
@@ -183,7 +182,7 @@ To enforce files, packages, units, enabled/running state, and health without
 executing notified restart handlers:
 
 ```bash
-deploy/ansible/scripts/deploy-metot.sh \
+deploy/ansible/scripts/deploy.sh --limit metot \
   --extra-vars totem_service_restarts_enabled=false
 ```
 
@@ -196,7 +195,7 @@ lifted.
 ### Exclude Python managers and drivers
 
 ```bash
-deploy/ansible/scripts/deploy-metot.sh \
+deploy/ansible/scripts/deploy.sh --limit metot \
   --extra-vars totem_device_manager_enabled=false
 ```
 
@@ -207,19 +206,17 @@ count from five to four.
 For a no-restart core-only convergence run, combine both guards:
 
 ```bash
-deploy/ansible/scripts/deploy-metot.sh \
+deploy/ansible/scripts/deploy.sh --limit metot \
   --extra-vars totem_service_restarts_enabled=false \
   --extra-vars totem_device_manager_enabled=false
 ```
 
 ### Target another host or the fleet
 
-The guarded wrapper must not be repurposed. Run Ansible from its directory and
-state the limit explicitly:
+Pass the intended limit to the same wrapper:
 
 ```bash
-cd deploy/ansible
-ansible-playbook playbooks/deploy.yml --limit motown
+deploy/ansible/scripts/deploy.sh --limit motown
 ```
 
 Omitting `--limit` authorizes all hosts in the `totems` group. Because that is
@@ -268,7 +265,8 @@ See [strfry configuration and implementation](/reference/strfry).
 - installs the inventory-selected Rust standard-library target on the
   controller when absent;
 - builds locally with `cargo build --release --locked --target <target>`;
-- manages the IPv6-capable `/etc/totemd/totemd.env` and seeds operator policy
+- manages the IPv6-capable `/etc/totemd/totemd.env`, including the five-minute
+  sync cadence and per-round timeout, and seeds operator policy
   `/etc/totemd/config.toml` only if absent;
 - installs `/usr/local/bin/totemd` and the `totemctl` symlink;
 - installs/enables `totemd.service`, passing the root-only FIPS key through
@@ -316,8 +314,9 @@ The final role checks the enabled scope:
    FIPS identity, proving the systemd credential and IPv6 web bind;
 8. `totemctl status` reports `ok`, a connected FIPS watcher, and valid
    operator policy;
-9. Python `/health` returns HTTP `200` when enabled;
-10. the expected migration checkpoint count exists.
+9. `totemctl history` returns the typed, process-local event-history result;
+10. Python `/health` returns HTTP `200` when enabled;
+11. the expected migration checkpoint count exists.
 
 These are live contract checks. A passing port check alone is not treated as
 service health.
@@ -447,7 +446,7 @@ These checks do not contact inventory hosts:
 ```bash
 cd deploy/ansible
 ansible-playbook playbooks/deploy.yml --syntax-check
-bash -n scripts/deploy-metot.sh
+bash -n scripts/deploy.sh
 bash -n scripts/stage-artifacts.sh
 ```
 

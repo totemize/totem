@@ -116,10 +116,14 @@ device-side resolver support from `.fips` resolution on a development host.
 5. A matching `!Totem` name/public-key claim emits `totem.peer.candidate` and
    starts a fresh-nonce signed challenge against the peer's port `8080`.
 6. A valid kind-27235 proof emits `totem.recognized` for the current FIPS
-   encounter and starts one policy-permitted bidirectional relay sync.
-7. Departure clears recognition, cancels an active sync, and emits
-   `totem.peer.gone`; completion is reported as `totem.sync.done`.
-8. SSE clients receive those pushes from `/bus/events`. Push delivery is
+   encounter and starts an immediate policy-permitted bidirectional relay
+   reconciliation.
+7. Totemd repeats reconciliation five minutes after each round completes while
+   the same encounter remains recognized; every `totem.sync.done` retains
+   strfry's readable result and optional parsed set-difference counts.
+8. Departure clears recognition, cancels a running child or interval wait, and
+   emits `totem.peer.gone`.
+9. SSE clients receive those pushes from `/bus/events`. Push delivery is
    intentionally lossy, so clients query `totem.status.get` and
    `totem.peers.get` after connecting or reconnecting.
 
@@ -128,11 +132,12 @@ device-side resolver support from `.fips` resolution on a development host.
 strfry accepts standard Nostr WebSocket traffic and commits accepted events to
 LMDB. The required artifact supports NIP-77 negentropy and the `strfry sync`
 client. The Ansible contract verifies NIP-77 and the NIP-11 identity used by
-totemd's implemented recognition/challenge loop; a 2026-08-20 live audit
-found motown's then-installed aarch64 relay failed that NIP-77 contract and
-must be restaged. `totemd` now supervises the unprivileged strfry runner after
-recognition, with per-encounter deduplication, timeout, and departure/shutdown
-cancellation.
+totemd's implemented recognition/challenge loop. A 2026-08-20 live audit found
+motown's original aarch64 artifact incompatible; it was replaced with strfry
+master using NIP-77 protocol 0 and passed bidirectional reconciliation. `totemd` supervises the
+unprivileged runner immediately and periodically after recognition, with
+per-peer non-overlap, a per-round timeout, departure/shutdown cancellation,
+and no extra database scan for its human-readable result.
 
 ### Hardware calls
 
@@ -167,7 +172,7 @@ session plaintext.
 | Capability | State in this revision |
 |---|---|
 | FIPS service, persistent identity, TUN, DNS, control socket | Implemented and deployment-verified |
-| IPv6-capable strfry relay and NIP-77 advertisement | Implemented; enforced by Ansible (motown's audited aarch64 artifact needs restaging) |
+| IPv6-capable strfry relay and NIP-77 advertisement | Implemented; protocol-0 capability is enforced by Ansible |
 | `totemd` FIPS polling, peer snapshot, seen/gone pushes | Implemented |
 | `totemctl` help/version/status/config/peers/history/events/generic call | Implemented |
 | Python display/NFC/storage/network API | Implemented; hardware availability depends on the device |
