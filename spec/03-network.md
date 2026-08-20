@@ -35,38 +35,64 @@ Deployment modes relevant to Totem:
 
 ## Radio usage and modes
 
-On a single-radio device (the Pi Zero W reference profile), the natural split:
+The Pi Zero W reference profile has one onboard combo chip, but it must not be
+modeled as one exclusive software mode. Linux exposes distinct Wi-Fi and
+Bluetooth controllers, and the Wi-Fi PHY itself advertises valid concurrent
+interface combinations. The net code MUST inspect those capabilities and live
+interfaces instead of assuming that enabling BLE, station Wi-Fi, AP, or P2P
+necessarily disables every other role.
 
-- **WiFi = service interface** — the AP for guests (`06-interaction.md`).
-- **Bluetooth = totem-to-totem proximity transport** for FIPS.
-- **FIPS IP overlay** when upstream internet exists.
+The device manager is the policy-free hardware boundary. It exposes:
 
-Multi-radio devices SHOULD follow the same logical split (AP on one radio,
-mesh transports on the others) but MAY interleave as capacity allows. See
-`09-open-questions.md` for the coexistence question on constrained hardware.
+- physical Wi-Fi/Bluetooth inventory, driver/firmware/controller metadata,
+  channels, roles, interface modes, and supported/unsupported operations;
+- kernel-declared Wi-Fi concurrency combinations and the live mode, channel,
+  connection, and addresses of every interface;
+- Wi-Fi and Bluetooth radio/block state and explicit setters;
+- station scan/connect/disconnect and AP create/stop;
+- Wi-Fi Direct discovery, peer inventory, and create-or-join/list/remove group
+  lifecycle;
+- bounded, independently identified BLE discovery sessions, structured
+  advertisements, advertising lifecycle, generic connection state, and GATT
+  client inventory/read/write/notification lifecycle;
+- typed hardware events plus explicit operation timeouts and idempotent
+  teardown.
 
-### Radio modes (single radio)
+It MUST NOT decide which role to prefer, when to switch, which peer to trust,
+whether to sync, or what packets to send. A higher-level controller uses the
+capability and status APIs, applies operator/product policy, and binds traffic
+to the interface/address returned for the selected link.
 
-One radio means the totem is always in exactly one of these modes. The modes
-are additive meeting paths — none precludes the others over the device's
-lifetime, and the AP conventions (`07-conventions.md`) apply **only** to
-AP-host mode:
+### Measured Pi Zero W concurrency
 
-| Mode | Radio role | Totem-to-totem path | Guest on-ramp |
-|------|-----------|--------------------|---------------|
-| Infra-station | joined to infrastructure WiFi | FIPS over shared L2 (mDNS discovery) | none (guests are on the infrastructure network) |
-| AP-host | emitting the `!Totem` AP | other totems join as stations; FIPS over the AP L2 | yes (`06-interaction.md`) |
-| BLE (v1.5) | WiFi per either mode above | FIPS BLE transport, no WiFi needed | per WiFi mode |
+Both armv6 and armv7 bench units report the `brcmfmac` PHY modes `managed`,
+`AP`, `P2P-client`, `P2P-GO`, and `P2P-device`. Their kernel exposes these
+valid combinations:
 
-Notes:
+1. up to two managed interfaces, one P2P-device, and one P2P-client-or-GO;
+   three interfaces total across at most two channels;
+2. one managed, one AP, one P2P-client, and one P2P-device; four interfaces
+   total on one channel.
 
-- Totem-to-totem connectivity works in **every** mode — a shared-router
-  deployment (two infra-stations) is the ordinary case and has no
-  limitations versus any other mode.
-- A totem in AP-host mode serves guests **and** acts as the meeting beacon
-  for other totems: one emission, two product stories.
-- Role switching between infra-station and AP-host is a policy question
-  (`09-open-questions.md`); v1 devices MAY fix the role in configuration.
+Live validation formed a reciprocal NetworkManager Wi-Fi Direct group between
+`totem` and `metot` on channel 7 while both retained their channel-7 managed
+infrastructure connection and FIPS TUN. The group negotiated totem as GO and
+metot as client, assigned link-local IPv4/IPv6 addresses, carried
+interface-bound ICMP with zero loss, and completed a bidirectional UDP
+request/ack exchange. Both sides had to activate the documented
+`wifi-p2p` create-or-join connection for the PBC negotiation; one-sided
+activation timed out without dropping infrastructure Wi-Fi.
+
+BLE discovery and structured advertisement reception were also validated
+while managed Wi-Fi and FIPS remained active. These measurements prove useful
+coexistence on the current bench stack; they do not guarantee arbitrary
+channel/role combinations on other adapters. The live capability matrix is
+authoritative, and unsupported/conflicting requests MUST fail explicitly.
+
+The AP conventions (`07-conventions.md`) apply only when an AP is actually
+active. Infrastructure station, AP, P2P, and BLE are mechanisms that may
+coexist when the reported hardware constraints allow; role selection remains
+a policy question (`09-open-questions.md`).
 
 ## Discovery and pairing sequence
 
