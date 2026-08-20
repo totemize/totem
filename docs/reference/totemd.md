@@ -140,10 +140,12 @@ Its HTML, CSS, and application JavaScript are built in `webapp/`; devices need
 no Node runtime or loose asset directory. The app loads aggregate state from a
 deliberately limited same-origin API and never connects to the generic bus.
 The CSP permits Chrome/Firefox extension schemes required by late-injected
-NIP-07 providers. An early-development nsec escape hatch lazily loads a pinned
-`nostr-tools` bundle: the secret stays in page memory, is never sent or
-persisted, and its byte array is cleared on logout/navigation. There are no
-external runtime assets.
+NIP-07 providers. Standard `window.nostr` providers work unchanged; when
+nos2x's manifest blocks its own provider resource on private-LAN HTTP origins,
+the app falls back to its already-injected content-script message bridge. An
+early-development nsec escape hatch lazily loads a pinned `nostr-tools` bundle:
+the secret stays in page memory, is never sent or persisted, and its byte array
+is cleared on logout/navigation. There are no external runtime assets.
 
 | Method | Path | Purpose |
 |---|---|---|

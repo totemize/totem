@@ -26,9 +26,11 @@ them and rejects stale output before running the Rust checks.
   later frames contain the same current state plus each typed push.
 - `/bus` and `/bus/events` remain loopback-only on port 8081. The browser never
   connects to them, and `totemctl` remains their client.
-- Owner signing uses a late-injected NIP-07 extension or the existing
-  development-only nsec bundle. An nsec is loaded lazily, stays in page memory,
-  and is cleared when forgotten or on navigation.
+- Owner signing uses any late-injected standard NIP-07 provider. nos2x's
+  manifest does not expose its provider script to private-LAN HTTP origins, so
+  a small fallback speaks its already-running content-script bridge when
+  `window.nostr` is absent. The existing development nsec bundle remains a
+  lazy, page-memory-only fallback and is cleared on navigation.
 
 The implemented UI intentionally stops at current backend capabilities:
 profile, engagement policy, aggregate status, current recognized Totems, and

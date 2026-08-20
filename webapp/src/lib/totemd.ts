@@ -1,3 +1,4 @@
+import { createNos2xSigner } from "./nos2x.js";
 import { parseSse } from "./sse.js";
 
 export type Befriend = "auto" | "ask" | "never";
@@ -159,7 +160,7 @@ export function loadSnapshot(): Promise<PublicSnapshot> {
   return requestJson("/api/status");
 }
 
-export async function waitForNip07(timeout = 5000): Promise<OwnerSigner> {
+export async function waitForNip07(timeout = 1500): Promise<OwnerSigner> {
   const deadline = Date.now() + timeout;
   do {
     if (
@@ -171,7 +172,17 @@ export async function waitForNip07(timeout = 5000): Promise<OwnerSigner> {
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   } while (Date.now() < deadline);
-  throw new Error("No NIP-07 extension detected. Retry or use a development nsec.");
+
+  // ponytail: nos2x-only fallback for insecure LAN origins; remove when its
+  // manifest exposes the standard provider to local-network HTTP pages.
+  const nos2x = createNos2xSigner();
+  try {
+    await nos2x.probe();
+    return nos2x;
+  } catch {
+    nos2x.clear();
+    throw new Error("No NIP-07 extension detected. Retry or use a development nsec.");
+  }
 }
 
 let nsecScript: Promise<void> | null = null;

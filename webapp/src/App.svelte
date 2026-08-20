@@ -293,7 +293,8 @@
       <summary>development nsec</summary>
       <p class="warning">Kept only in this page's memory and cleared on navigation. Use a development key.</p>
       <form class="inline-form" onsubmit={(event) => { event.preventDefault(); void useNsec(); }}>
-        <input type="password" placeholder="nsec1…" autocomplete="new-password" bind:value={nsec} required>
+        <input type="text" name="username" autocomplete="username" value="totem-owner" hidden>
+        <input type="password" name="nsec" placeholder="nsec1…" autocomplete="current-password" bind:value={nsec} required>
         <button class="btn" type="submit" disabled={busy}>use locally</button>
       </form>
     </details>
