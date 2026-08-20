@@ -10,14 +10,7 @@ import type {
   Settings,
 } from "./types";
 
-export type Screen =
-  | "home"
-  | "peers"
-  | "notes"
-  | "settings"
-  | "contacts"
-  | "encounters"
-  | "peer";
+export type Screen = "home" | "peers" | "notes" | "settings" | "encounters" | "peer";
 
 export type SetupStep = "welcome" | "identity" | "presence" | "name" | "public";
 
@@ -34,7 +27,7 @@ export interface State {
   /** First-run claim flow; null once the totem is claimed. */
   setup: { step: SetupStep; ownerNpub: string; error: string | null } | null;
   encounterLog: EncounterLogEntry[];
-  contactFilter: "all" | "friends";
+  friendFilter: "all" | "active" | "requests";
   /** Note composer open on the Notes screen. */
   composing: boolean;
   /** Note id whose ⋯ actions are expanded. */
@@ -56,7 +49,7 @@ export class Store {
     settings: null,
     setup: null,
     encounterLog: [],
-    contactFilter: "all",
+    friendFilter: "all",
     composing: false,
     noteMenu: null,
     selectedPeer: null,
@@ -98,8 +91,8 @@ export class Store {
     }
   }
 
-  setContactFilter(filter: "all" | "friends"): void {
-    this.state.contactFilter = filter;
+  setFriendFilter(filter: "all" | "active" | "requests"): void {
+    this.state.friendFilter = filter;
   }
 
   /** Screen to return to when closing a peer landing page. */

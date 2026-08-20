@@ -66,6 +66,8 @@ body {
 .clickable { cursor: pointer; }
 .clickable:hover { background: var(--fill); }
 
+.screen-title { font-size: 20px; font-weight: 700; padding: 18px 20px 0; }
+
 /* notes */
 .note-filters { display: flex; gap: 18px; padding: 16px 20px 12px; font-size: 13px; }
 .note-filters button { background: none; border: none; font: inherit; font-size: 13px; color: var(--dim); cursor: pointer; padding: 0; }

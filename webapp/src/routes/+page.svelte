@@ -2,7 +2,6 @@
   import Header from "$lib/components/Header.svelte";
   import TabBar from "$lib/components/TabBar.svelte";
   import { MockBus, MockRelay } from "$lib/mock";
-  import Contacts from "$lib/screens/Contacts.svelte";
   import Encounters from "$lib/screens/Encounters.svelte";
   import Home from "$lib/screens/Home.svelte";
   import Notes from "$lib/screens/Notes.svelte";
@@ -27,7 +26,6 @@
     {#if screen === "home"}<Home {store} />
     {:else if screen === "peers"}<Peers {store} />
     {:else if screen === "notes"}<Notes {store} />
-    {:else if screen === "contacts"}<Contacts {store} />
     {:else if screen === "encounters"}<Encounters {store} />
     {:else if screen === "peer"}<PeerLanding {store} />
     {:else}<Settings {store} />{/if}
