@@ -160,6 +160,18 @@
     mode: "0644"
   notify: Restart device manager
 
+- name: Grant the Bluetooth group access to the rfkill control device
+  ansible.builtin.template:
+    src: 70-totem-rfkill.rules.j2
+    dest: /etc/udev/rules.d/70-totem-rfkill.rules
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload udev rules
+    - Reload rfkill device permissions
+    - Restart device manager
+
 - name: Install the device-manager systemd unit
   ansible.builtin.template:
     src: totem.service.j2

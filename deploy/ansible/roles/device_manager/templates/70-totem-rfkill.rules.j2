@@ -1,0 +1,3 @@
+# Managed by Totem Ansible.  The radio driver always names the bluetooth
+# rfkill type; this access lets the unprivileged service restore a soft block.
+SUBSYSTEM=="misc", KERNEL=="rfkill", GROUP="bluetooth", MODE="0660"

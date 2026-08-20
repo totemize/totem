@@ -181,14 +181,63 @@ class Driver(BluetoothDeviceInterface):
         except (OSError, subprocess.SubprocessError, ValueError):
             return RadioBlockState(soft_blocked=not powered, hard_blocked=False)
 
+    def _set_rfkill_blocked(self, blocked: bool, timeout: float) -> None:
+        import subprocess
+
+        try:
+            subprocess.run(
+                [
+                    _tool("rfkill"),
+                    "block" if blocked else "unblock",
+                    "bluetooth",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RadioTimeoutError(
+                "Timed out changing Bluetooth rfkill state"
+            ) from exc
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise RadioOperationError(
+                "Unable to change the Bluetooth soft-block state"
+            ) from exc
+
     def set_radio_enabled(self, enabled: bool, timeout: float = 15.0):
         self._ready()
         before = self.get_radio_state()
-        if before.powered == enabled:
+        if before.powered == enabled and before.block.soft_blocked == (not enabled):
             return before
-        self._runtime.set_property(
-            BLUEZ_SERVICE, self._adapter_path, ADAPTER, "Powered", "b", enabled, timeout
-        )
+        if enabled:
+            if before.block.hard_blocked:
+                raise UnsupportedFeatureError(
+                    "Bluetooth is hard-blocked by the hardware or firmware"
+                )
+            if before.block.soft_blocked:
+                self._set_rfkill_blocked(False, timeout)
+            self._runtime.set_property(
+                BLUEZ_SERVICE,
+                self._adapter_path,
+                ADAPTER,
+                "Powered",
+                "b",
+                True,
+                timeout,
+            )
+        else:
+            if before.powered:
+                self._runtime.set_property(
+                    BLUEZ_SERVICE,
+                    self._adapter_path,
+                    ADAPTER,
+                    "Powered",
+                    "b",
+                    False,
+                    timeout,
+                )
+            self._set_rfkill_blocked(True, timeout)
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             current = self.get_radio_state()
