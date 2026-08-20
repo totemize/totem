@@ -1,0 +1,25 @@
+# Ansible seed for a new Totem. Existing configurations and identity keys are
+# deliberately preserved. LAN rendezvous forms the ordinary bench/home mesh.
+node:
+  identity:
+    persistent: true
+  rendezvous:
+    lan:
+      enabled: {{ totem_fips_lan_rendezvous_enabled | bool | lower }}
+
+tun:
+  enabled: true
+  name: fips0
+  mtu: 1280
+
+dns:
+  enabled: true
+  port: 5354
+
+transports:
+  udp:
+    bind_addr: "0.0.0.0:2121"
+  tcp:
+    bind_addr: "0.0.0.0:8443"
+
+peers: []

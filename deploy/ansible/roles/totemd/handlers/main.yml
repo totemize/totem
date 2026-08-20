@@ -1,0 +1,10 @@
+---
+- name: Reload systemd for totemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart totemd
+  ansible.builtin.systemd_service:
+    name: totemd.service
+    state: restarted
+  when: totem_service_restarts_enabled | bool

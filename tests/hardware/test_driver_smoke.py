@@ -25,8 +25,18 @@ def test_display_driver_initializes():
     from totem.devices.display.display import EInk
 
     display = EInk(driver_name)
-    display.initialize()
-    assert display.driver.health().operational
+    try:
+        display.initialize()
+        assert display.driver.health().operational
+        # Initialization alone cannot distinguish a connected idle panel from
+        # a floating BUSY line. A refresh must assert and release BUSY.
+        display.clear()
+        if getattr(display.driver, "CONFIRMS_REFRESH_WITH_BUSY", False):
+            assert display.driver.last_refresh_confirmed_by_busy is True, (
+                "display refresh was not confirmed by BUSY"
+            )
+    finally:
+        display.driver.close()
 
 
 def test_nfc_driver_initializes():
@@ -60,3 +70,23 @@ def test_storage_driver_initializes():
     driver = Driver(root=os.environ.get("TOTEM_STORAGE_ROOT", "/mnt/nvme"))
     assert driver.init() is True
     assert driver.health().operational
+
+
+def test_ups_driver_initializes_and_reads_status():
+    if not _selected("ups"):
+        pytest.skip("ups excluded by TOTEM_HARDWARE_COMPONENTS")
+    driver_name = os.environ.get("TOTEM_UPS_DRIVER")
+    if not driver_name:
+        pytest.skip("TOTEM_UPS_DRIVER must identify the attached UPS")
+
+    from totem.devices.ups.ups import UPS
+
+    ups = UPS(driver_name)
+    try:
+        ups.initialize()
+        status = ups.get_status()
+        assert ups.driver.health().operational
+        assert 0.0 <= status.battery_percent <= 100.0
+        assert 2.7 <= status.voltage_volts <= 5.0
+    finally:
+        ups.close()

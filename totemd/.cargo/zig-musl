@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${TARGET:-}" in
+  arm-unknown-linux-musleabihf)
+    zig_target=arm-linux-musleabihf
+    target_flags=(-mcpu=arm1176jzf_s -mfloat-abi=hard -mfpu=vfp)
+    ;;
+  aarch64-unknown-linux-musl)
+    zig_target=aarch64-linux-musl
+    target_flags=(-mcpu=baseline)
+    ;;
+  *)
+    echo "zig-musl: unsupported Rust target: ${TARGET:-unset}" >&2
+    exit 2
+    ;;
+esac
+
+# cc-rs supplies the Rust target spelling, which Zig does not accept. Replace
+# only that flag and preserve every include, define, warning, and output flag.
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    --target=*) ;;
+    *) args+=("$arg") ;;
+  esac
+done
+
+exec zig cc -target "$zig_target" "${target_flags[@]}" "${args[@]}"

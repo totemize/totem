@@ -61,17 +61,15 @@ Status: Draft (living document — shrinks as we resolve)
 - Privacy of relations: are kind 3 contact lists public, or visible only to
   the parties? Encounter records: wanted, and at what visibility? (An open
   contact graph publishes physical movement and social patterns.)
-- Key management: does the owner use the totem's npub or a separate admin
-  npub? What happens to contacts and mesh identity on key rotation?
-- Is any HTTP liveness/capability endpoint needed beyond NIP-11 and signed
-  events?
+- Key lifecycle: v1 now separates the device key from one locally persisted
+  owner npub. What physical proof should replace first-signer bootstrap, how
+  is a lost owner key recovered, and what happens to contacts and mesh
+  identity when the device key rotates?
 
 ### Guest experience
 
-- Captive portal on AP join? Is the web app read-only for non-owners?
+- Captive portal on AP join?
 
-### Conventions (values to pin)
+### Conventions (remaining values to pin)
 
-- Port numbers for relay and web app (`07-conventions.md`).
 - AP gateway address / ULA choice; captive portal yes/no.
-- NIP-11 marker field name (`07-conventions.md`).

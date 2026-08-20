@@ -19,6 +19,10 @@ def test_nfc_registry_uses_case_safe_module_names():
 
 def test_eink_registry_exposes_only_supported_drivers():
     assert "mock_eink" in EINK_DRIVERS.names
+    assert "waveshare_2in13_v1" in EINK_DRIVERS.names
+    assert "waveshare_2in13_v2" in EINK_DRIVERS.names
+    assert "waveshare_2in13_v3" in EINK_DRIVERS.names
+    assert "waveshare_2in13_v4" in EINK_DRIVERS.names
     assert "waveshare_3in7_pi5" in EINK_DRIVERS.names
 
 

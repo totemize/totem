@@ -1,0 +1,22 @@
+[Unit]
+Description=Totem control-plane daemon (totemd)
+Wants=fips.service network-online.target
+After=fips.service network-online.target
+
+[Service]
+Type=simple
+User=totem
+Group=totem
+SupplementaryGroups=fips strfry
+StateDirectory=totemd
+# The root-owned source remains 0600. systemd exposes a private read-only
+# credential to the unprivileged daemon for challenge signing.
+LoadCredential=fips.key:/etc/fips/fips.key
+NoNewPrivileges=true
+EnvironmentFile=-/etc/totemd/totemd.env
+ExecStart=/usr/local/bin/totemd serve
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

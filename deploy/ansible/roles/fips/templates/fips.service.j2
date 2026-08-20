@@ -1,0 +1,21 @@
+[Unit]
+Description=FIPS Mesh Network Daemon
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/fips/fips.yaml
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/fips --config /etc/fips/fips.yaml
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=fips
+RuntimeDirectoryMode=0750
+LogsDirectory=fips
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=no
+
+[Install]
+WantedBy=multi-user.target

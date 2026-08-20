@@ -6,8 +6,12 @@ Totem is an open-source personal hardware device platform: a small carried
 device (Raspberry Pi-based) that runs its own Nostr relay. Totems discover
 each other and sync notes when in range — an organic, sneakernet-style
 network. Spec lives in `spec/` (numbered docs; `01-overview.md` is the entry
-point). Code lives in `totem/` (Go daemon, Python helpers, frontend,
-screen-pipe/generator). `references/` holds third-party projects we build
+point). Code lives in `src/totem/` (Python hardware runtime: device
+managers, drivers, FastAPI/WS API; tests in `tests/`, units in
+`deploy/systemd/`). The control-plane daemon **totemd** (Rust) lives at
+`totemd/` in this repo (`spec/10-control-plane.md`; monorepo for spec-
+atomic iteration and one deploy story — split criteria in journal
+2026-08-19). `references/` holds third-party projects we build
 against or borrow from — notably `references/fips/` (the FIPS mesh daemon
 that provides the `fips0` overlay network our devices run on) and
 `references/strfry/`. These are reference checkouts: read them, don't
@@ -27,6 +31,7 @@ journal into this file or the specs; the journal keeps the story.
 ### totem (test unit #1)
 
 - Raspberry Pi (armv6l, Raspbian 13) at `192.168.8.136`.
+- No e-ink display is attached. Do not use this host for display tests.
 - FIPS npub: `npub1eu0clm0nsxwavcsj07at3sy7v52tuwgw4qpeqsyxgkeqg7krc7ps77c20q`
 - Runs `fips.service` (FIPS mesh daemon, binary at `/usr/local/bin/fips`,
   config at `/etc/fips/fips.yaml`, identity key `/etc/fips/fips.key` —
@@ -51,6 +56,11 @@ ssh npub1eu0clm0nsxwavcsj07at3sy7v52tuwgw4qpeqsyxgkeqg7krc7ps77c20q.fips
 ### metot (test unit #2)
 
 - Host `metot` at `192.168.8.239`, same image/user/pass scheme as totem.
+- Raspberry Pi Zero 2 W with PiSugar2 and a Waveshare 2.13-inch HAT.
+- Reports `armv7l` on its 32-bit OS but runs the fleet's compatible armv6l
+  artifacts; Ansible models system architecture and artifact class separately.
+- The HAT PCB is Rev 2.1; the attached panel/controller uses the V4 driver
+  (`waveshare_2in13_v4`). This is the only display test unit.
 - FIPS npub: `npub1j0adney3t3tuvcaz6wv6eahpkhfrl8rwhry58n2u4njuxz0j04lsrudpf6`
 
 ```bash
@@ -60,10 +70,81 @@ ssh metot.fips          # via FIPS mesh
 
 (`~/.ssh/config` has `Host *.fips` → `User totem`, so no user prefix needed.)
 
-- No password needed. If auth fails, the fallback password is `totem`.
+- Passwordless access may be absent on a fresh controller checkout; the
+  fallback password is `totem` (required by the 2026-08-20 Ansible run).
 - `fipsctl` works as the `totem` user (member of the `fips` group, control
   socket at `/run/fips/control.sock`). Use `sudo` only for root-only things
   (`systemctl restart fips`, reading `/etc/fips/fips.key`, `sudo fipsctl`).
+- Its staged armv6 strfry advertises NIP 77/negentropy and completed a
+  zero-transfer protocol-0 dry reconciliation with totem over FIPS (`Have 0
+  need 0`, 2026-08-20). The Ansible verifier also opens its LMDB through the
+  unprivileged runner on every deployment.
+
+### motown (test unit #3)
+
+- Fresh unit, onboarded 2026-08-20. Debian 13 (trixie), **aarch64** (64-bit —
+  unlike totem's armv6l; cross-builds need the aarch64 target).
+- Reaches LAN via mDNS: `motown.local` → `192.168.8.196` (address is
+  DHCP — mDNS name is the stable handle).
+- `~/.ssh/config` alias `motown` (User `totem`); our key is installed,
+  passwordless works. Fallback password: `totem`.
+- FIPS npub: `npub1rx7epldvux4d306aasw0n6y7wn9je0wa3yw4f8djpsw28g8zqzxsgg2g35`
+  (`fips.service` running, same layout as totem: binaries in
+  `/usr/local/bin`, config+key in `/etc/fips/`, `totem` in the `fips`
+  group; static aarch64 musl build of the same checkout as totem —
+  BLE off like the others).
+
+```bash
+ssh motown               # via LAN
+ssh motown.fips          # via FIPS mesh
+```
+
+- Runs strfry master `5d89a62` (aarch64 build, Alpine minirootfs runtime
+  under `/opt/strfry`, `bind = "::"`): relay on port 7777, verified over LAN,
+  mesh, and bidirectional protocol-0/NIP-77 sync with totem. The original
+  `router`-branch build was replaced after live wire testing proved its
+  pre-standard negentropy format incompatible despite the same `sync` CLI;
+  Ansible verification fails closed on this contract.
+- NIP-11 markers per 07 conventions (2026-08-20): `info.name` reads the
+  atomically generated `/var/lib/totemd/nip11-name` and hot-reloads without a
+  relay restart; current device-signed kind-0 value is `!Totem motown-wow`.
+  `info.pubkey` and
+  `info.self` = hex npub `19bd90fd…2008d`; NIP 77 and `negentropy = 1` render
+  over the mesh. Footgun: golpe takes the LAST duplicate key — set the stock
+  `pubkey = ""` line, don't add a second one.
+
+### totemd (all three bench units)
+
+- Standing install: `/usr/local/bin/totemd`, `totemctl` symlink,
+  `totemd.service` enabled; deploy/update with `deploy/flash.sh [devices]`.
+- Deployment fallback: `/etc/totemd/config.toml` (created only when absent).
+  Owner + mutable policy state: `/var/lib/totemd/state.toml` (0600, atomic).
+  Public metadata is the latest own device-signed kind 0 in strfry.
+- Signed challenge build is deployed to all three bench units. Metot joined
+  this baseline through the converged Ansible deployment on 2026-08-20.
+- The automatic sync supervisor is deployed only to totem + motown. Motown
+  runs the current five-minute periodic/history build with readable per-round
+  reconciliation summaries; totem retains the earlier encounter build.
+- Challenge signing key on enabled units: source remains
+  `/etc/fips/fips.key` root:root 0600; `totemd.service` passes it to `User=totem` with systemd `LoadCredential=`.
+  Do not copy it, print it, or loosen its mode.
+- Relay CLI runner: `/usr/local/libexec/totem-strfry`; `totem` belongs to the
+  `strfry` group and `/etc/strfry.conf` + `/var/lib/strfry` are group-scoped,
+  never world-writable. `deploy/flash.sh` and Ansible maintain this integration.
+- Owner/profile build is deployed to motown only; it was successfully claimed
+  through the in-memory development nsec flow and published its first own kind
+  0. Totem and metot retain their prior builds. Motown's page uses
+  same-origin `/app.js` plus nonce-bound NIP-98 APIs for first-signer claim,
+  policy, and device-signed kind-0 metadata. It polls for late NIP-07 injection
+  and has a development-only in-memory nsec signer (never sent/stored; use a
+  dev key). `/bus` and `/bus/events` remain loopback-only.
+
+```bash
+ssh totem 'totemctl status'  # fips health + effective policy + counters
+ssh totem 'totemctl peers'   # peers + NIP-11 hint + probe/recognition state
+ssh totem 'totemctl config'  # effective engagement policy
+ssh motown 'totemctl history' # bounded pushes + per-round sync summaries
+```
 
 ### Device inspection conventions
 
@@ -119,12 +200,16 @@ print(socket.inet_ntop(socket.AF_INET6, r[-16:]))
 Don't install resolver plumbing per-device (NM dnsmasq plugin etc.) —
 tried on totem, reverted 2026-08-19; devices stay symmetric.
 
-### strfry must bind IPv6: `bind = "::"`
+### Mesh-facing services must bind IPv6
 
-The mesh is IPv6-only (`fd00::/8`). Stock strfry binds `0.0.0.0` →
-mesh SYNs get RST ("Connection refused") while LAN and pings work.
-Fixed on both devices 2026-08-19 (`/etc/strfry.conf` line 44). Re-check
-after any strfry reinstall/config reset.
+The mesh is IPv6-only (`fd00::/8`). Stock strfry's `0.0.0.0` and a totemd
+web bind of `0.0.0.0:8080` both make mesh SYNs get RST ("Connection
+refused") while LAN and pings work. strfry must use `bind = "::"`; totemd
+defaults to `[::]:8080` (dual-stack on the device images).
+
+strfry was fixed on totem+metot 2026-08-19, motown 2026-08-20 (config copied
+verbatim; `/etc/strfry.conf` line 44). Re-check after any relay reinstall or
+service bind override.
 
 ### Dev host also runs fips
 

@@ -1,0 +1,69 @@
+---
+- name: Validate the target platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.system == 'Linux'
+      - ansible_facts.service_mgr == 'systemd'
+      - ansible_facts.architecture == totem_system_arch
+      - totem_npub is match('^npub1[023456789acdefghjklmnpqrstuvwxyz]+$')
+      - totem_npub_hex is match('^[0-9a-f]{64}$')
+    fail_msg: >-
+      {{ inventory_hostname }} reported {{ ansible_facts.system }}/
+      {{ ansible_facts.service_mgr }}/{{ ansible_facts.architecture }}, expected
+      Linux/systemd/{{ totem_system_arch }} with a valid npub/hex identity.
+
+- name: Install bare-device runtime dependencies
+  ansible.builtin.apt:
+    name: >-
+      {{ totem_base_packages +
+         (totem_device_manager_packages
+          if totem_device_manager_enabled | bool else []) }}
+    state: present
+    update_cache: true
+    cache_valid_time: 86400
+
+- name: Ensure device access groups exist
+  ansible.builtin.group:
+    name: "{{ item }}"
+    system: true
+    state: present
+  loop: "{{ totem_device_groups }}"
+
+- name: Ensure the Totem service account exists
+  ansible.builtin.user:
+    name: totem
+    shell: /bin/bash
+    create_home: true
+    groups: "{{ totem_device_groups | join(',') }}"
+    append: true
+    state: present
+
+- name: Create deployment state directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ totem_deploy_root }}", mode: "0755"}
+    - {path: "{{ totem_migration_root }}", mode: "0755"}
+    - {path: "{{ totem_artifact_state_root }}", mode: "0755"}
+    - {path: "{{ totem_remote_cache }}", mode: "0755"}
+
+- name: Read the bootstrap migration checkpoint
+  ansible.builtin.stat:
+    path: "{{ totem_migration_root }}/0001-bootstrap.complete"
+  register: bootstrap_checkpoint
+
+- name: Record bootstrap or legacy-host adoption
+  ansible.builtin.copy:
+    dest: "{{ totem_migration_root }}/0001-bootstrap.complete"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      migration=0001-bootstrap
+      inventory_hostname={{ inventory_hostname }}
+      architecture={{ ansible_facts.architecture }}
+  when: not bootstrap_checkpoint.stat.exists

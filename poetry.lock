@@ -970,6 +970,23 @@ test = ["build[virtualenv] (>=1.0.3)", "filelock (>=3.4.0)", "ini2toml[lite] (>=
 type = ["importlib_metadata (>=7.0.2) ; python_version < \"3.10\"", "jaraco.develop (>=7.21) ; sys_platform != \"cygwin\"", "mypy (==1.14.*)", "pytest-mypy"]
 
 [[package]]
+name = "smbus2"
+version = "0.6.1"
+description = "smbus2 is a drop-in replacement for smbus-cffi/smbus-python in pure Python"
+optional = true
+python-versions = "*"
+groups = ["main"]
+markers = "sys_platform == \"linux\" and extra == \"raspberry-pi\""
+files = [
+    {file = "smbus2-0.6.1-py2.py3-none-any.whl", hash = "sha256:650feeb27ca0ed58b07db4c10201c2a662c41305b7bf6e5fab9d888056f48180"},
+    {file = "smbus2-0.6.1.tar.gz", hash = "sha256:2b043372abf8f6029a632c3aab36b641c5d5872b1cbad599fc68e17ac4fd90a5"},
+]
+
+[package.extras]
+docs = ["sphinx (>=7)", "sphinx-rtd-theme"]
+qa = ["flake8"]
+
+[[package]]
 name = "sniffio"
 version = "1.3.1"
 description = "Sniff out which async library your code is running under"
@@ -1110,9 +1127,9 @@ test = ["big-O", "importlib-resources ; python_version < \"3.9\"", "jaraco.funct
 type = ["pytest-mypy"]
 
 [extras]
-raspberry-pi = ["RPi.GPIO", "gpiod", "gpiozero", "spidev"]
+raspberry-pi = ["RPi.GPIO", "gpiod", "gpiozero", "smbus2", "spidev"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "b6343ec580b03ba12831604f7484e948e23aa7ccbeb23a6c8f191ff744769897"
+content-hash = "971f954dbd7e6036af27643f92b334f1c68d415bfa40c7d87cb0d57aad12367e"

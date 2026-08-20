@@ -1,0 +1,234 @@
+---
+- name: Hash the deployable Python source tree
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ totem_repo_root }}/deploy/ansible/scripts/package-python-source.py"
+      - --print-revision
+      - "{{ totem_repo_root }}"
+  register: device_manager_source_revision
+  changed_when: false
+  delegate_to: localhost
+  become: false
+
+- name: Select the content-addressed Python release
+  ansible.builtin.set_fact:
+    totem_source_revision: "{{ device_manager_source_revision.stdout | trim }}"
+
+- name: Create the local source archive cache
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/../.cache"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+
+- name: Build the versioned Python source archive
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ totem_repo_root }}/deploy/ansible/scripts/package-python-source.py"
+      - --output
+      - "{{ playbook_dir }}/../.cache/totem-python-{{ totem_source_revision }}.tar.gz"
+      - --expect-revision
+      - "{{ totem_source_revision }}"
+      - "{{ totem_repo_root }}"
+  args:
+    creates: >-
+      {{ playbook_dir }}/../.cache/totem-python-{{ totem_source_revision }}.tar.gz
+  delegate_to: localhost
+  become: false
+
+- name: Create Python device-manager directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /opt/totem, owner: totem, group: totem, mode: "0755"}
+    - {path: /opt/totem/releases, owner: totem, group: totem, mode: "0755"}
+    - {path: "/opt/totem/releases/{{ totem_source_revision }}", owner: totem, group: totem, mode: "0755"}
+    - {path: /usr/local/libexec, owner: root, group: root, mode: "0755"}
+    - {path: /etc/totem, owner: root, group: totem, mode: "0750"}
+    - {path: /var/lib/totem, owner: totem, group: totem, mode: "0750"}
+    - {path: /var/lib/totem/storage, owner: totem, group: totem, mode: "0750"}
+
+- name: Cache the Python source archive on the device
+  ansible.builtin.copy:
+    src: >-
+      {{ playbook_dir }}/../.cache/totem-python-{{ totem_source_revision }}.tar.gz
+    dest: >-
+      {{ totem_remote_cache }}/totem-python-{{ totem_source_revision }}.tar.gz
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Extract the versioned Python source
+  ansible.builtin.unarchive:
+    src: >-
+      {{ totem_remote_cache }}/totem-python-{{ totem_source_revision }}.tar.gz
+    dest: "/opt/totem/releases/{{ totem_source_revision }}"
+    remote_src: true
+    owner: totem
+    group: totem
+    creates: >-
+      /opt/totem/releases/{{ totem_source_revision }}/app/pyproject.toml
+
+- name: Create the Python virtual environment
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -m
+      - venv
+      - --system-site-packages
+      - /opt/totem/.venv
+  args:
+    creates: /opt/totem/.venv/pyvenv.cfg
+
+- name: Keep system Python packages visible in an adopted virtual environment
+  ansible.builtin.lineinfile:
+    path: /opt/totem/.venv/pyvenv.cfg
+    regexp: '^include-system-site-packages ='
+    line: 'include-system-site-packages = true'
+
+- name: Read the Python release checkpoint
+  ansible.builtin.stat:
+    path: >-
+      {{ totem_artifact_state_root }}/device-manager-{{ totem_source_revision }}.installed
+  register: device_manager_release_checkpoint
+
+- name: Install a changed Python device-manager release
+  when: not device_manager_release_checkpoint.stat.exists
+  block:
+    - name: Install the Python package without rebuilding platform dependencies
+      ansible.builtin.command:
+        argv:
+          - /opt/totem/.venv/bin/python
+          - -m
+          - pip
+          - install
+          - --disable-pip-version-check
+          - --no-deps
+          - --no-build-isolation
+          - --force-reinstall
+          - "/opt/totem/releases/{{ totem_source_revision }}/app"
+      notify:
+        - Restart device manager
+        - Restart screen state service
+
+    - name: Record the installed Python release
+      ansible.builtin.copy:
+        dest: >-
+          {{ totem_artifact_state_root }}/device-manager-{{ totem_source_revision }}.installed
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          revision={{ totem_source_revision }}
+
+- name: Point the current release link at the selected Python release
+  ansible.builtin.file:
+    src: "/opt/totem/releases/{{ totem_source_revision }}/app"
+    dest: /opt/totem/current
+    state: link
+    owner: totem
+    group: totem
+    force: true
+  notify:
+    - Restart device manager
+    - Restart screen state service
+
+- name: Install the managed device-manager environment
+  ansible.builtin.template:
+    src: totem.env.j2
+    dest: /etc/totem/totem.env
+    owner: root
+    group: totem
+    mode: "0640"
+  notify:
+    - Restart device manager
+    - Restart screen state service
+
+- name: Install the device-manager systemd unit
+  ansible.builtin.template:
+    src: totem.service.j2
+    dest: /etc/systemd/system/totem.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd for device manager
+    - Restart device manager
+
+- name: Install the screen state systemd unit
+  ansible.builtin.template:
+    src: totem-screen.service.j2
+    dest: /etc/systemd/system/totem-screen.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd for device manager
+    - Restart screen state service
+
+- name: Install the screen replay command launcher
+  ansible.builtin.template:
+    src: totem-screen.j2
+    dest: /usr/local/libexec/totem-screen
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the screen replay command link
+  ansible.builtin.file:
+    src: /usr/local/libexec/totem-screen
+    dest: /usr/local/bin/totem-screen
+    state: link
+    owner: root
+    group: root
+    force: true
+
+- name: Read the device-manager layout migration checkpoint
+  ansible.builtin.stat:
+    path: "{{ totem_migration_root }}/0040-device-manager-layout.complete"
+  register: device_manager_layout_checkpoint
+
+- name: Record device-manager layout adoption
+  ansible.builtin.copy:
+    dest: "{{ totem_migration_root }}/0040-device-manager-layout.complete"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      migration=0040-device-manager-layout
+      release={{ totem_source_revision }}
+      legacy_opt_tree=preserved
+  when: not device_manager_layout_checkpoint.stat.exists
+
+- name: Enable and start the Python device manager
+  ansible.builtin.systemd_service:
+    name: totem.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Enable and start the screen state service
+  ansible.builtin.systemd_service:
+    name: totem-screen.service
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: totem_screen_enabled | bool
+
+- name: Disable and stop the screen state service
+  ansible.builtin.systemd_service:
+    name: totem-screen.service
+    enabled: false
+    state: stopped
+    daemon_reload: true
+  when: not (totem_screen_enabled | bool)
+
+- name: Apply device-manager changes before verification
+  ansible.builtin.meta: flush_handlers
