@@ -235,6 +235,33 @@ def test_bluez_advertisement_ids_are_safe_unique_dbus_path_segments():
     )
 
 
+def test_bluez_advertisement_omits_absent_optional_properties():
+    from totem.devices.network.drivers.bluez import AdvertisementObject
+
+    minimal = AdvertisementObject({"type": "peripheral"}, lambda: None)
+    assert {prop.name for prop in minimal.introspect().properties} == {"Type"}
+
+    populated = AdvertisementObject(
+        {
+            "type": "peripheral",
+            "service_uuids": ["180d"],
+            "service_data": {"180d": b"data"},
+            "manufacturer_data": {15: b"maker"},
+            "local_name": "Totem",
+            "includes": ["tx-power"],
+        },
+        lambda: None,
+    )
+    assert {prop.name for prop in populated.introspect().properties} == {
+        "Type",
+        "ServiceUUIDs",
+        "ServiceData",
+        "ManufacturerData",
+        "LocalName",
+        "Includes",
+    }
+
+
 def test_network_manager_peer_signal_does_not_reenter_dbus_loop():
     from totem.devices.network.drivers.network_manager_wifi import (
         NM_WIFI_P2P,

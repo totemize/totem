@@ -76,6 +76,27 @@ class AdvertisementObject(ServiceInterface):
         super().__init__(ADVERTISEMENT)
         self.specification = specification
         self.release_callback = release_callback
+        optional_properties = {
+            "ServiceUUIDs": bool(specification.get("service_uuids")),
+            "ManufacturerData": bool(specification.get("manufacturer_data")),
+            "ServiceData": bool(specification.get("service_data")),
+            "Includes": bool(specification.get("includes")),
+            "LocalName": bool(specification.get("local_name")),
+        }
+        # BlueZ distinguishes an absent optional property from an empty one.
+        # dbus-next builds one property list per service instance, so filter
+        # that list rather than mutating the shared class-level descriptors.
+        properties = ServiceInterface._get_properties(self)
+        setattr(
+            self,
+            "_ServiceInterface__properties",
+            [
+                prop
+                for prop in properties
+                if prop.name not in optional_properties
+                or optional_properties[prop.name]
+            ],
+        )
 
     @method()
     def Release(self):
