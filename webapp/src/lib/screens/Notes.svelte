@@ -25,7 +25,6 @@
       </div>
     </div>
   {/if}
-  <h1 class="screen-title">Notes</h1>
   <div class="note-filters">
     <button class:on={filter === "all"} onclick={() => store.setNoteFilter("all")}>All notes</button>
     <button class:on={filter === "own"} onclick={() => store.setNoteFilter("own")}>Your notes</button>
