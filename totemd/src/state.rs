@@ -3,7 +3,11 @@
 //! Pushes are lossy by design (`07-conventions.md`): consumers reconcile
 //! against `totem.status.get` on (re)connect.
 
-use std::{collections::HashMap, sync::Mutex, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Mutex,
+    time::Instant,
+};
 
 use serde_json::Value;
 use tokio::sync::broadcast;
@@ -21,6 +25,8 @@ pub struct AppState {
     /// Push counters by type — surfaced via `totem.status.get`.
     counters: Mutex<HashMap<String, u64>>,
     peers: Mutex<HashMap<String, PeerInfo>>,
+    /// Authenticated for the current FIPS encounter only; cleared on gone.
+    recognized: Mutex<HashSet<String>>,
     /// fips-side identity/mesh info from the last successful poll.
     mesh: Mutex<MeshInfo>,
     /// Connectivity health of the fips control socket.
@@ -50,6 +56,7 @@ impl AppState {
             tx,
             counters: Mutex::new(HashMap::new()),
             peers: Mutex::new(HashMap::new()),
+            recognized: Mutex::new(HashSet::new()),
             mesh: Mutex::new(MeshInfo::default()),
             fips: Mutex::new(FipsHealth::default()),
         }
@@ -80,6 +87,36 @@ impl AppState {
         *self.peers.lock().unwrap() = peers;
     }
 
+    pub fn peer_encounter(&self, npub: &str) -> Option<u64> {
+        self.peers
+            .lock()
+            .unwrap()
+            .get(npub)
+            .map(|peer| peer.first_seen)
+    }
+
+    /// Authenticate only the same encounter that issued the challenge.
+    /// Returns true for its first successful proof.
+    pub fn recognize(&self, npub: &str, encounter: u64) -> bool {
+        let peers = self.peers.lock().unwrap();
+        if peers.get(npub).map(|peer| peer.first_seen) != Some(encounter) {
+            return false;
+        }
+        self.recognized.lock().unwrap().insert(npub.into())
+    }
+
+    pub fn forget_recognized(&self, npub: &str) {
+        self.recognized.lock().unwrap().remove(npub);
+    }
+
+    pub fn is_recognized(&self, npub: &str) -> bool {
+        self.recognized.lock().unwrap().contains(npub)
+    }
+
+    pub fn recognized_count(&self) -> usize {
+        self.recognized.lock().unwrap().len()
+    }
+
     /// Peers sorted by first arrival, then npub — stable output for the bus —
     /// joined with their probe verdicts (null = not yet probed).
     pub fn peers_snapshot(&self) -> Vec<Value> {
@@ -88,11 +125,17 @@ impl AppState {
         v.into_iter()
             .map(|p| {
                 let mut j = serde_json::to_value(&p).unwrap_or(Value::Null);
-                j["probe_verdict"] = self
-                    .verdicts
-                    .get_freshness(&p.npub)
-                    .map(|(verdict, _)| Value::from(verdict.as_str()))
-                    .unwrap_or(Value::Null);
+                match self.verdicts.details(&p.npub) {
+                    Some((verdict, name)) => {
+                        j["probe_verdict"] = Value::from(verdict.as_str());
+                        j["nip11_name"] = name.map(Value::from).unwrap_or(Value::Null);
+                    }
+                    None => {
+                        j["probe_verdict"] = Value::Null;
+                        j["nip11_name"] = Value::Null;
+                    }
+                }
+                j["recognized"] = Value::from(self.is_recognized(&p.npub));
                 j
             })
             .collect()
@@ -128,5 +171,29 @@ impl AppState {
             "last_ok_secs_ago": age(h.last_ok),
             "last_error": h.last_err.clone().map(Value::from).unwrap_or(Value::Null),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognition_lasts_one_encounter() {
+        let st = AppState::new(Config::default());
+        let peer = |first_seen| PeerInfo {
+            npub: "npub1peer".into(),
+            ipv6_addr: "fd00::1".into(),
+            transport_type: "test".into(),
+            first_seen,
+            last_seen: first_seen,
+        };
+        st.set_peers(HashMap::from([("npub1peer".into(), peer(1))]));
+        assert!(st.recognize("npub1peer", 1));
+        assert!(!st.recognize("npub1peer", 1));
+        st.forget_recognized("npub1peer");
+        st.set_peers(HashMap::from([("npub1peer".into(), peer(2))]));
+        assert!(!st.recognize("npub1peer", 1)); // stale proof
+        assert!(st.recognize("npub1peer", 2));
     }
 }

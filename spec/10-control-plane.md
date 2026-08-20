@@ -21,12 +21,12 @@ splits across the two servers; both ports are pinned in `07-conventions.md`.
 - One Rust binary, two faces: `totemd serve` (the daemon, a systemd unit)
   and `totemctl` (a client of the bus — the same binary in client mode; it
   introduces no separate API).
-- Runs as root so it can read the FIPS identity key (`/etc/fips/fips.key`,
-  root:root 0600 by design): the challenge responder MUST sign with the
-  device identity (`02-identity.md`). This also settles the
-  `strfry sync` privilege question — config and DB are root/strfry-only.
-  The key's permissions are never loosened; a later `LoadCredential=`
-  split is possible but not required for v1.
+- Runs as the unprivileged `totem` user. systemd `LoadCredential=` reads the
+  FIPS identity key (`/etc/fips/fips.key`, root:root 0600 by design) and
+  exposes only a private read-only service credential; source permissions
+  are never loosened. The key stays in zeroizing memory and signs challenge
+  responses with the device identity (`02-identity.md`). Relay sync privilege
+  is handled separately when the sync supervisor lands.
 - Web assets are embedded in the binary; deployment is one binary plus one
   systemd unit.
 
@@ -35,7 +35,7 @@ splits across the two servers; both ports are pinned in `07-conventions.md`.
 | Component | What it does |
 |-----------|--------------|
 | **Net-code loop** | Watches the fips control socket (`/run/fips/control.sock`, JSON-lines — a direct client, never a `fipsctl` shell-out) for authenticated peers; resolves `.fips` via the documented embedder path (UDP `[::1]:5354`); probes NIP-11; runs the challenge as prover; emits verdicts (`02-identity.md`) |
-| **Challenge responder** | `GET /totem/challenge` on the web port; signs kind 27235 with the device key; rate-limited (every request costs a signature) |
+| **Challenge responder** | `GET /totem/challenge` on the web port; signs kind 27235 with the device key; strict nonce/URL/method binding and a small-burst global signature limit |
 | **Contacts writer** | Serialized read-modify-sign-write of kind 3 — the only writer; mutations from pairing, from the owner web app, and from `totemctl` all route through here |
 | **Sync supervisor** | Spawns and supervises `strfry sync ws://[peer]:PORT --dir both` per successful verdict; negentropy's design makes interrupted syncs resumable on the next encounter |
 | **Web server** | Two binds: the public web port (guest page + relay URL, owner app behind NIP-98, challenge endpoint) and a **loopback-only bind** for the bus |

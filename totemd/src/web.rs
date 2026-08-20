@@ -1,6 +1,6 @@
 //! The two binds (`10-control-plane.md`): the public web port (guest page /
-//! owner app / challenge endpoint — all later) and the loopback-only bus.
-//! Ports are TBD in `07-conventions.md`; env-overridable until pinned.
+//! owner app / challenge endpoint) and the loopback-only bus. Ports are
+//! pinned in `07-conventions.md`; bind addresses remain env-overridable.
 
 use std::{convert::Infallible, net::SocketAddr, sync::Arc};
 
@@ -13,13 +13,16 @@ use axum::{
 use serde_json::{json, Value};
 use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 
-use crate::{bus, config, fips, state::AppState};
+use crate::{bus, challenge, config, fips, state::AppState};
 
 fn addr_from_env(var: &str, default: &str) -> SocketAddr {
-    std::env::var(var)
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or_else(|| default.parse().expect("default addr"))
+    let value = std::env::var_os(var).unwrap_or_else(|| default.into());
+    let value = value
+        .to_str()
+        .unwrap_or_else(|| panic!("{var} must be UTF-8"));
+    value
+        .parse()
+        .unwrap_or_else(|e| panic!("invalid {var}={value}: {e}"))
 }
 
 pub async fn serve() {
@@ -37,18 +40,27 @@ pub async fn serve() {
         verdict_ttl_hours = cfg.verdict_ttl_hours,
         "effective config"
     );
+    let signer = match challenge::Signer::load(&challenge::key_path()) {
+        Ok(signer) => Arc::new(signer),
+        Err(e) => {
+            eprintln!("totemd: {e}");
+            std::process::exit(2);
+        }
+    };
+    tracing::info!(pubkey = %signer.public_key().to_hex(), "device signing key loaded");
     let st = Arc::new(AppState::new(cfg));
-    tokio::spawn(fips::watch(st.clone()));
 
     // Loopback only: the bus is kernel-internal by construction.
     let bus_router = Router::new()
         .route("/bus", post(bus_post))
         .route("/bus/events", get(bus_events))
         .with_state(st.clone());
-    // Public: becomes the guest page + owner app + /totem/challenge.
-    let web_router = Router::new().route("/", get(root)).with_state(st.clone());
+    // Public: guest page + the signed challenge responder.
+    let web_router = Router::new()
+        .route("/", get(root))
+        .merge(challenge::router(signer));
 
-    let web_addr = addr_from_env("TOTEMD_WEB_ADDR", "0.0.0.0:8080");
+    let web_addr = addr_from_env("TOTEMD_WEB_ADDR", "[::]:8080");
     let bus_addr = addr_from_env("TOTEMD_BUS_ADDR", "127.0.0.1:8081");
     let web_l = tokio::net::TcpListener::bind(web_addr)
         .await
@@ -57,6 +69,9 @@ pub async fn serve() {
         .await
         .expect("bus bind");
 
+    // Bind the responder before existing FIPS peers trigger challenges.
+    tokio::spawn(fips::watch(st.clone()));
+
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         web = %web_addr,
@@ -64,25 +79,17 @@ pub async fn serve() {
         "totemd starting (bus loopback only)"
     );
 
-    let web = tokio::spawn(async move {
-        axum::serve(web_l, web_router)
-            .with_graceful_shutdown(async {
-                let _ = tokio::signal::ctrl_c().await;
-            })
-            .await
+    let web = axum::serve(web_l, web_router).with_graceful_shutdown(async {
+        let _ = tokio::signal::ctrl_c().await;
     });
-    let bus = tokio::spawn(async move {
-        axum::serve(bus_l, bus_router)
-            .with_graceful_shutdown(async {
-                let _ = tokio::signal::ctrl_c().await;
-            })
-            .await
+    let bus = axum::serve(bus_l, bus_router).with_graceful_shutdown(async {
+        let _ = tokio::signal::ctrl_c().await;
     });
-    let _ = tokio::join!(web, bus);
+    tokio::try_join!(web, bus).expect("server failed");
     tracing::info!("totemd shut down");
 }
 
-async fn root(State(_st): State<Arc<AppState>>) -> Json<Value> {
+async fn root() -> Json<Value> {
     json!({"app": "totemd", "version": env!("CARGO_PKG_VERSION")}).into()
 }
 

@@ -105,10 +105,16 @@ ssh motown.fips          # via FIPS mesh
   `totemd.service` enabled; deploy/update with `deploy/flash.sh [devices]`.
 - Operator policy: `/etc/totemd/config.toml` (created only when absent —
   flash never clobbers edits); restart totemd after changes.
+- Signed challenge build is currently deployed to totem + motown only;
+  metot intentionally remains on the pre-challenge build during parallel
+  peripheral work (it will appear as `candidate`, not `recognized`).
+- Challenge signing key on enabled units: source remains
+  `/etc/fips/fips.key` root:root 0600; `totemd.service` passes it to `User=totem` with systemd `LoadCredential=`.
+  Do not copy it, print it, or loosen its mode.
 
 ```bash
 ssh totem 'totemctl status'  # fips health + effective policy + counters
-ssh totem 'totemctl peers'   # direct peers + cached NIP-11 probe grade
+ssh totem 'totemctl peers'   # peers + NIP-11 hint + probe/recognition state
 ssh totem 'totemctl config'  # effective engagement policy
 ```
 
@@ -166,12 +172,16 @@ print(socket.inet_ntop(socket.AF_INET6, r[-16:]))
 Don't install resolver plumbing per-device (NM dnsmasq plugin etc.) —
 tried on totem, reverted 2026-08-19; devices stay symmetric.
 
-### strfry must bind IPv6: `bind = "::"`
+### Mesh-facing services must bind IPv6
 
-The mesh is IPv6-only (`fd00::/8`). Stock strfry binds `0.0.0.0` →
-mesh SYNs get RST ("Connection refused") while LAN and pings work.
-Fixed on totem+metot 2026-08-19, motown 2026-08-20 (config copied verbatim;
-`/etc/strfry.conf` line 44). Re-check after any strfry reinstall/config reset.
+The mesh is IPv6-only (`fd00::/8`). Stock strfry's `0.0.0.0` and a totemd
+web bind of `0.0.0.0:8080` both make mesh SYNs get RST ("Connection
+refused") while LAN and pings work. strfry must use `bind = "::"`; totemd
+defaults to `[::]:8080` (dual-stack on the device images).
+
+strfry was fixed on totem+metot 2026-08-19, motown 2026-08-20 (config copied
+verbatim; `/etc/strfry.conf` line 44). Re-check after any relay reinstall or
+service bind override.
 
 ### Dev host also runs fips
 

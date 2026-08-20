@@ -26,6 +26,7 @@ pub fn handle(msg: Value, st: &AppState) -> Value {
                 "config": serde_json::to_value(&st.config).unwrap_or(Value::Null),
                 "fips": st.fips_json(),
                 "peers": st.peers_snapshot().len(),
+                "recognized": st.recognized_count(),
                 "events": st.counters(),
             });
         }
@@ -110,13 +111,19 @@ mod tests {
             },
         );
         st.set_peers(m);
-        st.verdicts
-            .set("npub1aa", crate::probe::ProbeVerdict::Candidate);
+        st.verdicts.set_with_name(
+            "npub1aa",
+            crate::probe::ProbeVerdict::Candidate,
+            Some("!Totem test".into()),
+        );
+        st.recognize("npub1aa", 7);
         let r = handle(json!({"type": "totem.peers.get", "id": "p1"}), &st);
         assert_eq!(r["type"], "totem.peers.get.result");
         assert_eq!(r["peers"][0]["npub"], "npub1aa");
         assert_eq!(r["peers"][0]["ipv6_addr"], "fd00::1");
         assert_eq!(r["peers"][0]["probe_verdict"], "candidate");
+        assert_eq!(r["peers"][0]["nip11_name"], "!Totem test");
+        assert_eq!(r["peers"][0]["recognized"], true);
         assert_eq!(r["status"], serde_json::Value::Null); // no stale fields
     }
 }

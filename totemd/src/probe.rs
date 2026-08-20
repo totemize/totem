@@ -7,18 +7,16 @@
 //! (a non-totem can install totemd later). In-memory v1; `ponytail:`
 //! persist + backoff grades only if re-probe storms ever show in logs.
 
-use std::{collections::HashMap, sync::Mutex, time::Duration};
+use std::{collections::HashMap, sync::Mutex};
 
-use bech32::FromBase32;
 use serde_json::Value;
 
-use crate::state::AppState;
+use crate::{challenge, http, state::AppState};
 
 /// Standard relay port (`07-conventions.md`; configurable when a
 /// non-7777 relay ever exists).
-pub const RELAY_PORT: u16 = 7777;
-const FETCH_TIMEOUT: Duration = Duration::from_secs(5);
-const MAX_NIP11_BYTES: u64 = 64 * 1024;
+const RELAY_PORT: u16 = 7777;
+const MAX_NIP11_NAME_BYTES: usize = 128;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProbeVerdict {
@@ -37,53 +35,25 @@ impl ProbeVerdict {
     }
 }
 
-/// npub (bech32) → lowercase hex.
-pub fn npub_to_hex(npub: &str) -> Option<String> {
-    let (hrp, data, variant) = bech32::decode(npub).ok()?;
-    if hrp != "npub" || variant != bech32::Variant::Bech32 {
-        return None;
-    }
-    let bytes: Vec<u8> = Vec::from_base32(&data).ok()?;
-    if bytes.len() != 32 {
-        return None;
-    }
-    Some(bytes.iter().map(|b| format!("{b:02x}")).collect())
+/// NIP-11 keys are exactly hex or npub (`07-conventions.md`).
+fn key_to_hex(key: &str) -> Option<String> {
+    challenge::parse_public_key(key).map(|key| key.to_hex())
 }
 
-/// NIP-11 `pubkey` claims may be hex or bech32 (`07-conventions.md`).
-fn claim_to_hex(claim: &str) -> Option<String> {
-    let c = claim.trim();
-    if c.len() == 64 && c.chars().all(|ch| ch.is_ascii_hexdigit()) {
-        Some(c.to_lowercase())
-    } else {
-        npub_to_hex(c)
-    }
+fn nip11_name(info: &Value) -> Option<String> {
+    info.get("name")
+        .and_then(Value::as_str)
+        .filter(|name| name.len() <= MAX_NIP11_NAME_BYTES && !name.chars().any(char::is_control))
+        .map(str::to_owned)
 }
 
 /// GET the NIP-11 document. Blocking — call via `spawn_blocking`.
-pub fn fetch_nip11(url: &str) -> Result<Value, String> {
-    use std::io::Read;
-
-    let agent = ureq::AgentBuilder::new().timeout(FETCH_TIMEOUT).build();
-    let response = agent
-        .get(url)
-        .set("Accept", "application/nostr+json")
-        .call()
-        .map_err(|e| format!("GET {url}: {e}"))?;
-    let mut body = String::new();
-    response
-        .into_reader()
-        .take(MAX_NIP11_BYTES + 1)
-        .read_to_string(&mut body)
-        .map_err(|e| format!("body: {e}"))?;
-    if body.len() as u64 > MAX_NIP11_BYTES {
-        return Err(format!("body exceeds {MAX_NIP11_BYTES} bytes"));
-    }
-    serde_json::from_str(&body).map_err(|e| format!("body: {e}"))
+fn fetch_nip11(url: &str) -> Result<Value, String> {
+    http::get_json(url, Some("application/nostr+json"))
 }
 
 /// Pure: judge a NIP-11 document against the transport-authenticated npub.
-pub fn assess(info: &Value, expected_npub: &str) -> ProbeVerdict {
+fn assess(info: &Value, expected_npub: &str) -> ProbeVerdict {
     let name = info.get("name").and_then(Value::as_str).unwrap_or_default();
     if !name.starts_with("!Totem") {
         return ProbeVerdict::NotTotem;
@@ -91,8 +61,9 @@ pub fn assess(info: &Value, expected_npub: &str) -> ProbeVerdict {
     let claim = info
         .get("pubkey")
         .and_then(Value::as_str)
+        .or_else(|| info.get("self").and_then(Value::as_str))
         .unwrap_or_default();
-    match (claim_to_hex(claim), npub_to_hex(expected_npub)) {
+    match (key_to_hex(claim), key_to_hex(expected_npub)) {
         (Some(a), Some(b)) if a == b => ProbeVerdict::Candidate,
         // Marker present but the claim is missing/garbled/mismatched:
         // not a totem (or not honest about who it is — same treatment).
@@ -101,9 +72,15 @@ pub fn assess(info: &Value, expected_npub: &str) -> ProbeVerdict {
 }
 
 /// Probe verdict cache with TTL for negative verdicts; candidates forever.
+struct CachedProbe {
+    verdict: ProbeVerdict,
+    at: u64,
+    nip11_name: Option<String>,
+}
+
 #[derive(Default)]
 pub struct ProbeVerdicts {
-    map: Mutex<HashMap<String, (ProbeVerdict, u64)>>, // npub -> (verdict, unix-secs)
+    map: Mutex<HashMap<String, CachedProbe>>,
 }
 
 fn now() -> u64 {
@@ -114,22 +91,50 @@ fn now() -> u64 {
 }
 
 impl ProbeVerdicts {
-    /// Cached verdict if still authoritative (totem forever, else within ttl).
-    pub fn get(&self, npub: &str, ttl_hours: u64) -> Option<ProbeVerdict> {
-        let (v, at) = *self.map.lock().unwrap().get(npub)?;
-        match v {
-            ProbeVerdict::Candidate => Some(v),
-            _ if now().saturating_sub(at) < ttl_hours.saturating_mul(3600) => Some(v),
+    /// Cached verdict if still authoritative (candidate forever, else within ttl).
+    fn get(&self, npub: &str, ttl_hours: u64) -> Option<ProbeVerdict> {
+        let map = self.map.lock().unwrap();
+        let cached = map.get(npub)?;
+        match cached.verdict {
+            ProbeVerdict::Candidate => Some(cached.verdict),
+            _ if now().saturating_sub(cached.at) < ttl_hours.saturating_mul(3600) => {
+                Some(cached.verdict)
+            }
             _ => None,
         }
     }
 
-    pub fn set(&self, npub: &str, v: ProbeVerdict) {
-        self.map.lock().unwrap().insert(npub.into(), (v, now()));
+    #[cfg(test)]
+    fn set(&self, npub: &str, verdict: ProbeVerdict) {
+        self.set_with_name(npub, verdict, None);
     }
 
-    pub fn get_freshness(&self, npub: &str) -> Option<(ProbeVerdict, u64)> {
-        self.map.lock().unwrap().get(npub).copied()
+    pub fn set_with_name(&self, npub: &str, verdict: ProbeVerdict, nip11_name: Option<String>) {
+        self.map.lock().unwrap().insert(
+            npub.into(),
+            CachedProbe {
+                verdict,
+                at: now(),
+                nip11_name,
+            },
+        );
+    }
+
+    pub fn details(&self, npub: &str) -> Option<(ProbeVerdict, Option<String>)> {
+        self.map
+            .lock()
+            .unwrap()
+            .get(npub)
+            .map(|cached| (cached.verdict, cached.nip11_name.clone()))
+    }
+
+    #[cfg(test)]
+    fn get_freshness(&self, npub: &str) -> Option<(ProbeVerdict, u64)> {
+        self.map
+            .lock()
+            .unwrap()
+            .get(npub)
+            .map(|cached| (cached.verdict, cached.at))
     }
 }
 
@@ -137,49 +142,50 @@ impl ProbeVerdicts {
 /// out; fresh verdict → maybe push `totem.peer.candidate` (per-encounter) and
 /// out; only then one fetch.
 pub async fn on_seen(st: &AppState, npub: &str, ip: &str) {
-    on_seen_port(st, npub, ip, RELAY_PORT).await
+    if on_seen_port(st, npub, ip, RELAY_PORT).await == Some(ProbeVerdict::Candidate) {
+        challenge::on_candidate(st, npub, ip).await;
+    }
 }
 
-pub async fn on_seen_port(st: &AppState, npub: &str, ip: &str, port: u16) {
+async fn on_seen_port(st: &AppState, npub: &str, ip: &str, port: u16) -> Option<ProbeVerdict> {
     if !st.config.probe {
-        return;
+        return None;
     }
     if let Some(v) = st.verdicts.get(npub, st.config.verdict_ttl_hours) {
         if v == ProbeVerdict::Candidate {
             push_candidate(st, npub);
         }
-        return;
+        return Some(v);
     }
-    let url = if ip.is_empty() {
-        None // peer without a routable address: record and retry next encounter
-    } else {
-        // Brackets are IPv6-only: `http://[fd00::1]:7777/` vs `http://192.168.8.136:7777/`
-        let host = if ip.contains(':') {
-            format!("[{ip}]")
-        } else {
-            ip.to_string()
-        };
-        Some(format!("http://{host}:{port}/"))
-    };
-    let verdict = match url {
+    let url = http::url(ip, port, "/");
+    let (verdict, name) = match url {
         Some(u) => match tokio::task::spawn_blocking(move || fetch_nip11(&u)).await {
-            Ok(Ok(info)) => assess(&info, npub),
+            Ok(Ok(info)) => {
+                let verdict = assess(&info, npub);
+                let name = if verdict == ProbeVerdict::Candidate {
+                    nip11_name(&info)
+                } else {
+                    None
+                };
+                (verdict, name)
+            }
             Ok(Err(e)) => {
                 tracing::debug!(npub, error = %e, "probe fetch failed");
-                ProbeVerdict::Unreachable
+                (ProbeVerdict::Unreachable, None)
             }
             Err(e) => {
                 tracing::warn!(npub, error = %e, "probe task failed");
-                ProbeVerdict::Unreachable
+                (ProbeVerdict::Unreachable, None)
             }
         },
-        None => ProbeVerdict::Unreachable,
+        None => (ProbeVerdict::Unreachable, None),
     };
     tracing::info!(npub, verdict = verdict.as_str(), "probe verdict");
-    st.verdicts.set(npub, verdict);
+    st.verdicts.set_with_name(npub, verdict, name);
     if verdict == ProbeVerdict::Candidate {
         push_candidate(st, npub);
     }
+    Some(verdict)
 }
 
 fn push_candidate(st: &AppState, npub: &str) {
@@ -196,24 +202,24 @@ mod tests {
     const HEX: &str = "cf1f8fedf3819dd662127fbab8c09e6514be390ea80390408645b2047ac3c783";
 
     #[test]
-    fn npub_hex_roundtrip() {
-        use bech32::ToBase32;
-
-        assert_eq!(npub_to_hex(N_PUB).unwrap(), HEX);
-        assert!(npub_to_hex("npub1badchecksumzz").is_none());
-        let short = bech32::encode("npub", [1u8].to_base32(), bech32::Variant::Bech32).unwrap();
-        assert!(npub_to_hex(&short).is_none());
-        let wrong_variant =
-            bech32::encode("npub", [1u8; 32].to_base32(), bech32::Variant::Bech32m).unwrap();
-        assert!(npub_to_hex(&wrong_variant).is_none());
+    fn key_parsing_accepts_only_hex_and_npub() {
+        assert_eq!(key_to_hex(N_PUB).unwrap(), HEX);
+        assert_eq!(key_to_hex(&N_PUB.to_uppercase()).unwrap(), HEX);
+        assert_eq!(key_to_hex(HEX).unwrap(), HEX);
+        assert_eq!(key_to_hex(&HEX.to_uppercase()).unwrap(), HEX);
+        assert!(key_to_hex("npub1badchecksumzz").is_none());
+        assert!(key_to_hex(&format!("nostr:{N_PUB}")).is_none());
+        assert!(key_to_hex("not-a-key").is_none());
     }
 
     #[test]
-    fn claim_accepts_hex_and_bech32() {
-        assert_eq!(claim_to_hex(HEX).unwrap(), HEX);
-        assert_eq!(claim_to_hex(&HEX.to_uppercase()).unwrap(), HEX);
-        assert_eq!(claim_to_hex(N_PUB).unwrap(), HEX);
-        assert!(claim_to_hex("not-a-key").is_none());
+    fn nip11_name_hint_is_bounded_and_terminal_safe() {
+        assert_eq!(
+            nip11_name(&json!({"name": "!Totem motown"})).as_deref(),
+            Some("!Totem motown")
+        );
+        assert!(nip11_name(&json!({"name": "!Totem\nspoof"})).is_none());
+        assert!(nip11_name(&json!({"name": "x".repeat(129)})).is_none());
     }
 
     #[test]
@@ -223,6 +229,9 @@ mod tests {
         // bech32 claim, same key
         let ok2 = json!({"name": "!Totem x", "pubkey": N_PUB});
         assert_eq!(assess(&ok2, N_PUB), ProbeVerdict::Candidate);
+        // legacy/self duplicate, same key
+        let self_claim = json!({"name": "!Totem x", "self": N_PUB});
+        assert_eq!(assess(&self_claim, N_PUB), ProbeVerdict::Candidate);
         // marker only, no claim
         let nokey = json!({"name": "!Totem x"});
         assert_eq!(assess(&nokey, N_PUB), ProbeVerdict::NotTotem);
@@ -243,7 +252,7 @@ mod tests {
         assert_eq!(v.get("a", 24), Some(ProbeVerdict::NotTotem));
         // zero ttl → any negative is stale
         assert_eq!(v.get("a", 0), None);
-        // totems cached regardless
+        // candidates cached regardless
         assert_eq!(v.get("b", 0), Some(ProbeVerdict::Candidate));
     }
 
@@ -285,6 +294,10 @@ mod tests {
         let mut sub = st.tx.subscribe();
         on_seen_port(&st, N_PUB, "127.0.0.1", port).await;
         assert_eq!(st.verdicts.get(N_PUB, 24), Some(ProbeVerdict::Candidate));
+        assert_eq!(
+            st.verdicts.details(N_PUB).unwrap().1.as_deref(),
+            Some("!Totem fake")
+        );
         assert_eq!(hits.load(Ordering::Relaxed), 1);
         let msg = sub.try_recv().unwrap();
         assert_eq!(msg["type"], "totem.peer.candidate");

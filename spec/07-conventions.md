@@ -15,11 +15,12 @@ live.
 
 | Service | Port | Notes |
 |---------|------|-------|
-| Relay (websocket + NIP-11 HTTP) | **TBD** | Standard nostr relay port |
-| Web app (owner control / guest info) | **TBD** | HTTP; also serves `/totem/challenge` |
-| Totem bus | **TBD** | Loopback only (`127.0.0.1` / `::1`); NIP-5D-shaped JSON + SSE |
+| Relay (websocket + NIP-11 HTTP) | **7777** | Standard nostr relay port |
+| Web app (owner control / guest info) | **8080** | HTTP; also serves `/totem/challenge` |
+| Totem bus | **8081** | Loopback only (`127.0.0.1` / `::1`); NIP-5D-shaped JSON + SSE |
 
-A totem MUST serve both on the ports registered here, on every on-ramp.
+A totem MUST serve these services on the registered ports on every on-ramp
+(the bus remains loopback-only).
 
 ## AP network conventions
 
@@ -68,9 +69,11 @@ Values for the recognition challenge (`02-identity.md`):
 - Endpoint: **`/totem/challenge` on the web-app port** (served by the
   control plane, `10-control-plane.md` — not the relay server).
 - Challenge event kind: **27235** (NIP-98's) with an added `nonce` tag.
-- Freshness window for `created_at`: **TBD**.
+- `created_at` is signed but MUST NOT be used as an acceptance clock; the
+  single-use 128-bit nonce provides freshness without RTC/NTP dependence.
 - The endpoint is guest-reachable and every request costs a signature:
-  implementations SHOULD rate-limit it.
+  implementations MUST rate-limit it and SHOULD permit a small legitimate
+  arrival burst.
 
 ## Totem bus
 
@@ -85,7 +88,7 @@ domain registry:
 |------|------|------------------|
 | `totem.status.get` | request | mesh state, peers, contacts, totems met, relay event count, storage |
 | `totem.config.get` | request | effective operator engagement policy (read-only in v1) |
-| `totem.peers.get` | request | current mesh peers plus cached NIP-11 probe grade |
+| `totem.peers.get` | request | current mesh peers plus cached probe grade, candidate's unsigned `nip11_name` hint, and per-encounter recognition |
 | `totem.contacts.add` / `totem.contacts.remove` | request | npub — the single-writer path for kind 3 updates |
 | `totem.peer.seen` | push | fips authenticated a peer |
 | `totem.peer.gone` | push | peer left the mesh (last authenticated npub) |

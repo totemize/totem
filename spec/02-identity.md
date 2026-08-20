@@ -86,24 +86,30 @@ The signed event is never published or stored anywhere:
 
 The prober's verification checklist:
 
-1. the signature is valid for `pubkey` (proof of key control);
+1. the event ID and signature are valid for `pubkey` (proof of key control);
 2. `pubkey` matches the expected npub — over FIPS the transport-authenticated
    peer npub, over AP the npub claimed in the NIP-11 document;
-3. the `nonce` tag equals the nonce sent (binds response to this exchange);
-4. `created_at` is fresh (window **TBD**, `07-conventions.md`).
+3. kind is 27235, content is empty, and the exact `nonce`, `u`, and `method`
+   tags bind the proof to this GET and endpoint.
 
-Pass → totem. Anything else → not a totem; ignore.
+`created_at` remains a normal signed Nostr event field but is **not an
+acceptance clock**. Totems are offline devices without guaranteed RTC/NTP;
+a wall-clock window would reject valid peers after cold boots. Freshness and
+replay resistance come from the verifier's unpredictable 128-bit nonce,
+used for one request and then discarded.
+
+Pass → recognized for this encounter. Anything else → no recognition.
 
 Properties: the challenge is one-way (mutual recognition is the symmetric
-exchange, both directions in parallel during pairing); stateless on both
-sides; replay-proof by construction (single-use nonce + freshness window);
-and it rides the totem's web server (`10-control-plane.md`) — no listener
-beyond the web port a totem serves anyway, and no involvement of the relay
-server at all.
+exchange, both directions in parallel during pairing); has no persisted
+challenge state on either side; is replay-proof by construction (an old
+proof cannot match a new random nonce); and rides the totem's web server
+(`10-control-plane.md`) — no listener beyond the web port a totem serves
+anyway, and no involvement of the relay server at all.
 
 Values are pinned in `07-conventions.md`: the endpoint is `/totem/challenge`
 on the web-app port, and the event kind is 27235 (NIP-98's) with an added
-`nonce` tag. The freshness window is still TBD there.
+`nonce` tag.
 
 ### Recognition flow
 
@@ -151,8 +157,8 @@ avoid repeatedly probing ordinary FIPS peers; its expiry policy lives in
 
 Inter-totem relations use standard **NIP-02 kind 3** contact/follow lists:
 
-- When totems meet and recognize each other, each follows the other by
-  publishing a kind 3 event (signed by its npub) to its own relay.
+- After recognition, each totem MAY follow the other by publishing a kind 3
+  event according to its operator policy (`10-control-plane.md`).
 - **Mutual follows = friends.**
 - This is deliberately plain nostr — flat, self-signed, stored in the relay
   like any other event. No contact-database format is invented; storage is
