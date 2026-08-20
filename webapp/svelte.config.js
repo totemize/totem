@@ -1,9 +1,3 @@
-import adapter from "@sveltejs/adapter-static";
+import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
-/** @type {import('@sveltejs/kit').Config} */
-export default {
-  kit: {
-    // Static site: single prerendered page, client-side state for screens.
-    adapter: adapter({ fallback: "index.html" }),
-  },
-};
+export default { preprocess: vitePreprocess() };

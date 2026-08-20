@@ -20,10 +20,12 @@ TOTEMD_KEY_PATH=/path/to/test-nsec cargo run -- serve
 Production does not copy or loosen the root-only FIPS key: systemd
 `LoadCredential=` supplies it privately to `User=totem`. Relay commands use
 root-owned `/usr/local/libexec/totem-strfry`; group-scoped config/LMDB access
-keeps the daemon unprivileged. `GET /` is server-rendered, while a tiny
-same-origin client handles first-signer claim, metadata, and policy mutations.
-It polls for late NIP-07 injection and offers a development-only, browser-memory
-nsec signer; secrets never cross HTTP or enter persistent browser storage.
+keeps the daemon unprivileged. `GET /` serves the embedded static Svelte app;
+its explicit public API does not expose the loopback bus. The app handles
+first-signer claim, metadata, policy mutations, and an owner-signed peer/history
+stream. It polls for late NIP-07 injection and lazily offers a development-only,
+browser-memory nsec signer; secrets never cross HTTP or enter persistent
+browser storage.
 
 ## Configuration
 
@@ -73,11 +75,17 @@ totemd/web/build-nsec-signer.sh
 ## Test
 
 ```bash
+npm ci --prefix ../webapp
+npm run check --prefix ../webapp
+npm run build --prefix ../webapp
 cargo test
 cargo clippy --all-targets -- -D warnings
 cargo build --release --target arm-unknown-linux-musleabihf
 cargo build --release --target aarch64-unknown-linux-musl
 ```
+
+The web build writes committed assets under `web/static/`; CI rebuilds them and
+fails if they are stale before compiling Rust.
 
 Cross builds need Zig; `.cargo/zig-musl` maps Rust targets to Zig's bundled
 musl headers while `rust-lld` links the static binary. No downloaded cross-GCC
@@ -88,7 +96,8 @@ or target sysroot is required.
 Skeleton: bus + SSE + totemctl. Landed: fips control-socket watcher;
 operator config; cached NIP-11 prefilter; signed per-encounter challenge
 (responder + prover); periodic supervised bidirectional relay sync with live
-peer state; bounded event history; server-rendered owner web app with
-nonce-bound NIP-98, durable claim/policy state, device-signed kind-0 profiles,
-dynamic NIP-11 naming, and armv6 + aarch64 musl cross builds. Next: kind-3
-friendship state/actions.
+peer state; bounded event history; embedded static Svelte owner web app with
+public aggregate state and an owner-signed activity stream; nonce-bound NIP-98,
+durable claim/policy state, device-signed kind-0 profiles, dynamic NIP-11
+naming, and armv6 + aarch64 musl cross builds. Next: kind-3 friendship
+state/actions.

@@ -1,47 +1,37 @@
-# webapp
+# Totem web app
 
-Owner companion app. SvelteKit static site (Svelte 5 + adapter-static);
-`npm run build` outputs a self-contained `build/` for totemd to serve.
+The Svelte 5 owner interface served by `totemd` at `/`. It is a client-only,
+single-page Vite build; totemd embeds the generated HTML, CSS, and JavaScript
+in its Rust binary, so devices need no Node runtime or loose web files.
 
 ```bash
-npm install
-npm run dev     # dev server
-npm run check   # svelte-check
-npm run build   # static build/
+npm ci
+npm run check
+npm run build       # writes ../totemd/web/static/{index.html,app.js,app.css}
+npm run dev         # proxies /api and /nsec-signer.js to localhost:8080
 ```
 
-## Architecture
+Commit the generated `totemd/web/static/` files with source changes. CI rebuilds
+them and rejects stale output before running the Rust checks.
 
-State-driven single page (no router). Screens switch on `store.state.screen`.
+## Runtime boundaries
 
-- `src/lib/types.ts` — domain model (hex pubkeys on the wire, npub display-only)
-- `src/lib/api.ts` — the two integration seams:
-  - `BusClient` — totemd control plane (status, peers, contacts, settings,
-    profile, claim; lossy pushes reconciled via `getStatus`). Mirrors the
-    `totem.*` NIP-5D vocabulary (spec 07/10).
-  - `RelayClient` — notes, straight to the totem's own local relay.
-    Nothing is ever published to external relays.
-- `src/lib/mock.ts` — `MockBus` / `MockRelay`. Swap for real clients in
-  `src/routes/+page.svelte`; the views never touch transport.
-- `src/lib/signer.ts` — owner signing via applesauce (NIP-07 extension,
-  NIP-46 bunker). The owner key signs admin/claim events only; kind 0
-  profile events are signed by the DEVICE key inside totemd (the app just
-  sends the bus request).
-- `src/lib/store.svelte.ts` — runes-based store; all mutations are methods.
-- `src/lib/screens/`, `src/lib/components/` — pure views.
+- Public state comes from same-origin `GET /api/status`.
+- Public `/api/updates` SSE contains invalidations only; it never exposes peer
+  identities or the generic bus.
+- Claim, profile, and policy mutations retain totemd's nonce/body-bound NIP-98
+  authorization.
+- Owner mode opens one NIP-98-authenticated `/api/owner/events` stream. Its
+  first frame contains current status, peers, and the daemon's bounded history;
+  later frames contain the same current state plus each typed push.
+- `/bus` and `/bus/events` remain loopback-only on port 8081. The browser never
+  connects to them, and `totemctl` remains their client.
+- Owner signing uses a late-injected NIP-07 extension or the existing
+  development-only nsec bundle. An nsec is loaded lazily, stays in page memory,
+  and is cleared when forgotten or on navigation.
 
-## Mock state
-
-Claim state and profile persist in localStorage (`mock.*` keys). Reset via
-settings → advanced → reset config. On the presence screen, clicking the
-pulse (or `window.mockPress()`) simulates the device button press.
-
-## Known stubs
-
-- Guest (unauthenticated) landing view — not built; totemd grew its own
-  read-only landing page in the meantime.
-- "+ new connection", Search, wipe/rotate — placeholder actions.
-- No NIP-98 signing on requests yet (`store.ownerSigner` is kept for it).
-- `shortNpub`/`fullNpub` in `format.ts` are display-only fakes, not bech32.
-- Ports/URLs follow spec 07 (relay 7777, web 8080); the claim endpoint URL
-  in `signer.ts` is a placeholder.
+The implemented UI intentionally stops at current backend capabilities:
+profile, engagement policy, aggregate status, current recognized Totems, and
+process-local activity. Notes, kind-3 friendship, durable encounters, hardware
+vitals, reset, and relay moderation return only when their real backend slices
+exist; the production app contains no mock state.

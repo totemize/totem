@@ -99,10 +99,11 @@ device-side resolver support from `.fips` resolution on a development host.
 - The Python API currently binds all interfaces, enables permissive CORS, and
   has no authentication layer. Treat port `8000` as a trusted-network or
   development surface until an explicit authorization boundary lands.
-- The `totemd` public bind serves server-rendered status, a same-origin NIP-07
-  owner client/API, and the rate-limited responder at `/totem/challenge`.
-  Owner mutations require nonce-bound NIP-98; the first valid signer claims an
-  unclaimed device.
+- The `totemd` public bind serves an embedded static Svelte app, limited
+  public status/update projections, NIP-98 owner APIs, and the rate-limited
+  responder at `/totem/challenge`. Owner mutations and the peer/activity
+  stream require nonce-bound signatures; the first valid signer claims an
+  unclaimed device. The generic bus remains inaccessible from this listener.
 
 ## Control and data flows
 
@@ -123,9 +124,11 @@ device-side resolver support from `.fips` resolution on a development host.
    strfry's readable result and optional parsed set-difference counts.
 8. Departure clears recognition, cancels a running child or interval wait, and
    emits `totem.peer.gone`.
-9. SSE clients receive those pushes from `/bus/events`. Push delivery is
-   intentionally lossy, so clients query `totem.status.get` and
-   `totem.peers.get` after connecting or reconnecting.
+9. Loopback consumers receive those pushes from `/bus/events`. The web app's
+   public `/api/updates` strips payloads and invalidates `/api/status`; its
+   owner-signed stream projects current peers/history plus future pushes. All
+   push delivery remains lossy, so reconnecting consumers start from current
+   state.
 
 ### Nostr storage and sync
 

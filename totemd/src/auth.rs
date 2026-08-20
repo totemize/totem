@@ -138,7 +138,10 @@ impl Nonces {
 
 fn validate_target(path: &str, method: &str) -> Result<(), String> {
     match (method, path) {
-        ("POST", "/api/owner/claim") | ("PUT", "/api/metadata") | ("PUT", "/api/config") => Ok(()),
+        ("POST", "/api/owner/claim")
+        | ("PUT", "/api/metadata")
+        | ("PUT", "/api/config")
+        | ("GET", "/api/owner/events") => Ok(()),
         _ => Err("unsupported authorization target".into()),
     }
 }
@@ -206,6 +209,17 @@ mod tests {
                 },
             )
             .is_err());
+
+        assert!(nonces
+            .issue(
+                "http://totem",
+                ChallengeRequest {
+                    path: "/api/owner/events".into(),
+                    method: "GET".into(),
+                    body: String::new(),
+                },
+            )
+            .is_ok());
 
         let challenge = nonces
             .issue(

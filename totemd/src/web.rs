@@ -1,5 +1,5 @@
-//! The two binds (`10-control-plane.md`): the public web port (guest page /
-//! owner app / challenge endpoint) and the loopback-only bus. Ports are
+//! The two binds (`10-control-plane.md`): the public web port (static owner
+//! app / JSON API / challenge endpoint) and the loopback-only bus. Ports are
 //! pinned in `07-conventions.md`; bind addresses remain env-overridable.
 
 use std::{
@@ -91,14 +91,18 @@ pub async fn serve() {
         .route("/bus", post(bus_post))
         .route("/bus/events", get(bus_events))
         .with_state(st.clone());
-    // Public: guest page, owner API, and the signed challenge responder.
+    // Public: static app, deliberately projected API, and challenge responder.
     let web_router = Router::new()
         .route("/", get(root))
         .route("/app.js", get(app_js))
+        .route("/app.css", get(app_css))
         .route("/nsec-signer.js", get(nsec_signer_js))
+        .route("/api/status", get(status_get))
+        .route("/api/updates", get(web_updates))
         .route("/api/auth/challenge", post(auth_challenge))
         .route("/api/owner", get(owner_status))
         .route("/api/owner/claim", post(owner_claim))
+        .route("/api/owner/events", get(owner_events))
         .route("/api/metadata", get(metadata_get).put(metadata_put))
         .route("/api/config", get(config_get).put(config_put))
         .layer(DefaultBodyLimit::max(64 * 1024))
@@ -373,66 +377,8 @@ async fn config_put(
     }
 }
 
-const STYLE: &str = r#"
-:root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }
-* { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; background: #f4efe5; color: #20251f; }
-main { width: min(44rem, calc(100% - 2rem)); margin: 0 auto; padding: 4rem 0; }
-header { margin-bottom: 2rem; }
-.eyebrow { margin: 0; color: #5c6758; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-h1 { margin: .25rem 0; font-size: clamp(2.5rem, 10vw, 5rem); line-height: 1; }
-.status { display: inline-block; margin-top: .75rem; font-weight: 700; }
-.online { color: #26733a; }
-.offline { color: #a13a2a; }
-section { margin: 1rem 0; padding: 1.25rem; border: 1px solid #d5cdbc; border-radius: .75rem; background: #fffdf8; }
-h2 { margin-top: 0; font-size: 1.1rem; }
-code { display: block; overflow-wrap: anywhere; padding: .75rem; border-radius: .4rem; background: #ece5d7; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 1rem; margin: 0; }
-.grid div { min-width: 0; }
-dt { color: #5c6758; font-size: .9rem; }
-dd { margin: .2rem 0 0; font-size: 1.35rem; font-weight: 700; overflow-wrap: anywhere; }
-a { color: #245c96; }
-[hidden] { display: none !important; }
-form { display: grid; gap: .8rem; margin-top: 1rem; }
-label { display: grid; gap: .3rem; font-weight: 700; }
-input, textarea, select, button { font: inherit; }
-input, textarea, select { width: 100%; padding: .65rem; border: 1px solid #a9a18f; border-radius: .4rem; background: transparent; color: inherit; }
-textarea { min-height: 5rem; resize: vertical; }
-.check { display: flex; align-items: center; gap: .5rem; }
-.check input { width: auto; }
-button { width: fit-content; padding: .65rem 1rem; border: 0; border-radius: .4rem; background: #245c96; color: white; font-weight: 700; cursor: pointer; }
-button:disabled { opacity: .55; cursor: wait; }
-.signer { padding: .8rem; border: 1px solid #d5cdbc; border-radius: .5rem; }
-.signer-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
-details { margin-top: .8rem; }
-summary { cursor: pointer; font-weight: 700; }
-.warning { color: #8b3a2b; font-size: .9rem; }
-.message { min-height: 1.5em; }
-footer { margin-top: 2rem; color: #5c6758; font-size: .9rem; }
-@media (prefers-color-scheme: dark) {
-  body { background: #171a17; color: #edf1ea; }
-  section { border-color: #3b4439; background: #20251f; }
-  code { background: #30372e; }
-  .eyebrow, dt, footer { color: #b9c4b5; }
-  .online { color: #79d88d; }
-  .offline { color: #ff9a86; }
-  a { color: #91c5ff; }
-}
-"#;
-
-fn escape_html(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len());
-    for c in value.chars() {
-        match c {
-            '&' => escaped.push_str("&amp;"),
-            '<' => escaped.push_str("&lt;"),
-            '>' => escaped.push_str("&gt;"),
-            '"' => escaped.push_str("&quot;"),
-            '\'' => escaped.push_str("&#39;"),
-            _ => escaped.push(c),
-        }
-    }
-    escaped
+fn status_value(app: &AppState) -> Value {
+    bus::handle(json!({"type": "totem.status.get"}), app)["status"].clone()
 }
 
 fn relay_url(host: &str) -> Option<String> {
@@ -441,142 +387,100 @@ fn relay_url(host: &str) -> Option<String> {
         .map(|authority| format!("ws://{}:7777", authority.host()))
 }
 
-fn render_home(status: &Value, profile: &profile::Profile, relay: &str) -> String {
-    let connected = status["fips"]["connected"].as_bool().unwrap_or(false);
-    let connection = if connected {
-        "Connected"
-    } else {
-        "Disconnected"
-    };
-    let connection_class = if connected { "online" } else { "offline" };
-    let npub = escape_html(status["fips"]["npub"].as_str().unwrap_or("Starting…"));
-    let name = escape_html(&profile.metadata.name);
-    let about = profile
-        .metadata
-        .about
-        .as_deref()
-        .map(escape_html)
-        .map(|about| format!("<p>{about}</p>"))
-        .unwrap_or_default();
-    let relay = escape_html(relay);
-    let version = escape_html(status["version"].as_str().unwrap_or("unknown"));
-    let befriend = escape_html(status["config"]["befriend"].as_str().unwrap_or("unknown"));
-    let sync_policy = match status["config"]["sync"].as_bool() {
-        Some(true) => "Every recognized Totem",
-        Some(false) => "Friends only",
-        None => "Unknown",
-    };
-    let mesh = status["fips"]["mesh_size"].as_u64().unwrap_or(0);
-    let peers = status["peers"].as_u64().unwrap_or(0);
-    let recognized = status["recognized"].as_u64().unwrap_or(0);
-    let syncs = status["events"]["totem.sync.done"].as_u64().unwrap_or(0);
-
-    format!(
-        r#"<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{name} · Totem</title>
-<style>{STYLE}</style>
-<script src="/nsec-signer.js" defer></script>
-<script src="/app.js" defer></script>
-</head>
-<body>
-<main>
-<header>
-<p class="eyebrow">Carry the network</p>
-<h1 id="device-name">{name}</h1>
-<span class="status {connection_class}"><span aria-hidden="true">●</span> {connection}</span>
-{about}
-</header>
-<section aria-labelledby="relay-heading">
-<h2 id="relay-heading">Local relay</h2>
-<p>Point any Nostr client at:</p>
-<code>{relay}</code>
-</section>
-<section aria-labelledby="identity-heading">
-<h2 id="identity-heading">Device identity</h2>
-<code>{npub}</code>
-</section>
-<section aria-labelledby="status-heading">
-<h2 id="status-heading">Status</h2>
-<dl class="grid">
-<div><dt>Mesh nodes</dt><dd>{mesh}</dd></div>
-<div><dt>Direct peers</dt><dd>{peers}</dd></div>
-<div><dt>Recognized Totems</dt><dd>{recognized}</dd></div>
-<div><dt>Completed syncs</dt><dd>{syncs}</dd></div>
-</dl>
-</section>
-<section aria-labelledby="policy-heading">
-<h2 id="policy-heading">Policy</h2>
-<dl class="grid">
-<div><dt>Sync</dt><dd>{sync_policy}</dd></div>
-<div><dt>Friendship</dt><dd>{befriend}</dd></div>
-</dl>
-</section>
-<section id="owner-controls" aria-labelledby="owner-heading">
-<h2 id="owner-heading">Owner controls</h2>
-<p id="owner-state">Loading claim state…</p>
-<div class="signer" aria-labelledby="signer-heading">
-<h3 id="signer-heading">Signer</h3>
-<p id="signer-state">Looking for a NIP-07 extension…</p>
-<div class="signer-actions">
-<button id="use-extension" type="button">Use browser extension</button>
-<button id="signer-logout" type="button" hidden>Forget signer</button>
-</div>
-<details>
-<summary>Development escape hatch: use nsec</summary>
-<p class="warning">The nsec stays in this page's memory and is cleared on logout or navigation. Use a development key only.</p>
-<form id="nsec-form">
-<label>nsec <input id="nsec" type="password" autocomplete="new-password" spellcheck="false" required></label>
-<button type="submit">Use nsec locally</button>
-</form>
-</details>
-</div>
-<button id="claim" type="button" hidden>Claim this Totem</button>
-<div id="settings" hidden>
-<form id="metadata-form">
-<h3>Public profile</h3>
-<label>Name <input id="metadata-name" maxlength="64" required></label>
-<label>Display name <input id="metadata-display-name" maxlength="128"></label>
-<label>About <textarea id="metadata-about" maxlength="1024"></textarea></label>
-<label>Picture URL <input id="metadata-picture" type="url" maxlength="2048"></label>
-<label>Website <input id="metadata-website" type="url" maxlength="2048"></label>
-<button type="submit">Publish profile</button>
-</form>
-<form id="config-form">
-<h3>Engagement policy</h3>
-<label class="check"><input id="config-sync" type="checkbox"> Sync every recognized Totem</label>
-<label>Friendship
-<select id="config-befriend">
-<option value="ask">Ask</option>
-<option value="auto">Automatic</option>
-<option value="never">Never</option>
-</select>
-</label>
-<button type="submit">Save policy</button>
-</form>
-</div>
-<p id="owner-message" class="message" role="status" aria-live="polite"></p>
-<noscript>Owner controls require JavaScript and a NIP-07 or nsec signer.</noscript>
-</section>
-<p><a href="/">Refresh status</a></p>
-<footer>totemd {version}</footer>
-</main>
-</body>
-</html>"#
-    )
+fn public_snapshot(app: &AppState, profile: &profile::Profile, relay: &str) -> Value {
+    json!({
+        "status": status_value(app),
+        "profile": profile,
+        "relay_url": relay,
+    })
 }
 
-const APP_JS: &str = include_str!("../web/app.js");
-const NSEC_SIGNER_JS: &str = include_str!("../web/nsec-signer.js");
+async fn status_get(State(control): State<ControlState>, headers: HeaderMap) -> Response {
+    let relay = headers
+        .get(header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .and_then(relay_url)
+        .unwrap_or_else(|| "ws://this-totem:7777".into());
+    api_json(public_snapshot(
+        &control.app,
+        &control.profile.read().unwrap(),
+        &relay,
+    ))
+}
 
-fn javascript(source: &'static str) -> Response {
+fn owner_snapshot(app: &AppState) -> Value {
+    json!({
+        "status": status_value(app),
+        "peers": app.peers_snapshot(),
+        "events": app.event_history(),
+    })
+}
+
+fn owner_update(app: &AppState, event: Value) -> Value {
+    json!({
+        "status": status_value(app),
+        "peers": app.peers_snapshot(),
+        "event": event,
+    })
+}
+
+/// One owner signature authenticates the long-lived current-state/history
+/// snapshot and future-only stream. Reconnection requires a fresh signature.
+async fn owner_events(State(control): State<ControlState>, headers: HeaderMap) -> Response {
+    if let Err((status, error)) =
+        authorize_owner(&control, &headers, "/api/owner/events", "GET", b"")
+    {
+        return api_error(status, &error);
+    }
+
+    // Subscribe first: an event racing the snapshot may be duplicated, never lost.
+    let receiver = control.app.tx.subscribe();
+    let initial = Ok::<_, Infallible>(
+        Event::default()
+            .event("snapshot")
+            .data(owner_snapshot(&control.app).to_string()),
+    );
+    let live_app = control.app.clone();
+    let live = BroadcastStream::new(receiver)
+        .filter_map(|message| message.ok())
+        .map(move |event| {
+            Ok::<_, Infallible>(
+                Event::default()
+                    .event("update")
+                    .data(owner_update(&live_app, event).to_string()),
+            )
+        });
     (
         [
             (header::CACHE_CONTROL, "no-store"),
-            (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        ],
+        Sse::new(tokio_stream::once(initial).chain(live)).keep_alive(KeepAlive::default()),
+    )
+        .into_response()
+}
+
+/// Public updates carry no peer payload; clients use them only to invalidate
+/// and refetch the deliberately limited `/api/status` projection.
+async fn web_updates(
+    State(control): State<ControlState>,
+) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
+    let stream = BroadcastStream::new(control.app.tx.subscribe())
+        .filter_map(|message| message.ok())
+        .map(|_| Ok::<_, Infallible>(Event::default().event("update").data("{}")));
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+const INDEX_HTML: &str = include_str!("../web/static/index.html");
+const APP_JS: &str = include_str!("../web/static/app.js");
+const APP_CSS: &str = include_str!("../web/static/app.css");
+const NSEC_SIGNER_JS: &str = include_str!("../web/nsec-signer.js");
+
+fn text_asset(content_type: &'static str, source: &'static str) -> Response {
+    (
+        [
+            (header::CACHE_CONTROL, "no-store"),
+            (header::CONTENT_TYPE, content_type),
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
         ],
         source,
@@ -585,31 +489,28 @@ fn javascript(source: &'static str) -> Response {
 }
 
 async fn app_js() -> Response {
-    javascript(APP_JS)
+    text_asset("text/javascript; charset=utf-8", APP_JS)
+}
+
+async fn app_css() -> Response {
+    text_asset("text/css; charset=utf-8", APP_CSS)
 }
 
 async fn nsec_signer_js() -> Response {
-    javascript(NSEC_SIGNER_JS)
+    text_asset("text/javascript; charset=utf-8", NSEC_SIGNER_JS)
 }
 
-async fn root(State(control): State<ControlState>, headers: HeaderMap) -> Response {
-    let host = headers
-        .get(header::HOST)
-        .and_then(|value| value.to_str().ok())
-        .and_then(relay_url)
-        .unwrap_or_else(|| "ws://this-totem:7777".into());
-    let status = bus::handle(json!({"type": "totem.status.get"}), &control.app);
-    let profile = control.profile.read().unwrap().clone();
+async fn root() -> Response {
     (
         [
             (header::CACHE_CONTROL, "no-store"),
             (
                 header::CONTENT_SECURITY_POLICY,
-                "default-src 'none'; script-src 'self' chrome-extension: moz-extension:; connect-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+                "default-src 'none'; script-src 'self' chrome-extension: moz-extension:; connect-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
             ),
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
         ],
-        Html(render_home(&status["status"], &profile, &host)),
+        Html(INDEX_HTML),
     )
         .into_response()
 }
@@ -656,35 +557,36 @@ mod tests {
     }
 
     #[test]
-    fn home_page_escapes_dynamic_text() {
-        let status = json!({
-            "version": "0.1<&\"'",
-            "config": {"sync": true, "befriend": "ask<script>"},
-            "fips": {"connected": true, "npub": "npub<&\"'", "mesh_size": 3},
-            "peers": 2,
-            "recognized": 1,
-            "events": {"totem.sync.done": 4},
-        });
+    fn static_index_has_only_external_application_assets() {
+        assert!(INDEX_HTML.starts_with("<!doctype html>"));
+        assert!(INDEX_HTML.contains("src=\"/app.js\""));
+        assert!(APP_JS.contains("/nsec-signer.js"));
+        assert!(INDEX_HTML.contains("href=\"/app.css\""));
+        assert!(!INDEX_HTML.contains("<style>"));
+    }
+
+    #[test]
+    fn public_and_owner_snapshots_project_existing_state() {
+        let app = AppState::new(config::Config::default());
+        app.push(json!({"type": "totem.test", "value": 1}));
         let profile = profile::Profile {
             metadata: profile::DeviceMetadata {
-                name: "name<script>".into(),
+                name: "test".into(),
                 display_name: None,
-                about: Some("about<&".into()),
+                about: None,
                 picture: None,
                 website: None,
             },
-            source: "kind0",
-            nip11_name: "!Totem name".into(),
+            source: "config",
+            nip11_name: "!Totem test".into(),
         };
-        let html = render_home(&status, &profile, "ws://totem.invalid:7777/?x=<bad>&y=1");
-        assert!(html.starts_with("<!doctype html>"));
-        assert!(html.contains("name&lt;script&gt;"));
-        assert!(html.contains("about&lt;&amp;"));
-        assert!(html.contains("npub&lt;&amp;&quot;&#39;"));
-        assert!(html.contains("ask&lt;script&gt;"));
-        assert!(html.contains("?x=&lt;bad&gt;&amp;y=1"));
-        assert!(html.contains("Every recognized Totem"));
-        assert!(html.contains("<script src=\"/nsec-signer.js\" defer></script>"));
-        assert!(!html.contains("name<script>"));
+        let public = public_snapshot(&app, &profile, "ws://totem:7777");
+        assert_eq!(public["profile"]["name"], "test");
+        assert_eq!(public["relay_url"], "ws://totem:7777");
+        assert_eq!(public["status"]["events"]["totem.test"], 1);
+
+        let owner = owner_snapshot(&app);
+        assert_eq!(owner["events"][0]["type"], "totem.test");
+        assert!(owner["peers"].as_array().unwrap().is_empty());
     }
 }
