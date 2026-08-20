@@ -16,7 +16,7 @@
 <div class="screen">
   <div class="note-filters">
     <button class:on={filter === "all"} onclick={() => store.setFriendFilter("all")}>All friends ({friends.length})</button>
-    <button class:on={filter === "active"} onclick={() => store.setFriendFilter("active")}>Active friends ({active.length})</button>
+    <button class:on={filter === "active"} onclick={() => store.setFriendFilter("active")}>Active ({active.length})</button>
     <button class:on={filter === "requests"} onclick={() => store.setFriendFilter("requests")}>Requests ({requests.length})</button>
     <button class="search">Search</button>
   </div>
