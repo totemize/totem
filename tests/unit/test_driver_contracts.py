@@ -178,6 +178,30 @@ def test_waveshare_2in13_refresh_requires_busy_assertion():
         )
 
 
+def test_waveshare_2in13_v2_does_not_require_busy_leading_edge(monkeypatch):
+    from totem.devices.display.drivers.waveshare_2in13_v2 import Driver
+
+    driver = Driver()
+    waits = []
+    sleeps = []
+    monkeypatch.setattr(driver, "send_command", lambda command: None)
+    monkeypatch.setattr(driver, "send_data", lambda data: None)
+    monkeypatch.setattr(
+        driver,
+        "wait_until_idle",
+        lambda **kwargs: waits.append(kwargs),
+    )
+    monkeypatch.setattr(
+        "totem.devices.display.drivers.waveshare_2in13_v2.time.sleep",
+        lambda seconds: sleeps.append(seconds),
+    )
+
+    driver._update()
+
+    assert waits == [{}]
+    assert sleeps == [driver.REFRESH_SETTLE_SECONDS]
+
+
 @pytest.mark.parametrize(
     "module_name",
     (
@@ -191,6 +215,7 @@ def test_waveshare_2in13_controls_hat_power(monkeypatch, module_name):
     module = importlib.import_module(module_name)
 
     outputs = []
+    setup_calls = []
 
     class FakeGPIO:
         BCM = 0
@@ -198,6 +223,7 @@ def test_waveshare_2in13_controls_hat_power(monkeypatch, module_name):
         IN = 3
         HIGH = 1
         LOW = 0
+        PUD_DOWN = 21
 
         @staticmethod
         def setwarnings(enabled):
@@ -208,8 +234,8 @@ def test_waveshare_2in13_controls_hat_power(monkeypatch, module_name):
             pass
 
         @staticmethod
-        def setup(pin, mode):
-            pass
+        def setup(pin, mode, **kwargs):
+            setup_calls.append((pin, mode, kwargs))
 
         @staticmethod
         def output(pin, value):
@@ -244,5 +270,10 @@ def test_waveshare_2in13_controls_hat_power(monkeypatch, module_name):
 
     driver.init()
     assert (driver.power_pin, FakeGPIO.HIGH) in outputs
+    assert (
+        driver.busy_pin,
+        FakeGPIO.IN,
+        {"pull_up_down": FakeGPIO.PUD_DOWN},
+    ) in setup_calls
     driver.close()
     assert outputs[-1] == (driver.power_pin, FakeGPIO.LOW)

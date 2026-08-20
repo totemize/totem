@@ -42,6 +42,7 @@ class MockGPIO:
     IN = 3
     HIGH = 1
     LOW = 0
+    PUD_DOWN = 21
 
     @staticmethod
     def setwarnings(enabled):
@@ -52,7 +53,7 @@ class MockGPIO:
         return None
 
     @staticmethod
-    def setup(pin, mode):
+    def setup(pin, mode, **kwargs):
         return None
 
     @staticmethod
@@ -131,7 +132,15 @@ class Waveshare2in13Base(EInkDeviceInterface):
         self.GPIO.setmode(self.GPIO.BCM)
         self.GPIO.setup(self.reset_pin, self.GPIO.OUT)
         self.GPIO.setup(self.dc_pin, self.GPIO.OUT)
-        self.GPIO.setup(self.busy_pin, self.GPIO.IN)
+        # Waveshare's Raspberry Pi transport (and Pwnagotchi's known-working
+        # V2 integration) biases the active-high BUSY input low. Some Rev 2.1
+        # HATs leave BUSY electrically floating while idle, so PUD_OFF makes a
+        # healthy panel indistinguishable from a disconnected one.
+        self.GPIO.setup(
+            self.busy_pin,
+            self.GPIO.IN,
+            pull_up_down=self.GPIO.PUD_DOWN,
+        )
         self.GPIO.setup(self.power_pin, self.GPIO.OUT)
         self.GPIO.output(self.power_pin, self.GPIO.HIGH)
 
