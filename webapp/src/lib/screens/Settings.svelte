@@ -69,6 +69,13 @@
     <summary>advanced</summary>
     <button class="danger-item" onclick={() => danger("wipe")}>wipe stored notes</button>
     <button class="danger-item" onclick={() => danger("rotate")}>rotate device key</button>
-    <button class="danger-item" onclick={() => danger("reset")}>{confirmingReset ? "click again to confirm reset" : "reset config"}</button>
+    {#if confirmingReset}
+      <div class="danger-item" style="display:flex; gap:18px; cursor:default">
+        <button class="danger-inline" onclick={() => danger("reset")}>click again to confirm reset</button>
+        <button class="danger-inline cancel" onclick={() => (confirmingReset = false)}>cancel</button>
+      </div>
+    {:else}
+      <button class="danger-item" onclick={() => danger("reset")}>reset config</button>
+    {/if}
   </details>
 </div>

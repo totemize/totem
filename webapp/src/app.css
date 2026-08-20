@@ -118,7 +118,7 @@ body {
 
 /* identity chips at top of settings */
 .identity-row { display: flex; align-items: center; gap: 10px; padding: 34px 20px; border-bottom: 1px solid var(--line); }
-.identity-row .chip { flex: 1; text-align: center; font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--ink); background: var(--fill); border-radius: 14px; padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.identity-row .chip { border: none; cursor: pointer; flex: 1; text-align: center; font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--ink); background: var(--fill); border-radius: 14px; padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .identity-row .at { font-size: 12px; color: var(--dim); flex-shrink: 0; }
 
 .back { text-align: left; background: none; border: none; font: inherit; font-size: 13px; font-weight: 700; color: var(--dim); cursor: pointer; padding: 16px 20px 12px; display: flex; align-items: center; gap: 6px; }
@@ -142,6 +142,9 @@ details.advanced summary:hover { color: var(--ink); }
   font: inherit; font-size: 13px; color: #a33; cursor: pointer;
 }
 .danger-item:hover { background: var(--fill); }
+.danger-inline { background: none; border: none; font: inherit; font-size: 13px; font-weight: 700; color: #a33; cursor: pointer; padding: 0; }
+.danger-inline.cancel { color: var(--dim); font-weight: 400; }
+.danger-inline.cancel:hover { color: var(--ink); }
 
 /* section anchor for + shortcuts */
 .screen-plus { display: flex; padding-bottom: 10px; margin-top: auto; }
