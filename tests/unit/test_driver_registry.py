@@ -6,6 +6,7 @@ from totem.devices.display.display import EINK_DRIVERS, EInk
 from totem.devices.nfc.nfc import NFC, NFC_DRIVERS
 from totem.devices.registry import HardwareNotFoundError, MockDriverNotAllowedError
 from totem.devices.network.network import WIFI_DRIVERS, WiFi
+from totem.devices.network.bluetooth import BLUETOOTH_DRIVERS, Bluetooth
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
@@ -28,8 +29,9 @@ def test_eink_registry_exposes_only_supported_drivers():
 
 def test_nfc_usb_detection_parses_lsusb_output():
     output = b"Bus 001 Device 004: ID 04e6:5591 SCM Microsystems Inc.\n"
-    with patch("totem.devices.nfc.nfc.sys.platform", "linux"), patch(
-        "totem.devices.nfc.nfc.subprocess.check_output", return_value=output
+    with (
+        patch("totem.devices.nfc.nfc.sys.platform", "linux"),
+        patch("totem.devices.nfc.nfc.subprocess.check_output", return_value=output),
     ):
         assert NFC().driver.__class__.__module__.endswith(".acr122")
 
@@ -45,9 +47,18 @@ def test_wifi_registry_uses_existing_module_names():
     )
 
 
+def test_bluetooth_registry_exposes_bluez_and_explicit_mock():
+    assert BLUETOOTH_DRIVERS.names == ("bluez", "mock_bluetooth")
+    assert Bluetooth("mock_bluetooth", allow_mock=True).driver.is_mock
+
+
 def test_wifi_detection_resolves_onboard_driver():
-    with patch("totem.devices.network.network.sys.platform", "linux"), patch(
-        "totem.devices.network.network.subprocess.check_output", return_value=b"lo\nwlan0\n"
+    with (
+        patch("totem.devices.network.network.sys.platform", "linux"),
+        patch(
+            "totem.devices.network.network.subprocess.check_output",
+            return_value=b"lo\nwlan0\n",
+        ),
     ):
         assert WiFi().driver.__class__.__module__.endswith(".rpi5_onboard_wifi")
 

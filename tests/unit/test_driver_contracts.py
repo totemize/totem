@@ -13,6 +13,7 @@ from totem.devices.display.display import EInkDeviceInterface
 from totem.devices.nfc.nfc import NFCDeviceInterface
 from totem.devices.storage.device import StorageDeviceInterface
 from totem.devices.network.network import WiFiDeviceInterface
+from totem.devices.network.bluetooth import BluetoothDeviceInterface
 from totem.devices.ups.ups import UPSDeviceInterface
 
 
@@ -41,6 +42,8 @@ DRIVERS = (
     ("totem.devices.network.drivers.mock_wifi", WiFiDeviceInterface),
     ("totem.devices.network.drivers.rpi5_onboard_wifi", WiFiDeviceInterface),
     ("totem.devices.network.drivers.usb_wifi_adapter", WiFiDeviceInterface),
+    ("totem.devices.network.drivers.bluez", BluetoothDeviceInterface),
+    ("totem.devices.network.drivers.mock_bluetooth", BluetoothDeviceInterface),
     ("totem.devices.ups.drivers.pisugar2", UPSDeviceInterface),
     ("totem.devices.ups.drivers.waveshare_ups_hat_c", UPSDeviceInterface),
 )
@@ -79,6 +82,7 @@ def test_driver_implements_declared_contract(module_name, interface):
         "totem.devices.display.drivers.mock_eink",
         "totem.devices.nfc.drivers.mock_nfc",
         "totem.devices.network.drivers.mock_wifi",
+        "totem.devices.network.drivers.mock_bluetooth",
     ),
 )
 def test_mock_driver_reports_mock_health(module_name):
