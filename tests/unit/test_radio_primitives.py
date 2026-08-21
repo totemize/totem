@@ -290,6 +290,16 @@ def test_nan_controller_publish_match_and_cleanup_lifecycle():
     assert events[0][0] == "wifi_nan_match_found"
     publish = next(command for command in commands if "publish" in command)
     assert "eyJwb3J0Ijo0ODczfQ" in publish
+    assert [
+        "/usr/bin/iw",
+        "phy",
+        "phy9",
+        "interface",
+        "add",
+        "totemnan0",
+        "type",
+        "__nan",
+    ] in commands
 
     controller.stop_session(session.id)
     controller.stop_session(session.id)

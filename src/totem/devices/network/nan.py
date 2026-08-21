@@ -108,7 +108,7 @@ class NanDiscoveryController:
                 "add",
                 self.interface,
                 "type",
-                "nan",
+                "__nan",
             ],
             timeout,
         )
