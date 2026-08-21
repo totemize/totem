@@ -29,6 +29,7 @@ working environment.
 
 | Date | Summary |
 |------|---------|
+| [2026-08-21 — totem display enablement](journal/2026-08-21.md#totem-display-enablement) | Enabled the same V4 screen profile on the older totem host, fixed fresh-screen deployment ordering, camera-verified the live UI, and converged with `changed=0`. |
 | [2026-08-21 — state-specific word-reveal captions](journal/2026-08-21.md#state-specific-word-reveal-captions) | Added stable randomized captions for all 13 authoritative scenes, independent word timing, exhaustive deterministic proof, and [physical metot evidence](proofs/2026-08-21/state-captions/README.md). |
 | [2026-08-21 — authoritative footer note count](journal/2026-08-21.md#authoritative-footer-note-count) | Replaced the friend star with `[•]`, added the cached kind-1 note count at bottom right, and physically verified live `404` rendering on metot. |
 | [2026-08-21 — interactive face animations](journal/2026-08-21.md#authoritative-interactive-face-animations) | Added state-bound idle, charging, sync, suspicious-peer, and flirty-candidate motion; deterministic 49-frame replay and [camera proof](proofs/2026-08-21/interactive-animations/README.md) passed on metot with a fixed left-side glasses sequence. |

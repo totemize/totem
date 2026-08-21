@@ -277,6 +277,9 @@
     state: started
     daemon_reload: true
 
+- name: Apply device-manager changes before starting the screen
+  ansible.builtin.meta: flush_handlers
+
 - name: Enable and start the screen state service
   ansible.builtin.systemd_service:
     name: totem-screen.service

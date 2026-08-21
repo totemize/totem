@@ -29,15 +29,18 @@ never stored in inventory or artifacts.
 The common device-manager role installs the same screen package, systemd unit,
 and replay command on every Totem. Inventory decides whether that unit is
 enabled and running: the fleet default is `totem_screen_enabled=false`, while
-Metot's host variables set it to true, seed
-`TOTEM_EINK_DRIVER=waveshare_2in13_v4`, apply the enclosure's
-`TOTEM_SCREEN_ROTATION=180`, and select `TOTEM_UPS_DRIVER=pisugar2`. The screen
+metot and totem's host variables set it to true, seed
+`TOTEM_EINK_DRIVER=waveshare_2in13_v4`, and apply the enclosure's
+`TOTEM_SCREEN_ROTATION=180`; metot additionally selects
+`TOTEM_UPS_DRIVER=pisugar2`. Pending device-manager environment and release
+changes are applied before the screen is started, so a newly enabled display
+cannot race an older auto-detected driver. The screen
 service renders through the local device-manager API, presents the boot splash
 before releasing the remaining services, then continuously projects
 authoritative control-plane/device/UPS snapshots. The deployed defaults use a
 2.1-second coalescing window, 15-second safety poll, 1.2-second progressive
-caption words, and 20% low and 8% critical battery thresholds. Metot pins
-scheduled full-refresh promotion to zero after
+caption words, and 20% low and 8% critical battery thresholds. Both display
+hosts pin scheduled full-refresh promotion to zero after
 the initial safe full frame, preserving the Pwnagotchi-compatible V4 partial
 path without periodic full-panel flashes.
 Inventory can also pin comma-separated sequence-rate, minimum-dwell, and
@@ -63,6 +66,8 @@ userspace adapter, reboots only when either boot parameter changes, then fails
 verification unless `/dev/spidev0.0`, `/dev/i2c-1`, and live UPS telemetry are
 all available. `deploy/devices/metot.boot-config.txt` mirrors the same two
 settings for image-building and manual recovery.
+Totem converges and verifies SPI only; no UPS/I2C profile is asserted until that
+peripheral is confirmed on the older Zero W.
 If a controller run stops after writing that block but before its reboot,
 resume once with `--extra-vars totem_force_hardware_reboot=true`; the fleet
 default remains false.
