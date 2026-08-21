@@ -51,10 +51,12 @@ the device manager, but it MUST preserve the ownership boundary:
    passes the descriptor directly to the fixed FIPS receiver with
    `SCM_RIGHTS`. Myco MUST NOT read or frame the CoC payload.
 2. For Wi-Fi Aware, the integration publishes the fixed service name
-   `myco.fips.v1`. Passive service data contains only the selected UDP port as
-   two little-endian bytes. Once a data path yields a scoped peer IPv6 address,
-   the integration submits `(peer npub, scoped UDP endpoint)` through the
-   existing group-scoped FIPS control socket.
+   `myco.fips.v1` with empty passive service data. After a match, it exchanges
+   the Android-compatible UTF-8 `<npub>|<port>` follow-up, validates the npub
+   shape and non-zero port, and binds the result to that match. Once a data
+   path yields a scoped peer IPv6 address, the integration submits `(peer
+   npub, scoped UDP endpoint)` through the existing group-scoped FIPS control
+   socket.
 3. LAN and `!FIPS` SoftAP endpoints use that same FIPS UDP-connect operation.
    They are not alternate unauthenticated Myco application endpoints.
 
@@ -75,9 +77,10 @@ bytes. A failed optional lane leaves the existing FIPS-TUN path intact.
 At the current implementation boundary, Linux NAN data-path creation reports a
 typed unsupported result until a production NDP backend is available, and CoC
 handoff requires the separate FIPS receiver implementation. Automatic Android
-Aware identity follow-up messaging and real handset interoperability remain
-hardware-backed completion gates; the operator must not infer them from mock
-data-path success.
+Aware identity follow-up messaging is implemented against the pinned Android
+and upstream `iw` wire contracts, but real handset interoperability remains a
+hardware-backed completion gate; the operator must not infer it from mock
+follow-up or data-path success.
 
 ## Totem Nearby napplet
 

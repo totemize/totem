@@ -11,6 +11,8 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 const MYCO_AWARE_SERVICE: &str = "myco.fips.v1";
 const FIPS_CONTROL_SOCKET: &str = "/run/fips/control.sock";
+const LEGACY_AWARE_UDP_PORT: u16 = 4871;
+const BECH32_CHARSET: &str = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -83,6 +85,28 @@ pub struct NanMatch {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct NanFollowup {
+    pub id: String,
+    pub session_id: String,
+    pub match_id: String,
+    pub peer_address: String,
+    pub payload_base64: String,
+    pub direction: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AwarePeerIdentity {
+    pub match_id: String,
+    pub session_id: String,
+    pub peer_address: String,
+    pub npub: String,
+    pub port: u16,
+    pub received_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct L2capListener {
     pub id: String,
     pub local_address: String,
@@ -109,6 +133,8 @@ pub struct TransportManager {
     device_manager_url: String,
     fips_control_socket: PathBuf,
     lanes: RwLock<HashMap<String, Vec<PeerLane>>>,
+    aware_announced: RwLock<HashMap<String, String>>,
+    aware_identities: RwLock<HashMap<String, AwarePeerIdentity>>,
 }
 
 impl TransportManager {
@@ -131,6 +157,8 @@ impl TransportManager {
             device_manager_url,
             fips_control_socket,
             lanes: RwLock::new(HashMap::new()),
+            aware_announced: RwLock::new(HashMap::new()),
+            aware_identities: RwLock::new(HashMap::new()),
         })
     }
 
@@ -186,14 +214,14 @@ impl TransportManager {
         udp_port: u16,
         duration: u16,
     ) -> Result<NanDiscovery> {
-        // This is routing metadata only, matching Myco's BLE PSM carrier. No
-        // identity is leaked in a passive Wi-Fi Aware announcement.
-        let service_info = general_purpose::STANDARD.encode(udp_port.to_le_bytes());
+        if udp_port == 0 {
+            bail!("Wi-Fi Aware UDP port must be non-zero");
+        }
         self.post_json(
             "/network/wifi/aware/discovery",
             json!({
                 "service_name": MYCO_AWARE_SERVICE,
-                "service_info_base64": service_info,
+                "service_info_base64": "",
                 "duration_seconds": duration,
                 "timeout_seconds": 15,
             }),
@@ -234,9 +262,128 @@ impl TransportManager {
         serde_json::from_value(value).context("decode Wi-Fi Aware matches")
     }
 
+    pub async fn exchange_aware_identity(
+        &self,
+        session_id: &str,
+        local_npub: &str,
+        port: u16,
+    ) -> Result<Vec<AwarePeerIdentity>> {
+        validate_npub(local_npub)?;
+        if port == 0 {
+            bail!("Wi-Fi Aware UDP port must be non-zero");
+        }
+        let payload = format!("{local_npub}|{port}");
+        let payload_base64 = general_purpose::STANDARD.encode(payload.as_bytes());
+        let matches = self.aware_matches().await?;
+        for matched in matches
+            .into_iter()
+            .filter(|matched| matched.session_id == session_id)
+        {
+            let should_send = {
+                let mut announced = self
+                    .aware_announced
+                    .write()
+                    .expect("Aware announcement lock poisoned");
+                if announced.contains_key(&matched.id) {
+                    false
+                } else {
+                    announced.insert(matched.id.clone(), session_id.to_string());
+                    true
+                }
+            };
+            if !should_send {
+                continue;
+            }
+            let result: Result<NanFollowup> = self
+                .post_json(
+                    "/network/wifi/aware/followups",
+                    json!({
+                        "match_id": matched.id.clone(),
+                        "payload_base64": payload_base64,
+                        "timeout_seconds": 15,
+                    }),
+                )
+                .await;
+            if let Err(error) = result {
+                self.aware_announced
+                    .write()
+                    .expect("Aware announcement lock poisoned")
+                    .remove(&matched.id);
+                return Err(error).context("send Wi-Fi Aware identity follow-up");
+            }
+        }
+
+        let value = self.get_json("/network/wifi/aware/followups").await?;
+        let followups: Vec<NanFollowup> =
+            serde_json::from_value(value).context("decode Wi-Fi Aware follow-ups")?;
+        let mut identities = self
+            .aware_identities
+            .write()
+            .expect("Aware identity lock poisoned");
+        for followup in followups.into_iter().filter(|followup| {
+            followup.session_id == session_id && followup.direction == "received"
+        }) {
+            let Ok(bytes) = general_purpose::STANDARD.decode(&followup.payload_base64) else {
+                continue;
+            };
+            let Ok(text) = std::str::from_utf8(&bytes) else {
+                continue;
+            };
+            let Ok((npub, port)) = parse_aware_identity(text) else {
+                continue;
+            };
+            identities.insert(
+                followup.match_id.clone(),
+                AwarePeerIdentity {
+                    match_id: followup.match_id,
+                    session_id: followup.session_id,
+                    peer_address: followup.peer_address,
+                    npub,
+                    port,
+                    received_at: followup.created_at,
+                },
+            );
+        }
+        let mut result: Vec<_> = identities
+            .values()
+            .filter(|identity| identity.session_id == session_id)
+            .cloned()
+            .collect();
+        result.sort_by(|a, b| a.match_id.cmp(&b.match_id));
+        Ok(result)
+    }
+
+    pub fn aware_identities(&self) -> Vec<AwarePeerIdentity> {
+        let mut values: Vec<_> = self
+            .aware_identities
+            .read()
+            .expect("Aware identity lock poisoned")
+            .values()
+            .cloned()
+            .collect();
+        values.sort_by(|a, b| a.match_id.cmp(&b.match_id));
+        values
+    }
+
+    pub fn aware_identity(&self, match_id: &str) -> Option<AwarePeerIdentity> {
+        self.aware_identities
+            .read()
+            .expect("Aware identity lock poisoned")
+            .get(match_id)
+            .cloned()
+    }
+
     pub async fn stop_aware_discovery(&self, session_id: &str) -> Result<()> {
         self.delete(&format!("/network/wifi/aware/discovery/{session_id}"))
             .await?;
+        self.aware_announced
+            .write()
+            .expect("Aware announcement lock poisoned")
+            .retain(|_, value| value != session_id);
+        self.aware_identities
+            .write()
+            .expect("Aware identity lock poisoned")
+            .retain(|_, value| value.session_id != session_id);
         Ok(())
     }
 
@@ -451,6 +598,37 @@ fn validate_udp_endpoint(address: &str) -> Result<()> {
     Ok(())
 }
 
+fn validate_npub(npub: &str) -> Result<()> {
+    let Some(data) = npub.strip_prefix("npub1") else {
+        bail!("invalid npub in Wi-Fi Aware identity");
+    };
+    if data.len() != 58
+        || !data
+            .chars()
+            .all(|character| BECH32_CHARSET.contains(character))
+    {
+        bail!("invalid npub in Wi-Fi Aware identity");
+    }
+    Ok(())
+}
+
+fn parse_aware_identity(value: &str) -> Result<(String, u16)> {
+    let (npub, port) = match value.split_once('|') {
+        Some((npub, port)) if !port.contains('|') => (
+            npub,
+            port.parse::<u16>()
+                .context("invalid Wi-Fi Aware identity port")?,
+        ),
+        Some(_) => bail!("invalid Wi-Fi Aware identity fields"),
+        None => (value, LEGACY_AWARE_UDP_PORT),
+    };
+    validate_npub(npub)?;
+    if port == 0 {
+        bail!("invalid Wi-Fi Aware identity port");
+    }
+    Ok((npub.to_string(), port))
+}
+
 fn scoped_udp_endpoint(path: &NanDataPath) -> Result<String> {
     let (address, scope) = path
         .peer_ipv6
@@ -495,20 +673,151 @@ fn stable_error(error: &anyhow::Error) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::routing::post;
+    use axum::routing::{get, post};
     use axum::{Json, Router};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
     use tokio::net::UnixListener;
     use tokio::sync::oneshot;
 
     #[test]
-    fn discovery_metadata_is_only_little_endian_port() {
-        assert_eq!(4873_u16.to_le_bytes(), [0x09, 0x13]);
+    fn aware_identity_matches_android_wire_and_legacy_fallback() {
+        let npub = "npub1eu0clm0nsxwavcsj07at3sy7v52tuwgw4qpeqsyxgkeqg7krc7ps77c20q";
+        assert_eq!(
+            parse_aware_identity(&format!("{npub}|4873")).unwrap(),
+            (npub.to_string(), 4873)
+        );
+        assert_eq!(
+            parse_aware_identity(npub).unwrap(),
+            (npub.to_string(), LEGACY_AWARE_UDP_PORT)
+        );
+        assert!(parse_aware_identity("npub1bad|4873").is_err());
+        assert!(parse_aware_identity(&format!("{npub}|0")).is_err());
     }
 
     #[test]
     fn device_manager_must_be_loopback() {
         assert!(TransportManager::new("http://192.168.8.9:8000".into()).is_err());
         assert!(TransportManager::new("http://127.0.0.1:8000".into()).is_ok());
+    }
+
+    #[tokio::test]
+    async fn aware_discovery_and_followup_match_android_wire() {
+        let local_npub = "npub1eu0clm0nsxwavcsj07at3sy7v52tuwgw4qpeqsyxgkeqg7krc7ps77c20q";
+        let remote_npub = "npub1j0adney3t3tuvcaz6wv6eahpkhfrl8rwhry58n2u4njuxz0j04lsrudpf6";
+        let discovery_request = Arc::new(Mutex::new(None));
+        let followup_request = Arc::new(Mutex::new(None));
+        let followup_count = Arc::new(AtomicUsize::new(0));
+        let discovery_capture = Arc::clone(&discovery_request);
+        let followup_capture = Arc::clone(&followup_request);
+        let sent_count = Arc::clone(&followup_count);
+        let received_payload =
+            general_purpose::STANDARD.encode(format!("{remote_npub}|4873").as_bytes());
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new()
+                    .route(
+                        "/network/wifi/aware/discovery",
+                        post(move |Json(body): Json<Value>| {
+                            let capture = Arc::clone(&discovery_capture);
+                            async move {
+                                *capture.lock().unwrap() = Some(body);
+                                Json(json!({
+                                    "id": "session-1",
+                                    "interface": "totemnan0",
+                                    "service_name": MYCO_AWARE_SERVICE,
+                                    "active": true
+                                }))
+                            }
+                        }),
+                    )
+                    .route(
+                        "/network/wifi/aware/matches",
+                        get(|| async {
+                            Json(json!([{
+                                "id": "match-1",
+                                "session_id": "session-1",
+                                "peer_address": "02:00:00:00:20:02",
+                                "service_info_base64": "",
+                                "last_seen_at": "2026-08-21T00:00:00Z"
+                            }]))
+                        }),
+                    )
+                    .route(
+                        "/network/wifi/aware/followups",
+                        get(move || {
+                            let payload = received_payload.clone();
+                            async move {
+                                Json(json!([{
+                                    "id": "received-1",
+                                    "session_id": "session-1",
+                                    "match_id": "match-1",
+                                    "peer_address": "02:00:00:00:20:02",
+                                    "payload_base64": payload,
+                                    "direction": "received",
+                                    "created_at": "2026-08-21T00:00:01Z"
+                                }]))
+                            }
+                        })
+                        .post(move |Json(body): Json<Value>| {
+                            let capture = Arc::clone(&followup_capture);
+                            let count = Arc::clone(&sent_count);
+                            async move {
+                                count.fetch_add(1, Ordering::SeqCst);
+                                *capture.lock().unwrap() = Some(body.clone());
+                                Json(json!({
+                                    "id": "sent-1",
+                                    "session_id": "session-1",
+                                    "match_id": "match-1",
+                                    "peer_address": "02:00:00:00:20:02",
+                                    "payload_base64": body["payload_base64"],
+                                    "direction": "sent",
+                                    "created_at": "2026-08-21T00:00:01Z"
+                                }))
+                            }
+                        }),
+                    ),
+            )
+            .await
+            .unwrap();
+        });
+
+        let manager = TransportManager::with_fips_socket(
+            format!("http://{address}"),
+            PathBuf::from("/unused"),
+        )
+        .unwrap();
+        let session = manager.start_aware_discovery(4873, 60).await.unwrap();
+        let identities = manager
+            .exchange_aware_identity(&session.id, local_npub, 4873)
+            .await
+            .unwrap();
+        manager
+            .exchange_aware_identity(&session.id, local_npub, 4873)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            discovery_request.lock().unwrap().as_ref().unwrap()["service_info_base64"],
+            ""
+        );
+        let sent = followup_request.lock().unwrap().clone().unwrap();
+        assert_eq!(sent["match_id"], "match-1");
+        assert_eq!(
+            general_purpose::STANDARD
+                .decode(sent["payload_base64"].as_str().unwrap())
+                .unwrap(),
+            format!("{local_npub}|4873").as_bytes()
+        );
+        assert_eq!(identities.len(), 1);
+        assert_eq!(identities[0].npub, remote_npub);
+        assert_eq!(identities[0].port, 4873);
+        assert_eq!(followup_count.load(Ordering::SeqCst), 1);
+        server.abort();
     }
 
     #[tokio::test]

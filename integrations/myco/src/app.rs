@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -14,8 +15,8 @@ use crate::model::{
 };
 use crate::protocol::{self, FileMessage, PairPayload};
 use crate::transport::{
-    L2capConnection, L2capListener, NanDataPath, NanDiscovery, NanMatch, PeerLane, TransportKind,
-    TransportManager, TransportStatus,
+    AwarePeerIdentity, L2capConnection, L2capListener, NanDataPath, NanDiscovery, NanMatch,
+    PeerLane, TransportKind, TransportManager, TransportStatus,
 };
 
 pub struct App {
@@ -27,6 +28,7 @@ pub struct App {
     outbox_dir: PathBuf,
     client: reqwest::Client,
     transport: TransportManager,
+    aware_tasks: Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
 }
 
 impl App {
@@ -58,6 +60,7 @@ impl App {
             outbox_dir,
             client,
             transport: TransportManager::new(device_manager_url)?,
+            aware_tasks: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -116,6 +119,68 @@ impl App {
             .await
     }
 
+    pub fn maintain_aware_identity(
+        self: &Arc<Self>,
+        session: &NanDiscovery,
+        udp_port: u16,
+        duration: u16,
+    ) {
+        let session_id = session.id.clone();
+        let app = Arc::clone(self);
+        let task_session_id = session_id.clone();
+        let task = tokio::spawn(async move {
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(duration.into());
+            loop {
+                if tokio::time::Instant::now() >= deadline {
+                    break;
+                }
+                if let Err(error) = app
+                    .exchange_aware_identity(&task_session_id, udp_port)
+                    .await
+                {
+                    tracing::warn!(
+                        session_id = %task_session_id,
+                        error = %error,
+                        "Wi-Fi Aware identity exchange attempt failed"
+                    );
+                }
+                let now = tokio::time::Instant::now();
+                let remaining = deadline.saturating_duration_since(now);
+                tokio::time::sleep(remaining.min(Duration::from_secs(1))).await;
+            }
+            app.aware_tasks
+                .lock()
+                .expect("Aware task lock poisoned")
+                .remove(&task_session_id);
+        });
+        if let Some(previous) = self
+            .aware_tasks
+            .lock()
+            .expect("Aware task lock poisoned")
+            .insert(session_id, task)
+        {
+            previous.abort();
+        }
+    }
+
+    pub async fn exchange_aware_identity(
+        &self,
+        session_id: &str,
+        udp_port: u16,
+    ) -> Result<Vec<AwarePeerIdentity>> {
+        self.transport
+            .exchange_aware_identity(session_id, &self.npub(), udp_port)
+            .await
+    }
+
+    pub fn aware_identities(&self) -> Vec<AwarePeerIdentity> {
+        self.transport.aware_identities()
+    }
+
+    pub fn aware_identity(&self, match_id: &str) -> Option<AwarePeerIdentity> {
+        self.transport.aware_identity(match_id)
+    }
+
     pub async fn create_aware_path(
         &self,
         npub: &str,
@@ -130,6 +195,14 @@ impl App {
     }
 
     pub async fn stop_aware_discovery(&self, session_id: &str) -> Result<()> {
+        if let Some(task) = self
+            .aware_tasks
+            .lock()
+            .expect("Aware task lock poisoned")
+            .remove(session_id)
+        {
+            task.abort();
+        }
         self.transport.stop_aware_discovery(session_id).await
     }
 

@@ -49,6 +49,14 @@ pub async fn serve(app: Arc<App>) -> anyhow::Result<()> {
         )
         .route("/transports/aware/matches", get(control_aware_matches))
         .route(
+            "/transports/aware/identities",
+            get(control_aware_identities),
+        )
+        .route(
+            "/transports/aware/identities/sync",
+            post(control_aware_identity_sync),
+        )
+        .route(
             "/transports/aware/data-paths",
             post(control_aware_data_path),
         )
@@ -251,14 +259,13 @@ async fn control_aware_discovery(
     State(app): State<Arc<App>>,
     Json(input): Json<AwareDiscoveryInput>,
 ) -> Response {
-    match app
-        .start_aware_discovery(
-            input.udp_port.unwrap_or(4873),
-            input.duration_seconds.unwrap_or(300).clamp(1, 3600),
-        )
-        .await
-    {
-        Ok(session) => Json(session).into_response(),
+    let port = input.udp_port.unwrap_or(4873);
+    let duration = input.duration_seconds.unwrap_or(300).clamp(1, 3600);
+    match app.start_aware_discovery(port, duration).await {
+        Ok(session) => {
+            app.maintain_aware_identity(&session, port, duration);
+            Json(session).into_response()
+        }
         Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
     }
 }
@@ -280,10 +287,34 @@ async fn control_aware_matches(State(app): State<Arc<App>>) -> Response {
     }
 }
 
+async fn control_aware_identities(State(app): State<Arc<App>>) -> Response {
+    Json(app.aware_identities()).into_response()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AwareIdentitySyncInput {
+    session_id: String,
+    udp_port: Option<u16>,
+}
+
+async fn control_aware_identity_sync(
+    State(app): State<Arc<App>>,
+    Json(input): Json<AwareIdentitySyncInput>,
+) -> Response {
+    match app
+        .exchange_aware_identity(&input.session_id, input.udp_port.unwrap_or(4873))
+        .await
+    {
+        Ok(identities) => Json(identities).into_response(),
+        Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AwareDataPathInput {
-    peer_npub: String,
+    peer_npub: Option<String>,
     match_id: String,
     port: Option<u16>,
 }
@@ -292,12 +323,21 @@ async fn control_aware_data_path(
     State(app): State<Arc<App>>,
     Json(input): Json<AwareDataPathInput>,
 ) -> Response {
+    let identity = app.aware_identity(&input.match_id);
+    let (peer_npub, port) = match input.peer_npub {
+        Some(peer_npub) => (peer_npub, input.port.unwrap_or(4873)),
+        None => {
+            let Some(identity) = identity else {
+                return error(
+                    StatusCode::BAD_REQUEST,
+                    "peerNpub is required until an identity follow-up is received",
+                );
+            };
+            (identity.npub, input.port.unwrap_or(identity.port))
+        }
+    };
     match app
-        .create_aware_path(
-            &input.peer_npub,
-            &input.match_id,
-            input.port.unwrap_or(4873),
-        )
+        .create_aware_path(&peer_npub, &input.match_id, port)
         .await
     {
         Ok(path) => Json(path).into_response(),

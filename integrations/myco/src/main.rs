@@ -27,8 +27,11 @@ Usage:
   totem-myco unroute <peer-npub> <lan|softap>
   totem-myco aware-discover [udp-port] [seconds]
   totem-myco aware-matches
+  totem-myco aware-identities
+  totem-myco aware-sync <session-id> [udp-port]
   totem-myco aware-stop <session-id>
   totem-myco aware-connect <peer-npub> <match-id> [udp-port]
+  totem-myco aware-connect-auto <match-id>
   totem-myco aware-remove <data-path-id>
   totem-myco coc-listen [psm] [public|random]
   totem-myco coc-listeners
@@ -130,6 +133,18 @@ async fn run() -> Result<()> {
             )
         }
         "aware-matches" => print_response(get("/transports/aware/matches").await?),
+        "aware-identities" => print_response(get("/transports/aware/identities").await?),
+        "aware-sync" => {
+            let session_id = required(args.next(), "session id")?;
+            let port = optional_u16(args.next(), "UDP port")?.unwrap_or(4873);
+            print_response(
+                post(
+                    "/transports/aware/identities/sync",
+                    Some(json!({"sessionId": session_id, "udpPort": port})),
+                )
+                .await?,
+            )
+        }
         "aware-stop" => {
             let id = required(args.next(), "session id")?;
             print_response(delete(&format!("/transports/aware/discovery/{id}")).await?)
@@ -142,6 +157,16 @@ async fn run() -> Result<()> {
                 post(
                     "/transports/aware/data-paths",
                     Some(json!({"peerNpub": npub, "matchId": match_id, "port": port})),
+                )
+                .await?,
+            )
+        }
+        "aware-connect-auto" => {
+            let match_id = required(args.next(), "match id")?;
+            print_response(
+                post(
+                    "/transports/aware/data-paths",
+                    Some(json!({"matchId": match_id})),
                 )
                 .await?,
             )

@@ -36,13 +36,16 @@ through the device manager:
 - `totem-myco coc-listen`, `coc-listeners`, `coc-handoff`, `coc-close`, and
   `coc-connect` expose the bounded listener/accepted/outbound lifecycle. The
   device manager hands established descriptors directly to FIPS.
-- `totem-myco aware-discover [udp-port] [seconds]` publishes
-  `myco.fips.v1`; its service data contains only the two-byte little-endian UDP
-  port, never an identity.
-- `totem-myco aware-matches`, `aware-connect`, `aware-remove`, and `aware-stop`
-  expose match, data-path, and cleanup operations. A connected path is
-  converted to a numeric-scope IPv6 endpoint and submitted to the existing
-  FIPS control socket as a UDP peer.
+- `totem-myco aware-discover [udp-port] [seconds]` publishes and subscribes to
+  `myco.fips.v1` with empty passive service data. A bounded background loop
+  exchanges Android-compatible `<npub>|<port>` follow-up messages for each new
+  match; identity is not exposed before a match.
+- `totem-myco aware-matches`, `aware-identities`, `aware-sync`,
+  `aware-connect`, `aware-connect-auto`, `aware-remove`, and `aware-stop`
+  expose match, validated identity, data-path, and cleanup operations. The
+  automatic connect form consumes the identity received for its match. A
+  connected path is converted to a numeric-scope IPv6 endpoint and submitted
+  to the existing FIPS control socket as a UDP peer.
 - `totem-myco route <npub> <lan|softap> <udp-endpoint>` submits an already
   discovered LAN or SoftAP UDP endpoint through the same FIPS control seam.
 
