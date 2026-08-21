@@ -26,6 +26,7 @@ def test_capability_status_radio_and_p2p_endpoints():
         assert capabilities.status_code == 200
         assert "P2P-GO" in capabilities.json()["wifi"]["interface_modes"]
         assert capabilities.json()["wifi"]["aware"]["discovery"]["supported"]
+        assert capabilities.json()["wifi"]["aware"]["followup"]["supported"]
         assert capabilities.json()["bluetooth"]["roles"] == ["central", "peripheral"]
         assert capabilities.json()["bluetooth"]["l2cap"]["le_coc_listen"]["supported"]
 
@@ -182,6 +183,22 @@ def test_wifi_aware_discovery_match_data_path_and_teardown_endpoints():
             "/network/wifi/aware/matches", params={"session_id": session["id"]}
         ).json()
         assert len(matches) == 1
+
+        followup_response = client.post(
+            "/network/wifi/aware/followups",
+            json={
+                "match_id": matches[0]["id"],
+                "payload_base64": base64.b64encode(b"npub1example|4873").decode(),
+            },
+        )
+        assert followup_response.status_code == 200
+        assert followup_response.json()["direction"] == "sent"
+        followups = client.get(
+            "/network/wifi/aware/followups",
+            params={"session_id": session["id"]},
+        ).json()
+        assert [value["direction"] for value in followups] == ["sent", "received"]
+        assert base64.b64decode(followups[1]["payload_base64"]) == b"mock-npub|4873"
 
         data_path_response = client.post(
             "/network/wifi/aware/data-paths", json={"match_id": matches[0]["id"]}

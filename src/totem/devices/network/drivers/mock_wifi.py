@@ -7,12 +7,16 @@ import threading
 from typing import Any, Callable, Dict, Optional
 import uuid
 
-from totem.devices.network.errors import RadioResourceNotFoundError
+from totem.devices.network.errors import (
+    InvalidRadioRequestError,
+    RadioResourceNotFoundError,
+)
 from totem.devices.network.models import (
     ConcurrentInterfaceCombination,
     InterfaceLimit,
     NanDataPath,
     NanDiscoverySession,
+    NanFollowup,
     NanMatch,
     OperationSupport,
     P2PGroup,
@@ -44,7 +48,9 @@ class Driver(WiFiDeviceInterface):
         self.groups: Dict[str, P2PGroup] = {}
         self.nan_sessions: Dict[str, NanDiscoverySession] = {}
         self.nan_matches: Dict[str, NanMatch] = {}
+        self.nan_followups: Dict[str, NanFollowup] = {}
         self.nan_data_paths: Dict[str, NanDataPath] = {}
+        self.maximum_nan_followups = 128
         self._nan_cookie = 1
         self._event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None
 
@@ -150,10 +156,12 @@ class Driver(WiFiDeviceInterface):
                 "p2p_discovery": supported,
                 "p2p_group": supported,
                 "nan_discovery": supported,
+                "nan_followup": supported,
                 "nan_data_path": supported,
             },
             aware=WiFiAwareCapabilities(
                 discovery=supported,
+                followup=supported,
                 data_path=supported,
                 interface_mode="NAN",
                 data_interface_mode="NAN-data",
@@ -313,6 +321,11 @@ class Driver(WiFiDeviceInterface):
             for key, value in self.nan_matches.items()
             if value.session_id != session_id
         }
+        self.nan_followups = {
+            key: value
+            for key, value in self.nan_followups.items()
+            if value.session_id != session_id
+        }
 
     def list_nan_discovery_sessions(self):
         return list(self.nan_sessions.values())
@@ -323,6 +336,71 @@ class Driver(WiFiDeviceInterface):
         return [
             value
             for value in self.nan_matches.values()
+            if session_id is None or value.session_id == session_id
+        ]
+
+    def send_nan_followup(self, match_id: str, payload: bytes, timeout: float = 15.0):
+        self._ready()
+        match = self.nan_matches.get(match_id)
+        if match is None:
+            raise RadioResourceNotFoundError("NAN match was not found")
+        if len(payload) > 255:
+            raise InvalidRadioRequestError(
+                "NAN follow-up payload must be at most 255 bytes"
+            )
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise InvalidRadioRequestError(
+                "The iw NAN backend supports UTF-8 follow-up payloads only"
+            ) from exc
+        if "\x00" in text or "\n" in text or "\r" in text:
+            raise InvalidRadioRequestError(
+                "NAN follow-up payload cannot contain NUL or line breaks"
+            )
+        now = datetime.now(timezone.utc).isoformat()
+        sent = NanFollowup(
+            id=uuid.uuid4().hex,
+            session_id=match.session_id,
+            match_id=match.id,
+            peer_address=match.peer_address,
+            local_instance_id=match.local_instance_id,
+            peer_instance_id=match.peer_instance_id,
+            payload_base64=base64.b64encode(payload).decode("ascii"),
+            direction="sent",
+            created_at=now,
+        )
+        received = NanFollowup(
+            id=uuid.uuid4().hex,
+            session_id=match.session_id,
+            match_id=match.id,
+            peer_address=match.peer_address,
+            local_instance_id=match.local_instance_id,
+            peer_instance_id=match.peer_instance_id,
+            payload_base64=base64.b64encode(b"mock-npub|4873").decode("ascii"),
+            direction="received",
+            created_at=now,
+        )
+        self.nan_followups[sent.id] = sent
+        self.nan_followups[received.id] = received
+        while len(self.nan_followups) > self.maximum_nan_followups:
+            self.nan_followups.pop(next(iter(self.nan_followups)))
+        self._emit(
+            "wifi_nan_followup_sent",
+            {"followup_id": sent.id, "match_id": match.id},
+        )
+        self._emit(
+            "wifi_nan_followup_received",
+            {"followup_id": received.id, "match_id": match.id},
+        )
+        return sent
+
+    def list_nan_followups(self, session_id: Optional[str] = None):
+        if session_id and session_id not in self.nan_sessions:
+            raise RadioResourceNotFoundError("NAN discovery session was not found")
+        return [
+            value
+            for value in self.nan_followups.values()
             if session_id is None or value.session_id == session_id
         ]
 
@@ -376,5 +454,6 @@ class Driver(WiFiDeviceInterface):
         self.groups.clear()
         self.nan_sessions.clear()
         self.nan_matches.clear()
+        self.nan_followups.clear()
         self.nan_data_paths.clear()
         super().close()

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 import re
 import subprocess
 import threading
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Union
 import uuid
 
 from totem.devices.network.errors import (
@@ -20,7 +20,7 @@ from totem.devices.network.errors import (
     RadioOperationError,
     RadioResourceNotFoundError,
 )
-from totem.devices.network.models import NanDiscoverySession, NanMatch
+from totem.devices.network.models import NanDiscoverySession, NanFollowup, NanMatch
 
 
 _SERVICE_NAME = re.compile(r"^[A-Za-z0-9.-]{1,255}$")
@@ -29,9 +29,15 @@ _FUNCTION_RESULT = re.compile(
 )
 _MATCH = re.compile(
     r"NAN\(cookie=(?P<cookie>0x[0-9a-fA-F]+|\d+)\):\s*"
-    r"DiscoveryResult,\s*peer_id=(?P<peer>\d+),\s*"
+    r"(?:DiscoveryResult|Replied),\s*peer_id=(?P<peer>\d+),\s*"
     r"local_id=(?P<local>\d+),\s*peer_mac=(?P<mac>[0-9A-Fa-f:]{17})"
-    r"(?:,\s*info=(?P<info>\S+))?"
+    r"(?:,\s*info=(?P<info>.*))?$"
+)
+_FOLLOWUP = re.compile(
+    r"NAN\(cookie=(?P<cookie>0x[0-9a-fA-F]+|\d+)\):\s*"
+    r"FollowUpReceive,\s*peer_id=(?P<peer>\d+),\s*"
+    r"local_id=(?P<local>\d+),\s*peer_mac=(?P<mac>[0-9A-Fa-f:]{17})"
+    r"(?:,\s*info=(?P<info>.*))?$"
 )
 
 
@@ -65,6 +71,7 @@ class NanDiscoveryController:
         popen_factory: Callable[..., Any] = subprocess.Popen,
         event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
         maximum_sessions: int = 4,
+        maximum_followups: int = 128,
     ):
         self.phy_name = phy_name
         self.interface = interface
@@ -73,8 +80,10 @@ class NanDiscoveryController:
         self._popen_factory = popen_factory
         self._event_callback = event_callback
         self.maximum_sessions = maximum_sessions
+        self.maximum_followups = max(1, maximum_followups)
         self._sessions: Dict[str, NanDiscoverySession] = {}
         self._matches: Dict[str, NanMatch] = {}
+        self._followups: Dict[str, NanFollowup] = {}
         self._timers: Dict[str, threading.Timer] = {}
         self._monitor = None
         self._monitor_thread: Optional[threading.Thread] = None
@@ -148,6 +157,7 @@ class NanDiscoveryController:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
                 text=True,
+                errors="surrogateescape",
                 bufsize=1,
             )
         except OSError as exc:
@@ -168,8 +178,11 @@ class NanDiscoveryController:
         for line in monitor.stdout:
             self.process_event_line(line)
 
-    def process_event_line(self, line: str) -> Optional[NanMatch]:
-        found = _MATCH.search(line)
+    def process_event_line(self, line: str) -> Optional[Union[NanMatch, NanFollowup]]:
+        followup = _FOLLOWUP.search(line.rstrip("\n"))
+        if followup:
+            return self._record_received_followup(followup)
+        found = _MATCH.search(line.rstrip("\n"))
         if not found:
             return None
         cookie = int(found.group("cookie"), 0)
@@ -185,13 +198,20 @@ class NanDiscoveryController:
             if session is None:
                 return None
             peer_address = found.group("mac").lower()
-            match_id = "{}_{}".format(session.id, peer_address.replace(":", "_"))
+            local_instance_id = int(found.group("local"))
+            peer_instance_id = int(found.group("peer"))
+            match_id = "{}_{}_{}_{}".format(
+                session.id,
+                peer_address.replace(":", "_"),
+                local_instance_id,
+                peer_instance_id,
+            )
             model = NanMatch(
                 id=match_id,
                 session_id=session.id,
                 peer_address=peer_address,
-                local_instance_id=int(found.group("local")),
-                peer_instance_id=int(found.group("peer")),
+                local_instance_id=local_instance_id,
+                peer_instance_id=peer_instance_id,
                 service_info_base64=_api_info(found.group("info") or ""),
                 last_seen_at=_utc_now(),
             )
@@ -206,6 +226,149 @@ class NanDiscoveryController:
             },
         )
         return model
+
+    def _record_received_followup(self, found: re.Match) -> Optional[NanFollowup]:
+        cookie = int(found.group("cookie"), 0)
+        peer_address = found.group("mac").lower()
+        local_instance_id = int(found.group("local"))
+        peer_instance_id = int(found.group("peer"))
+        with self._lock:
+            session = next(
+                (
+                    value
+                    for value in self._sessions.values()
+                    if cookie in (value.publish_cookie, value.subscribe_cookie)
+                ),
+                None,
+            )
+            if session is None:
+                return None
+            match = next(
+                (
+                    value
+                    for value in self._matches.values()
+                    if value.session_id == session.id
+                    and value.peer_address == peer_address
+                    and value.local_instance_id == local_instance_id
+                    and value.peer_instance_id == peer_instance_id
+                ),
+                None,
+            )
+            if match is None:
+                return None
+            payload = (found.group("info") or "").encode("utf-8", "surrogateescape")
+            model = self._append_followup(
+                match=match, payload=payload, direction="received"
+            )
+        self._emit(
+            "wifi_nan_followup_received",
+            {
+                "followup_id": model.id,
+                "match_id": model.match_id,
+                "session_id": model.session_id,
+                "peer_address": model.peer_address,
+            },
+        )
+        return model
+
+    def _append_followup(
+        self, *, match: NanMatch, payload: bytes, direction: str
+    ) -> NanFollowup:
+        model = NanFollowup(
+            id=uuid.uuid4().hex,
+            session_id=match.session_id,
+            match_id=match.id,
+            peer_address=match.peer_address,
+            local_instance_id=match.local_instance_id,
+            peer_instance_id=match.peer_instance_id,
+            payload_base64=base64.b64encode(payload).decode("ascii"),
+            direction=direction,
+            created_at=_utc_now(),
+        )
+        self._followups[model.id] = model
+        while len(self._followups) > self.maximum_followups:
+            self._followups.pop(next(iter(self._followups)))
+        return model
+
+    @staticmethod
+    def _followup_text(payload: bytes) -> str:
+        if len(payload) > 255:
+            raise InvalidRadioRequestError(
+                "NAN follow-up payload must be at most 255 bytes"
+            )
+        try:
+            text = payload.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise InvalidRadioRequestError(
+                "The iw NAN backend supports UTF-8 follow-up payloads only"
+            ) from exc
+        if "\x00" in text or "\n" in text or "\r" in text:
+            raise InvalidRadioRequestError(
+                "NAN follow-up payload cannot contain NUL or line breaks"
+            )
+        return text
+
+    def send_followup(
+        self, match_id: str, payload: bytes, timeout: float = 15.0
+    ) -> NanFollowup:
+        text = self._followup_text(payload)
+        with self._lock:
+            if self._closed:
+                raise RadioOperationError("NAN discovery controller is closed")
+            match = self._matches.get(match_id)
+            if match is None:
+                raise RadioResourceNotFoundError("NAN match was not found")
+            session = self._sessions.get(match.session_id)
+            if session is None:
+                raise RadioResourceNotFoundError("NAN discovery session was not found")
+            arguments = [
+                self.iw_path,
+                "dev",
+                self.interface,
+                "nan",
+                "add_func",
+                "type",
+                "followup",
+                "name",
+                session.service_name,
+            ]
+            if text:
+                arguments.extend(["info", text])
+            arguments.extend(
+                [
+                    "flw_up_id",
+                    str(match.local_instance_id),
+                    "flw_up_req_id",
+                    str(match.peer_instance_id),
+                    "flw_up_dest",
+                    match.peer_address,
+                ]
+            )
+            output = self._run(arguments, timeout)
+            self._function_result(output)
+            model = self._append_followup(
+                match=match, payload=payload, direction="sent"
+            )
+        self._emit(
+            "wifi_nan_followup_sent",
+            {
+                "followup_id": model.id,
+                "match_id": model.match_id,
+                "session_id": model.session_id,
+                "peer_address": model.peer_address,
+            },
+        )
+        return model
+
+    def list_followups(self, session_id: Optional[str] = None):
+        with self._lock:
+            if session_id and session_id not in self._sessions:
+                raise RadioResourceNotFoundError("NAN discovery session was not found")
+            return [
+                value
+                for value in self._followups.values()
+                if session_id is None or value.session_id == session_id
+            ]
 
     def start_session(
         self,
@@ -349,6 +512,11 @@ class NanDiscoveryController:
             self._matches = {
                 key: value
                 for key, value in self._matches.items()
+                if value.session_id != session_id
+            }
+            self._followups = {
+                key: value
+                for key, value in self._followups.items()
                 if value.session_id != session_id
             }
             if not self._sessions:

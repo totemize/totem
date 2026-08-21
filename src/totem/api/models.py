@@ -50,6 +50,8 @@ class EventType(str, Enum):
     WIFI_P2P_GROUP_REMOVED = "wifi_p2p_group_removed"
     WIFI_NAN_MATCH_FOUND = "wifi_nan_match_found"
     WIFI_NAN_MATCH_UPDATED = "wifi_nan_match_updated"
+    WIFI_NAN_FOLLOWUP_SENT = "wifi_nan_followup_sent"
+    WIFI_NAN_FOLLOWUP_RECEIVED = "wifi_nan_followup_received"
     WIFI_NAN_DATA_PATH_READY = "wifi_nan_data_path_ready"
     WIFI_NAN_DATA_PATH_REMOVED = "wifi_nan_data_path_removed"
     BLE_ADVERTISEMENT_FOUND = "ble_advertisement_found"
@@ -108,6 +110,7 @@ class OperationSupportResponse(BaseModel):
 
 class WiFiAwareCapabilitiesResponse(BaseModel):
     discovery: OperationSupportResponse
+    followup: OperationSupportResponse
     data_path: OperationSupportResponse
     interface_mode: Optional[str] = None
     data_interface_mode: Optional[str] = None
@@ -284,6 +287,24 @@ class NanMatchResponse(BaseModel):
     peer_instance_id: int = Field(ge=1)
     service_info_base64: str
     last_seen_at: str
+
+
+class NanFollowupRequest(BaseModel):
+    match_id: str = Field(min_length=1, max_length=256)
+    payload_base64: str
+    timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+
+
+class NanFollowupResponse(BaseModel):
+    id: str
+    session_id: str
+    match_id: str
+    peer_address: str
+    local_instance_id: int = Field(ge=1)
+    peer_instance_id: int = Field(ge=1)
+    payload_base64: str
+    direction: str
+    created_at: str
 
 
 class NanDataPathRequest(BaseModel):

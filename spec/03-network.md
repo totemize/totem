@@ -53,8 +53,8 @@ The device manager is the policy-free hardware boundary. It exposes:
 - Wi-Fi Direct discovery, peer inventory, and create-or-join/list/remove group
   lifecycle;
 - Wi-Fi Aware/NAN capability detection, bounded publish/subscribe discovery,
-  match inventory, and typed NAN data-path support or an explicit unsupported
-  reason;
+  match inventory, bounded UTF-8 follow-up messages, and typed NAN data-path
+  support or an explicit unsupported reason;
 - bounded, independently identified BLE discovery sessions, structured
   advertisements, advertising lifecycle, generic connection state, and GATT
   client inventory/read/write/notification lifecycle;
@@ -74,7 +74,12 @@ registered: an undiscoverable open listener is not a successful primitive.
 The advertisement carries only the FIPS service UUID and the assigned 16-bit
 PSM, never an npub or trust decision. A NAN discovery function likewise
 carries caller-supplied opaque service information; the device manager does
-not interpret it as peer identity. NAN data-path results MUST return a scoped
+not interpret it as peer identity. A NAN follow-up MUST target an existing
+match so the device manager derives the local instance ID, peer requester ID,
+and destination MAC rather than accepting an inconsistent tuple from a caller.
+The `iw` backend MUST reject payloads it cannot represent losslessly as one
+UTF-8 command argument and MUST bound retained sent/received state. NAN
+data-path results MUST return a scoped
 IPv6 address and interface suitable for interface-bound FIPS UDP, or report
 `supported: false` without changing infrastructure Wi-Fi, FIPS, or routes.
 Support reporting MUST include the current process authority required by the

@@ -37,6 +37,7 @@ class OperationSupport:
 @dataclass(frozen=True)
 class WiFiAwareCapabilities:
     discovery: OperationSupport
+    followup: OperationSupport
     data_path: OperationSupport
     interface_mode: Optional[str] = None
     data_interface_mode: Optional[str] = None
@@ -167,6 +168,19 @@ class NanMatch:
     peer_instance_id: int
     service_info_base64: str
     last_seen_at: str
+
+
+@dataclass(frozen=True)
+class NanFollowup:
+    id: str
+    session_id: str
+    match_id: str
+    peer_address: str
+    local_instance_id: int
+    peer_instance_id: int
+    payload_base64: str
+    direction: str
+    created_at: str
 
 
 @dataclass(frozen=True)

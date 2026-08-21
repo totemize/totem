@@ -372,6 +372,7 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
                 None if p2p_supported else "NetworkManager P2P device absent",
             ),
             "nan_discovery": OperationSupport(nan_supported, nan_reason),
+            "nan_followup": OperationSupport(nan_supported, nan_reason),
             "nan_data_path": OperationSupport(False, nan_data_reason),
         }
         return WiFiCapabilities(
@@ -392,6 +393,7 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
             operations=operations,
             aware=WiFiAwareCapabilities(
                 discovery=operations["nan_discovery"],
+                followup=operations["nan_followup"],
                 data_path=operations["nan_data_path"],
                 interface_mode=nan_mode,
                 data_interface_mode=nan_data_mode,
@@ -465,6 +467,19 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
 
     def list_nan_matches(self, session_id: Optional[str] = None):
         return self._nan.list_matches(session_id) if self._nan is not None else []
+
+    def send_nan_followup(self, match_id: str, payload: bytes, timeout: float = 15.0):
+        support = self.get_capabilities().aware.followup
+        if not support.supported:
+            raise UnsupportedFeatureError(
+                support.reason or "Wi-Fi Aware follow-ups are unsupported"
+            )
+        if self._nan is None:
+            raise RadioResourceNotFoundError("NAN match was not found")
+        return self._nan.send_followup(match_id, payload, timeout)
+
+    def list_nan_followups(self, session_id: Optional[str] = None):
+        return self._nan.list_followups(session_id) if self._nan is not None else []
 
     def create_nan_data_path(
         self, match_id: str, port: int = 4873, timeout: float = 30.0

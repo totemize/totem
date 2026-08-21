@@ -15,6 +15,7 @@ from totem.devices.network.capabilities import (
     parse_rfkill_json,
 )
 from totem.devices.network.errors import (
+    InvalidRadioRequestError,
     RadioConflictError,
     RadioOperationError,
     RadioResourceNotFoundError,
@@ -118,6 +119,7 @@ def test_mock_radios_report_real_shape_and_transition_idempotently():
     capabilities = manager.get_capabilities()
     assert capabilities.wifi.operations["p2p_group"].supported
     assert capabilities.wifi.aware.discovery.supported
+    assert capabilities.wifi.aware.followup.supported
     assert capabilities.wifi.aware.data_path.supported
     assert capabilities.wifi.aware.interface_mode == "NAN"
     assert capabilities.wifi.aware.data_interface_mode == "NAN-data"
@@ -144,6 +146,7 @@ def test_network_manager_reports_nan_absence_as_typed_unsupported(monkeypatch):
     capabilities = driver.get_capabilities()
 
     assert not capabilities.aware.discovery.supported
+    assert not capabilities.aware.followup.supported
     assert not capabilities.aware.data_path.supported
     assert capabilities.aware.interface_mode is None
     assert capabilities.aware.data_interface_mode is None
@@ -167,6 +170,7 @@ def test_network_manager_detects_nan_interface_mode(monkeypatch):
     capabilities = driver.get_capabilities()
 
     assert capabilities.aware.discovery.supported
+    assert capabilities.aware.followup.supported
     assert not capabilities.aware.data_path.supported
     assert capabilities.aware.data_path.reason == (
         "nl80211 NAN data interface mode absent"
@@ -240,6 +244,8 @@ def test_nan_controller_publish_match_and_cleanup_lifecycle():
 
     def runner(arguments, timeout):
         commands.append(arguments)
+        if "add_func" in arguments and "followup" in arguments:
+            return "instance_id: 3, cookie: 103\n"
         if "add_func" in arguments and "publish" in arguments:
             return "instance_id: 1, cookie: 101\n"
         if "add_func" in arguments and "subscribe" in arguments:
@@ -269,6 +275,7 @@ def test_nan_controller_publish_match_and_cleanup_lifecycle():
         runner=runner,
         popen_factory=lambda *args, **kwargs: monitor,
         event_callback=lambda event, data: events.append((event, data)),
+        maximum_followups=2,
     )
 
     session = controller.start_session(
@@ -290,6 +297,39 @@ def test_nan_controller_publish_match_and_cleanup_lifecycle():
     assert events[0][0] == "wifi_nan_match_found"
     publish = next(command for command in commands if "publish" in command)
     assert "eyJwb3J0Ijo0ODczfQ" in publish
+    sent = controller.send_followup(match.id, b"npub1example|4873")
+    received = controller.process_event_line(
+        "NAN(cookie=101): FollowUpReceive, peer_id=7, local_id=1, "
+        "peer_mac=02:00:00:00:20:02, info=npub1peer|4873"
+    )
+    assert sent.direction == "sent"
+    assert base64.b64decode(sent.payload_base64) == b"npub1example|4873"
+    assert received is not None
+    assert received.direction == "received"
+    assert base64.b64decode(received.payload_base64) == b"npub1peer|4873"
+    assert controller.list_followups(session.id) == [sent, received]
+    followup_command = next(command for command in commands if "followup" in command)
+    assert followup_command == [
+        "/usr/bin/iw",
+        "dev",
+        "totemnan0",
+        "nan",
+        "add_func",
+        "type",
+        "followup",
+        "name",
+        "myco.fips.v1",
+        "info",
+        "npub1example|4873",
+        "flw_up_id",
+        "1",
+        "flw_up_req_id",
+        "7",
+        "flw_up_dest",
+        "02:00:00:00:20:02",
+    ]
+    newest = controller.send_followup(match.id, b"newest")
+    assert controller.list_followups(session.id) == [received, newest]
     assert [
         "/usr/bin/iw",
         "phy",
@@ -305,6 +345,7 @@ def test_nan_controller_publish_match_and_cleanup_lifecycle():
     controller.stop_session(session.id)
     assert monitor.terminated
     assert controller.list_sessions() == []
+    assert controller.list_followups() == []
     assert [command[-1] for command in commands if "rm_func" in command] == [
         "101",
         "102",
@@ -353,6 +394,22 @@ def test_nan_controller_rolls_back_cluster_when_subscription_fails():
     assert ["iw", "dev", "totemnan0", "nan", "stop"] in commands
     assert ["iw", "dev", "totemnan0", "del"] in commands
     assert controller.list_sessions() == []
+
+
+def test_nan_followup_rejects_unrepresentable_or_oversized_payloads():
+    from totem.devices.network.nan import NanDiscoveryController
+
+    controller = NanDiscoveryController(
+        phy_name="phy9",
+        interface="totemnan0",
+        iw_path="iw",
+        runner=lambda arguments, timeout: "",
+    )
+
+    for payload in (b"\xff", b"line\nbreak", b"x" * 256):
+        with pytest.raises(InvalidRadioRequestError) as exc_info:
+            controller.send_followup("missing", payload)
+        assert getattr(exc_info.value, "code", None) == "invalid_radio_request"
 
 
 def test_l2cap_transport_assigns_psm_and_closes_listener_idempotently():

@@ -50,6 +50,8 @@ from totem.api.models import (
     NanDataPathResponse,
     NanDiscoveryRequest,
     NanDiscoverySessionResponse,
+    NanFollowupRequest,
+    NanFollowupResponse,
     NanMatchResponse,
     NetworkCapabilitiesResponse,
     NetworkConfigurationRequest,
@@ -538,6 +540,32 @@ def create_app(
         manager = await _get_manager(request, "network")
         values = await _call_hardware(
             request, "network", manager.list_nan_matches, session_id
+        )
+        return serialize(values)
+
+    @application.post(
+        "/network/wifi/aware/followups", response_model=NanFollowupResponse
+    )
+    async def nan_followup_send(request: Request, command: NanFollowupRequest):
+        manager = await _get_manager(request, "network")
+        payload = _decode_base64(command.payload_base64, "payload_base64")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.send_nan_followup,
+            command.match_id,
+            payload,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get(
+        "/network/wifi/aware/followups", response_model=list[NanFollowupResponse]
+    )
+    async def nan_followups(request: Request, session_id: Optional[str] = None):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(
+            request, "network", manager.list_nan_followups, session_id
         )
         return serialize(values)
 

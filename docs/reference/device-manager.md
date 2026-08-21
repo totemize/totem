@@ -165,8 +165,8 @@ Capability and status responses include:
   supported includes;
 - explicit LE L2CAP CoC listen/connect/descriptor-handoff capability and
   bounded resource limits;
-- explicit NAN discovery and data-path capability, including the control and
-  data interface modes independently;
+- explicit NAN discovery, UTF-8 follow-up, and data-path capability, including
+  the control and data interface modes independently;
 - Wi-Fi and Bluetooth soft/hard block state, every active Wi-Fi interface with
   mode/channel/addresses, P2P discovery/groups, NAN sessions/data paths, and
   active BLE work.
@@ -187,6 +187,7 @@ The complete HTTP surface is:
 | P2P groups | `POST`, `GET /network/wifi/p2p/groups`; `DELETE /network/wifi/p2p/groups/{id}` | Create-or-join with a peer, list live state/interface/addresses, or remove it. |
 | NAN discovery | `POST`, `GET /network/wifi/aware/discovery`; `DELETE /network/wifi/aware/discovery/{id}` | Own bounded publish/subscribe functions for a caller-supplied service name and opaque base64 information. |
 | NAN matches | `GET /network/wifi/aware/matches` | Return match/session IDs, peer MAC, local/peer instance IDs, opaque information, and last-seen time. |
+| NAN follow-ups | `POST`, `GET /network/wifi/aware/followups` | Send a bounded UTF-8 service message to a match or list bounded sent/received messages. Payloads remain strict base64 at HTTP. |
 | NAN data paths | `POST`, `GET /network/wifi/aware/data-paths`; `DELETE /network/wifi/aware/data-paths/{id}` | Return or remove a NAN data interface plus scoped local/peer IPv6 and FIPS UDP port when the platform backend supports negotiation. |
 | BLE discovery | `POST`, `DELETE /network/bluetooth/discovery` | Start/stop one independently identified, bounded scan session. |
 | BLE observations | `GET /network/bluetooth/devices` | Return address/type/name, UUIDs, base64 data, RSSI/Tx power, timestamps, and connection state. |
@@ -249,9 +250,15 @@ explicit close.
 
 The Linux NAN discovery backend creates a manager-owned `totemnan0` interface,
 starts nl80211 NAN through `iw`, installs paired publish/subscribe functions,
-parses match events, and removes only its own functions and interface. Service
-information is base64url-encoded on the `iw` carrier and remains strict base64
-at HTTP. Discovery is supported only when the PHY advertises `NAN` and the
+parses match and follow-up events, and removes only its own functions and
+interface. Discovery service information is base64url-encoded on the `iw`
+carrier and remains strict base64 at HTTP. Follow-ups use match-derived local
+and peer instance IDs plus the peer MAC; their service information is sent as
+UTF-8 because `iw` accepts a text argument rather than arbitrary binary. NUL,
+line breaks, non-UTF-8 data, and payloads over the NAN 255-byte limit fail with
+a typed validation error. Retained sent/received follow-up history is bounded
+and removed with its session. Discovery and follow-ups are supported only when
+the PHY advertises `NAN` and the
 calling process already has `CAP_NET_ADMIN`; the deployment does not grant
 that capability to the unprivileged API service or weaken its systemd
 boundary. Without a future narrow broker, the service therefore reports a

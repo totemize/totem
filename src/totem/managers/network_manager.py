@@ -127,6 +127,12 @@ class NetworkManager:
     def list_nan_matches(self, session_id=None):
         return self.wifi_device.list_nan_matches(session_id)
 
+    def send_nan_followup(self, match_id: str, payload: bytes, timeout: float = 15.0):
+        return self.wifi_device.send_nan_followup(match_id, payload, timeout)
+
+    def list_nan_followups(self, session_id=None):
+        return self.wifi_device.list_nan_followups(session_id)
+
     def create_nan_data_path(
         self, match_id: str, port: int = 4873, timeout: float = 30.0
     ):
