@@ -33,14 +33,16 @@ through the device manager:
 
 - `totem-myco transports` reports the live, reasoned device-manager capability
   document and the lanes requested by this service.
-- `totem-myco coc-connect <npub> <address> <psm>` asks the device manager to
-  establish a CoC and hand its file descriptor directly to FIPS.
+- `totem-myco coc-listen`, `coc-listeners`, `coc-handoff`, `coc-close`, and
+  `coc-connect` expose the bounded listener/accepted/outbound lifecycle. The
+  device manager hands established descriptors directly to FIPS.
 - `totem-myco aware-discover [udp-port] [seconds]` publishes
   `myco.fips.v1`; its service data contains only the two-byte little-endian UDP
   port, never an identity.
-- `totem-myco aware-connect <npub> <match-id> [udp-port]` asks the device
-  manager for the data path, converts the scoped IPv6 address to a numeric
-  scope, and submits it to the existing FIPS control socket as a UDP peer.
+- `totem-myco aware-matches`, `aware-connect`, `aware-remove`, and `aware-stop`
+  expose match, data-path, and cleanup operations. A connected path is
+  converted to a numeric-scope IPv6 endpoint and submitted to the existing
+  FIPS control socket as a UDP peer.
 - `totem-myco route <npub> <lan|softap> <udp-endpoint>` submits an already
   discovered LAN or SoftAP UDP endpoint through the same FIPS control seam.
 
@@ -49,6 +51,9 @@ the peer's stable FIPS address on `fips0`. CoC, Aware, LAN, and SoftAP are lanes
 under that overlay, so Noise identity, routing, and fallback remain FIPS-owned.
 The Myco service calls only loopback device-manager HTTP and the existing
 group-scoped `/run/fips/control.sock`; it gains no radio or key privilege.
+The npub supplied with a lane is only a FIPS dial hint. FIPS authenticates it
+with Noise and applies its own peer ACL; a discovery result alone grants no
+Myco Circle membership or file access.
 
 Production Wi-Fi Aware data-path creation is currently reported unsupported by
 the Linux device manager until an NDP backend exists. End-to-end CoC likewise

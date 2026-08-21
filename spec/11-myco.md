@@ -63,6 +63,9 @@ the peer's stable FIPS mesh address. FIPS owns Noise identity, framing,
 routing, selection among usable links, and fallback. The device manager owns
 only the bounded radio resources that it creates. The Myco integration records
 which lane it requested, but does not promote that observation into trust.
+An operator-supplied or follow-up-discovered npub is only a dial hint: FIPS
+MUST authenticate it through Noise and enforce its peer ACL. Myco pairing and
+Circle membership remain separate, explicit state transitions.
 
 The radio adapter MUST call the device manager over an explicit loopback URL
 and FIPS through `/run/fips/control.sock`; it MUST NOT receive additional

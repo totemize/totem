@@ -26,9 +26,15 @@ Usage:
   totem-myco route <peer-npub> <lan|softap> <udp-endpoint>
   totem-myco unroute <peer-npub> <lan|softap>
   totem-myco aware-discover [udp-port] [seconds]
+  totem-myco aware-matches
+  totem-myco aware-stop <session-id>
   totem-myco aware-connect <peer-npub> <match-id> [udp-port]
   totem-myco aware-remove <data-path-id>
-  totem-myco coc-connect <peer-npub> <bluetooth-address> <psm> [public|random]";
+  totem-myco coc-listen [psm] [public|random]
+  totem-myco coc-listeners
+  totem-myco coc-close <listener-id>
+  totem-myco coc-connect <peer-npub> <bluetooth-address> <psm> [public|random]
+  totem-myco coc-handoff <peer-npub> <connection-id>";
 
 #[tokio::main]
 async fn main() {
@@ -123,6 +129,11 @@ async fn run() -> Result<()> {
                 .await?,
             )
         }
+        "aware-matches" => print_response(get("/transports/aware/matches").await?),
+        "aware-stop" => {
+            let id = required(args.next(), "session id")?;
+            print_response(delete(&format!("/transports/aware/discovery/{id}")).await?)
+        }
         "aware-connect" => {
             let npub = required(args.next(), "peer npub")?;
             let match_id = required(args.next(), "match id")?;
@@ -139,6 +150,22 @@ async fn run() -> Result<()> {
             let id = required(args.next(), "data path id")?;
             print_response(delete(&format!("/transports/aware/data-paths/{id}")).await?)
         }
+        "coc-listen" => {
+            let psm = optional_u16(args.next(), "PSM")?.unwrap_or(0);
+            let address_type = args.next().unwrap_or_else(|| "public".into());
+            print_response(
+                post(
+                    "/transports/coc/listeners",
+                    Some(json!({"psm": psm, "addressType": address_type})),
+                )
+                .await?,
+            )
+        }
+        "coc-listeners" => print_response(get("/transports/coc/listeners").await?),
+        "coc-close" => {
+            let id = required(args.next(), "listener id")?;
+            print_response(delete(&format!("/transports/coc/listeners/{id}")).await?)
+        }
         "coc-connect" => {
             let npub = required(args.next(), "peer npub")?;
             let peer_address = required(args.next(), "Bluetooth address")?;
@@ -153,6 +180,17 @@ async fn run() -> Result<()> {
                         "psm": psm,
                         "addressType": address_type,
                     })),
+                )
+                .await?,
+            )
+        }
+        "coc-handoff" => {
+            let npub = required(args.next(), "peer npub")?;
+            let id = required(args.next(), "connection id")?;
+            print_response(
+                post(
+                    &format!("/transports/coc/connections/{id}/fips-handoff"),
+                    Some(json!({"peerNpub": npub})),
                 )
                 .await?,
             )

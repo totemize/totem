@@ -44,6 +44,11 @@ pub async fn serve(app: Arc<App>) -> anyhow::Result<()> {
         )
         .route("/transports/aware/discovery", post(control_aware_discovery))
         .route(
+            "/transports/aware/discovery/{id}",
+            axum::routing::delete(control_aware_discovery_stop),
+        )
+        .route("/transports/aware/matches", get(control_aware_matches))
+        .route(
             "/transports/aware/data-paths",
             post(control_aware_data_path),
         )
@@ -52,6 +57,18 @@ pub async fn serve(app: Arc<App>) -> anyhow::Result<()> {
             axum::routing::delete(control_aware_data_path_remove),
         )
         .route("/transports/coc", post(control_coc_connect))
+        .route(
+            "/transports/coc/listeners",
+            get(control_coc_listeners).post(control_coc_listener_create),
+        )
+        .route(
+            "/transports/coc/listeners/{id}",
+            axum::routing::delete(control_coc_listener_close),
+        )
+        .route(
+            "/transports/coc/connections/{id}/fips-handoff",
+            post(control_coc_handoff),
+        )
         .layer(DefaultBodyLimit::max(128 * 1024))
         .with_state(app);
 
@@ -246,6 +263,23 @@ async fn control_aware_discovery(
     }
 }
 
+async fn control_aware_discovery_stop(
+    State(app): State<Arc<App>>,
+    Path(id): Path<String>,
+) -> Response {
+    match app.stop_aware_discovery(&id).await {
+        Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
+async fn control_aware_matches(State(app): State<Arc<App>>) -> Response {
+    match app.aware_matches().await {
+        Ok(matches) => Json(matches).into_response(),
+        Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AwareDataPathInput {
@@ -303,6 +337,65 @@ async fn control_coc_connect(State(app): State<Arc<App>>, Json(input): Json<CocI
         .await
     {
         Ok(connection) => Json(connection).into_response(),
+        Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CocListenerInput {
+    psm: Option<u16>,
+    mtu: Option<u16>,
+    address_type: Option<String>,
+}
+
+async fn control_coc_listener_create(
+    State(app): State<Arc<App>>,
+    Json(input): Json<CocListenerInput>,
+) -> Response {
+    match app
+        .create_coc_listener(
+            input.psm.unwrap_or(0),
+            input.mtu.unwrap_or(1024),
+            input.address_type.as_deref().unwrap_or("public"),
+        )
+        .await
+    {
+        Ok(listener) => Json(listener).into_response(),
+        Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
+async fn control_coc_listeners(State(app): State<Arc<App>>) -> Response {
+    match app.coc_listeners().await {
+        Ok(listeners) => Json(listeners).into_response(),
+        Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
+async fn control_coc_listener_close(
+    State(app): State<Arc<App>>,
+    Path(id): Path<String>,
+) -> Response {
+    match app.close_coc_listener(&id).await {
+        Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CocHandoffInput {
+    peer_npub: String,
+}
+
+async fn control_coc_handoff(
+    State(app): State<Arc<App>>,
+    Path(id): Path<String>,
+    Json(input): Json<CocHandoffInput>,
+) -> Response {
+    match app.handoff_coc(&input.peer_npub, &id).await {
+        Ok(status) => Json(status).into_response(),
         Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
     }
 }

@@ -14,8 +14,8 @@ use crate::model::{
 };
 use crate::protocol::{self, FileMessage, PairPayload};
 use crate::transport::{
-    L2capConnection, NanDataPath, NanDiscovery, PeerLane, TransportKind, TransportManager,
-    TransportStatus,
+    L2capConnection, L2capListener, NanDataPath, NanDiscovery, NanMatch, PeerLane, TransportKind,
+    TransportManager, TransportStatus,
 };
 
 pub struct App {
@@ -95,9 +95,6 @@ impl App {
         address: &str,
         kind: &str,
     ) -> Result<PeerLane> {
-        if !self.is_in_circle(npub) {
-            bail!("direct UDP lanes require a Circle peer");
-        }
         self.transport
             .connect_udp_lane(npub, address, TransportKind::udp_lane(kind)?)
             .await
@@ -125,10 +122,15 @@ impl App {
         match_id: &str,
         port: u16,
     ) -> Result<NanDataPath> {
-        if !self.is_in_circle(npub) {
-            bail!("Wi-Fi Aware data paths require a Circle peer");
-        }
         self.transport.create_aware_path(npub, match_id, port).await
+    }
+
+    pub async fn aware_matches(&self) -> Result<Vec<NanMatch>> {
+        self.transport.aware_matches().await
+    }
+
+    pub async fn stop_aware_discovery(&self, session_id: &str) -> Result<()> {
+        self.transport.stop_aware_discovery(session_id).await
     }
 
     pub async fn remove_aware_path(&self, data_path_id: &str) -> Result<()> {
@@ -143,12 +145,32 @@ impl App {
         mtu: u16,
         address_type: &str,
     ) -> Result<L2capConnection> {
-        if !self.is_in_circle(npub) {
-            bail!("LE CoC handoff requires a Circle peer");
-        }
         self.transport
             .connect_coc(npub, peer_address, psm, mtu, address_type)
             .await
+    }
+
+    pub async fn create_coc_listener(
+        &self,
+        psm: u16,
+        mtu: u16,
+        address_type: &str,
+    ) -> Result<L2capListener> {
+        self.transport
+            .create_coc_listener(psm, mtu, address_type)
+            .await
+    }
+
+    pub async fn coc_listeners(&self) -> Result<Vec<L2capListener>> {
+        self.transport.coc_listeners().await
+    }
+
+    pub async fn close_coc_listener(&self, listener_id: &str) -> Result<()> {
+        self.transport.close_coc_listener(listener_id).await
+    }
+
+    pub async fn handoff_coc(&self, npub: &str, connection_id: &str) -> Result<serde_json::Value> {
+        self.transport.handoff_coc(npub, connection_id).await
     }
 
     pub fn create_invite(&self) -> Result<String> {

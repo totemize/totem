@@ -74,6 +74,27 @@ pub struct NanDataPath {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct NanMatch {
+    pub id: String,
+    pub session_id: String,
+    pub peer_address: String,
+    pub service_info_base64: String,
+    pub last_seen_at: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct L2capListener {
+    pub id: String,
+    pub local_address: String,
+    pub address_type: String,
+    pub psm: u16,
+    pub mtu: u16,
+    pub service_uuid: String,
+    pub advertisement_id: Option<String>,
+    pub listening: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct L2capConnection {
     pub id: String,
     pub peer_address: String,
@@ -208,6 +229,17 @@ impl TransportManager {
         Ok(path)
     }
 
+    pub async fn aware_matches(&self) -> Result<Vec<NanMatch>> {
+        let value = self.get_json("/network/wifi/aware/matches").await?;
+        serde_json::from_value(value).context("decode Wi-Fi Aware matches")
+    }
+
+    pub async fn stop_aware_discovery(&self, session_id: &str) -> Result<()> {
+        self.delete(&format!("/network/wifi/aware/discovery/{session_id}"))
+            .await?;
+        Ok(())
+    }
+
     pub async fn remove_aware_path(&self, data_path_id: &str) -> Result<()> {
         self.delete(&format!("/network/wifi/aware/data-paths/{data_path_id}"))
             .await?;
@@ -264,6 +296,51 @@ impl TransportManager {
             resource_id: Some(connection.id.clone()),
         });
         Ok(connection)
+    }
+
+    pub async fn create_coc_listener(
+        &self,
+        psm: u16,
+        mtu: u16,
+        address_type: &str,
+    ) -> Result<L2capListener> {
+        self.post_json(
+            "/network/bluetooth/l2cap/listeners",
+            json!({
+                "psm": psm,
+                "mtu": mtu,
+                "address_type": address_type,
+                "timeout_seconds": 30,
+            }),
+        )
+        .await
+    }
+
+    pub async fn coc_listeners(&self) -> Result<Vec<L2capListener>> {
+        let value = self.get_json("/network/bluetooth/l2cap/listeners").await?;
+        serde_json::from_value(value).context("decode LE CoC listeners")
+    }
+
+    pub async fn close_coc_listener(&self, listener_id: &str) -> Result<()> {
+        self.delete(&format!("/network/bluetooth/l2cap/listeners/{listener_id}"))
+            .await?;
+        Ok(())
+    }
+
+    pub async fn handoff_coc(&self, npub: &str, connection_id: &str) -> Result<Value> {
+        let result = self
+            .post_json(
+                &format!("/network/bluetooth/l2cap/connections/{connection_id}/fips-handoff"),
+                json!({"timeout_seconds": 15}),
+            )
+            .await?;
+        self.replace_lane(PeerLane {
+            npub: npub.to_string(),
+            transport: TransportKind::BluetoothCoc,
+            address: None,
+            resource_id: Some(connection_id.to_string()),
+        });
+        Ok(result)
     }
 
     fn registered_lanes(&self) -> Vec<PeerLane> {
