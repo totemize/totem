@@ -23,6 +23,7 @@ totem_base_packages:
 totem_network_packages:
   - network-manager
   - dnsmasq-base
+  - iw
 
 totem_device_manager_packages:
   - python3-venv

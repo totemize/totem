@@ -38,9 +38,9 @@ Status: Draft (living document — shrinks as we resolve)
   one radio (Pi Zero W). V1 uses exclusive WiFi station/AP fallback and does
   not depend on concurrent AP+station support; define multi-radio behavior
   when that hardware profile is exercised.
-- Measure simultaneous fallback with larger groups. V1's randomized delay and
-  final rescan make one AP host likely, but deliberately avoid a persistent
-  election protocol until live split rates justify it.
+- Measure simultaneous fallback with larger groups. V1's randomized delay,
+  final rescan, and empty-AP retry make convergence likely, but deliberately
+  avoid a persistent election protocol until live split rates justify it.
 
 ### Relay / sync
 

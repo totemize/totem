@@ -52,13 +52,17 @@
     group: root
     mode: "0755"
 
-- name: Install the Wi-Fi fallback systemd unit
+- name: Install the Wi-Fi fallback systemd units
   ansible.builtin.copy:
-    src: totem-wifi-fallback.service
-    dest: /etc/systemd/system/totem-wifi-fallback.service
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
     owner: root
     group: root
     mode: "0644"
+  loop:
+    - totem-wifi-fallback.service
+    - totem-wifi-ap-idle.service
+    - totem-wifi-ap-idle.timer
   notify: Reload systemd for Wi-Fi fallback
 
 - name: Apply Wi-Fi fallback definitions
@@ -78,4 +82,11 @@
   ansible.builtin.systemd_service:
     name: totem-wifi-fallback.service
     enabled: true
+    daemon_reload: true
+
+- name: Enable and start idle AP retry
+  ansible.builtin.systemd_service:
+    name: totem-wifi-ap-idle.timer
+    enabled: true
+    state: started
     daemon_reload: true

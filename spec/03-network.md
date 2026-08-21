@@ -70,9 +70,10 @@ Notes:
   `!Totem` if one is visible, or starts its own `!Totem` AP after a short
   randomized delay and final rescan. The delay makes one host likely when
   several disconnected totems arrive together.
-- AP-host mode is sticky until reboot or an explicit infrastructure reconnect;
-  v1 does not periodically drop connected guests merely to scan for an
-  upstream network.
+- AP-host mode is sticky while any WiFi station is associated. An AP with no
+  associated stations for ten uninterrupted minutes restarts the same
+  infrastructure → existing `!Totem` → AP selection cycle. Failed station
+  detection preserves the AP and resets the idle interval.
 
 ## Discovery and pairing sequence
 

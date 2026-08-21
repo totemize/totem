@@ -19,12 +19,27 @@
 - name: Read systemd service facts
   ansible.builtin.service_facts:
 
-- name: Require Wi-Fi fallback to be enabled
+- name: Require Wi-Fi fallback units to be enabled
   ansible.builtin.command:
-    argv: [systemctl, is-enabled, totem-wifi-fallback.service]
+    argv: [systemctl, is-enabled, "{{ item }}"]
+  loop:
+    - totem-wifi-fallback.service
+    - totem-wifi-ap-idle.timer
   register: verify_totem_wifi_fallback_enabled_command
   changed_when: false
   failed_when: verify_totem_wifi_fallback_enabled_command.stdout != 'enabled'
+
+- name: Require Wi-Fi idle retry to be active
+  ansible.builtin.command:
+    argv: [systemctl, is-active, totem-wifi-ap-idle.timer]
+  register: verify_totem_wifi_idle_timer_active_command
+  changed_when: false
+  failed_when: verify_totem_wifi_idle_timer_active_command.stdout != 'active'
+
+- name: Require Wi-Fi station inspection support
+  ansible.builtin.command:
+    argv: [/usr/sbin/iw, dev, wlan0, info]
+  changed_when: false
 
 - name: Read Totem NetworkManager profile contracts
   ansible.builtin.command:

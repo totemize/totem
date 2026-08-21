@@ -59,6 +59,7 @@ is LAN, access point, or FIPS.
 | Unit | Process identity | Purpose | Durable state |
 |---|---|---|---|
 | `totem-wifi-fallback.service` | root, oneshot | Keeps an active infrastructure connection, joins a visible `!Totem`, or activates the local AP | NetworkManager profiles under `/etc/NetworkManager/system-connections/` |
+| `totem-wifi-ap-idle.timer` / `.service` | root, timer + oneshot | Preserves an AP with associated stations; retries selection after ten empty minutes | Ephemeral idle start in `/run/totem-wifi-ap-idle` |
 | `fips.service` | root | Mesh transport, authentication, routing, TUN, local DNS, control socket | `/etc/fips/fips.yaml`, `/etc/fips/fips.key` |
 | `strfry.service` | `strfry` | Nostr relay, NIP-11, NIP-77/negentropy | `/etc/strfry.conf`, `/var/lib/strfry/` |
 | `totemd.service` | `totem`, supplementary groups `fips`, `strfry` | FIPS watcher, NIP-11 prefilter, signed recognition, public web bind, loopback message bus, strfry runner access | `/etc/totemd/totemd.env`, `/etc/totemd/config.toml`; current encounter state is in memory |
@@ -120,8 +121,9 @@ device-side resolver support from `.fips` resolution on a development host.
 3. If `!Totem` is visible, it activates the open `totem-peer` station profile.
 4. Otherwise it waits a randomized interval, rescans to avoid simultaneous
    AP creation, and activates `totem-ap` at `10.21.0.1`.
-5. The AP remains active until reboot or an explicit connection change; v1
-   does not interrupt guests for periodic infrastructure scans.
+5. A one-minute timer checks the kernel's associated-station table. Any station
+   keeps the AP active; ten uninterrupted empty minutes restart this same
+   selection cycle. Inspection failure preserves the AP and resets the timer.
 
 ### Mesh observation and bus events
 
@@ -190,7 +192,7 @@ session plaintext.
 
 | Capability | State in this revision |
 |---|---|
-| NetworkManager infrastructure/peer/AP fallback | Implemented; live AP validation is motown-only in this revision |
+| NetworkManager infrastructure/peer/AP fallback | Implemented; live host/peer validation passed in both directions on totem and motown |
 | FIPS service, persistent identity, TUN, DNS, control socket | Implemented and deployment-verified |
 | IPv6-capable strfry relay and NIP-77 advertisement | Implemented; protocol-0 capability is enforced by Ansible |
 | `totemd` FIPS polling, peer snapshot, seen/gone pushes | Implemented |

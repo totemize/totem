@@ -31,8 +31,9 @@ Read these rules before a deployment:
   during a no-restart window.
 - Wi-Fi fallback and the Python device-manager role are enabled by default.
   Installing fallback profiles does not replace an active connection; an AP
-  activation test is separately disruptive. Disable Python when another
-  workstream owns its managers or drivers.
+  activation test is separately disruptive. The idle timer preserves an AP
+  with any associated station and retries selection after ten empty minutes.
+  Disable Python when another workstream owns its managers or drivers.
 - Existing `/etc/fips/fips.yaml`, FIPS identity files, strfry operator policy,
   `/etc/totemd/config.toml`, and `/var/lib/strfry/` are preserved. The role
   still reconciles strfry's mesh bind and NIP-11 name/public key, plus managed
@@ -323,7 +324,7 @@ The final role checks the enabled scope:
 1. IPv6 ports `7777` and `8080`, plus loopback bus port `8081`, accept
    connections;
 2. port `8000` accepts connections when Python is enabled;
-3. Wi-Fi fallback is enabled and both NetworkManager profile contracts load;
+3. Wi-Fi fallback and its idle timer are enabled and active, and both NetworkManager profile contracts load;
 4. core units, plus optional `totem.service`, are enabled and running;
 5. `fipsctl show status` reports running state, active TUN, and the exact
    persistent inventory npub;

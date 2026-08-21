@@ -1,0 +1,9 @@
+[Unit]
+Description=Check whether the Totem Wi-Fi AP is idle
+Wants=NetworkManager.service
+After=NetworkManager.service
+ConditionPathExists=/sys/class/net/wlan0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/totem-wifi-fallback --check-ap-idle

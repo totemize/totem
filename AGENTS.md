@@ -99,10 +99,13 @@ ssh motown               # via LAN
 ssh motown.fips          # via FIPS mesh
 ```
 
-- Wi-Fi fallback is staged only on motown: when infrastructure is unavailable,
-  NetworkManager joins a visible open `!Totem` or hosts it at `10.21.0.1`.
-  The live AP proof issued a `10.21.0.75` lease and verified web, relay, SSH,
-  and FIPS health; motown was restored to infrastructure and reboot-verified.
+- Wi-Fi fallback is staged on totem and motown only (not metot): when
+  infrastructure is unavailable, NetworkManager joins a visible open `!Totem`
+  or hosts it at `10.21.0.1`. Live role-reversal and synchronized-outage tests
+  formed one BSS, issued peer leases (`10.21.0.46`/`.206`), authenticated the
+  exact FIPS identities, and reconciled both relays. Both devices were restored
+  to infrastructure and converged afterward. APs with any associated station
+  stay active; ten uninterrupted empty minutes restart selection.
 - Runs strfry master `5d89a62` (aarch64 build, Alpine minirootfs runtime
   under `/opt/strfry`, `bind = "::"`): relay on port 7777, verified over LAN,
   mesh, and bidirectional protocol-0/NIP-77 sync with totem. The original
@@ -260,3 +263,19 @@ assuming failure.
 A transient systemd rollback cannot execute `/run/script` directly; it fails
 at `EXEC` with status 203. Invoke it as `/bin/sh /run/script`, or install an
 executable under `/usr/local/libexec`.
+
+### Keep the controller on infrastructure during isolated AP tests
+
+Joining `!Totem` from the development workstation removes the route used by the
+agent transport and produces `fetch failed` until infrastructure returns. Arm
+device-local restore timers, capture evidence on each Totem, keep the
+workstation on `NOBIOS`, and retrieve the captures after restoration.
+
+### `nmcli connection down` blocks automatic reconnection
+
+NetworkManager treats an explicit profile deactivation as a manual autoconnect
+block until `nmcli connection up` (or equivalent restoration), even if
+`connection.autoconnect=yes` is set afterward. An empty-AP cycle in such a test
+will correctly rehost instead of selecting that blocked infrastructure profile.
+Always arm an explicit `connection up` rollback; do not model a real RF outage
+with `connection down` when evaluating infrastructure auto-return.

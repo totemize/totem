@@ -8,8 +8,13 @@ ap_profile=totem-ap
 grace=${TOTEM_WIFI_GRACE_SECONDS:-15}
 jitter=${TOTEM_WIFI_JITTER_SECONDS:-10}
 wait=${TOTEM_WIFI_ACTIVATION_WAIT_SECONDS:-30}
+idle_seconds=${TOTEM_WIFI_AP_IDLE_SECONDS:-600}
+idle_marker=${TOTEM_WIFI_AP_IDLE_MARKER:-/run/totem-wifi-ap-idle}
+uptime_file=${TOTEM_UPTIME_FILE:-/proc/uptime}
 nmcli=${TOTEM_NMCLI:-nmcli}
+iw_cmd=${TOTEM_IW:-/usr/sbin/iw}
 sleep_cmd=${TOTEM_SLEEP:-sleep}
+systemctl_cmd=${TOTEM_SYSTEMCTL:-systemctl}
 
 log() {
     printf 'totem-wifi-fallback: %s\n' "$*"
@@ -34,6 +39,69 @@ join_peer() {
     log "joining existing $ssid network"
     "$nmcli" --wait "$wait" connection up "$peer_profile" ifname "$interface"
 }
+
+check_ap_idle() {
+    local connection now started stations uptime
+    if ! connection=$(active_connection); then
+        rm -f "$idle_marker"
+        return 0
+    fi
+
+    if [[ "$connection" != "$ap_profile" ]]; then
+        rm -f "$idle_marker"
+        return 0
+    fi
+
+    if ! stations=$("$iw_cmd" dev "$interface" station dump 2>/dev/null); then
+        rm -f "$idle_marker"
+        log "cannot inspect AP stations; keeping $ssid active and resetting idle timer"
+        return 0
+    fi
+
+    if [[ -n "$stations" ]]; then
+        if [[ -e "$idle_marker" ]]; then
+            log "AP station connected; resetting idle timer"
+            rm -f "$idle_marker"
+        fi
+        return 0
+    fi
+
+    if ! read -r uptime _ < "$uptime_file"; then
+        rm -f "$idle_marker"
+        log "cannot read monotonic uptime; keeping $ssid active and resetting idle timer"
+        return 0
+    fi
+    now=${uptime%%.*}
+    if [[ ! "$now" =~ ^[0-9]+$ ]]; then
+        rm -f "$idle_marker"
+        log "invalid monotonic uptime; keeping $ssid active and resetting idle timer"
+        return 0
+    fi
+
+    if [[ ! -r "$idle_marker" ]] || ! read -r started < "$idle_marker" ||
+        [[ ! "$started" =~ ^[0-9]+$ ]] || (( started > now )); then
+        printf '%s\n' "$now" > "$idle_marker"
+        log "AP has no stations; starting ${idle_seconds}s idle timer"
+        return 0
+    fi
+
+    if (( now - started < idle_seconds )); then
+        return 0
+    fi
+
+    rm -f "$idle_marker"
+    log "AP has been empty for ${idle_seconds}s; restarting Wi-Fi selection"
+    "$nmcli" connection down "$ap_profile"
+    "$systemctl_cmd" --no-block start totem-wifi-fallback.service
+}
+
+if [[ ${1:-} == "--check-ap-idle" ]]; then
+    check_ap_idle
+    exit 0
+elif (( $# > 0 )); then
+    log "unknown argument: $1"
+    exit 2
+fi
 
 if connected; then
     log "leaving active connection $(active_connection) unchanged"

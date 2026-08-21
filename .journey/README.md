@@ -29,6 +29,7 @@ working environment.
 
 | Date | Summary |
 |------|---------|
+| [2026-08-21 — two-device Wi-Fi fallback](journal/2026-08-21.md#two-device-wi-fi-fallback-acceptance) | Bidirectional and synchronized-loss AP/peer proof, then `iw`-guarded empty-AP recovery; DHCP, FIPS identity, recognition, sync, client preservation, and restoration passed. |
 | [2026-08-20 — static Svelte web app](journal/2026-08-20.md#totemd-static-svelte-web-app) | Replaced the SSR root with embedded Svelte 5/Vite; retained NIP-98 controls; added public aggregate and owner-signed live state without exposing the bus; deployed to totem, then added a nos2x LAN-HTTP bridge and deployed it to motown with claimed profile preserved. |
 | [2026-08-20 — Wi-Fi fallback](journal/2026-08-20.md#networkmanager-wi-fi-fallback-and-motown-ap-proof) | Native infrastructure → existing `!Totem` → AP fallback; motown-only open-AP DHCP/web/relay/SSH proof, safe restore, and reboot persistence. |
 | [2026-08-20 — e-ink boot POC](journal/2026-08-20.md#e-ink-boot-presentation-state-machine) | Fleet-generic screen artifacts with inventory-gated activation; composable boot presentation service; synthetic replay and real reboot camera verification on metot; cross-layer Totem state catalog and display arbitration model. |

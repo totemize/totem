@@ -28,8 +28,10 @@ never stored in inventory or artifacts.
 
 The network role installs two inactive-on-deploy NetworkManager profiles and an
 event-triggered oneshot. Existing infrastructure wins; otherwise a Totem joins
-a visible open `!Totem` or hosts one at `10.21.0.1` after grace and jitter.
-Enabling the unit does not switch the deployment's active Wi-Fi connection.
+a visible open `!Totem` or hosts one at `10.21.0.1` after grace and jitter. A
+one-minute timer uses `iw` to preserve an AP with any associated station; after
+600 uninterrupted empty seconds it reruns the same selection cycle. Enabling
+the units does not switch the deployment's active Wi-Fi connection.
 
 The common device-manager role installs the same screen package, systemd unit,
 and replay command on every Totem. Inventory decides whether that unit is
