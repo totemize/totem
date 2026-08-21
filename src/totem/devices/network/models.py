@@ -202,6 +202,30 @@ class BLEAdvertisement:
 
 
 @dataclass(frozen=True)
+class L2CAPListener:
+    id: str
+    local_address: str
+    address_type: str
+    psm: int
+    mtu: int
+    service_uuid: str
+    advertisement_id: Optional[str]
+    listening: bool
+
+
+@dataclass(frozen=True)
+class L2CAPConnection:
+    id: str
+    listener_id: Optional[str]
+    peer_address: str
+    address_type: str
+    psm: int
+    mtu: int
+    connected_at: str
+    handed_off: bool = False
+
+
+@dataclass(frozen=True)
 class GATTCharacteristic:
     id: str
     path: str

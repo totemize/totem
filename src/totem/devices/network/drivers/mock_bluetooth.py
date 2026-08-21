@@ -15,6 +15,8 @@ from totem.devices.network.models import (
     GATTCharacteristic,
     GATTService,
     L2CAPCapabilities,
+    L2CAPConnection,
+    L2CAPListener,
     OperationSupport,
     RadioBlockState,
 )
@@ -35,6 +37,9 @@ class Driver(BluetoothDeviceInterface):
         self.subscriptions: Dict[str, str] = {}
         self.value = b"mock-value"
         self.connected = False
+        self.l2cap_listeners: Dict[str, L2CAPListener] = {}
+        self.l2cap_connections: Dict[str, L2CAPConnection] = {}
+        self._next_l2cap_psm = 0x0081
         self._event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None
         self.first_seen = _now()
 
@@ -185,6 +190,86 @@ class Driver(BluetoothDeviceInterface):
     def list_advertisements(self):
         return list(self.advertisements.values())
 
+    def create_l2cap_listener(
+        self,
+        service_uuid: str,
+        psm: int = 0,
+        mtu: int = 1024,
+        address_type: str = "public",
+        timeout: float = 15.0,
+    ):
+        self._ready()
+        listener_id = uuid.uuid4().hex
+        assigned_psm = psm or self._next_l2cap_psm
+        if psm == 0:
+            self._next_l2cap_psm += 2
+        advertisement = self.register_advertisement(
+            {
+                "id": "l2cap_{}".format(listener_id),
+                "service_uuids": [service_uuid],
+            },
+            timeout,
+        )
+        listener = L2CAPListener(
+            id=listener_id,
+            local_address="02:00:00:00:10:01",
+            address_type=address_type,
+            psm=assigned_psm,
+            mtu=mtu,
+            service_uuid=service_uuid,
+            advertisement_id=advertisement.id,
+            listening=True,
+        )
+        self.l2cap_listeners[listener_id] = listener
+        return listener
+
+    def list_l2cap_listeners(self):
+        return list(self.l2cap_listeners.values())
+
+    def close_l2cap_listener(self, listener_id: str, timeout: float = 15.0):
+        listener = self.l2cap_listeners.pop(listener_id, None)
+        if listener and listener.advertisement_id:
+            self.unregister_advertisement(listener.advertisement_id, timeout)
+
+    def connect_l2cap(
+        self,
+        peer_address: str,
+        psm: int,
+        mtu: int = 1024,
+        address_type: str = "public",
+        timeout: float = 15.0,
+    ):
+        self._ready()
+        connection_id = uuid.uuid4().hex
+        connection = L2CAPConnection(
+            id=connection_id,
+            listener_id=None,
+            peer_address=peer_address,
+            address_type=address_type,
+            psm=psm,
+            mtu=mtu,
+            connected_at=_now(),
+        )
+        self.l2cap_connections[connection_id] = connection
+        self._emit(
+            "ble_l2cap_connection_opened",
+            {"connection_id": connection_id, "peer_address": peer_address, "psm": psm},
+        )
+        return connection
+
+    def list_l2cap_connections(self):
+        return list(self.l2cap_connections.values())
+
+    def close_l2cap_connection(self, connection_id: str):
+        self.l2cap_connections.pop(connection_id, None)
+
+    def handoff_l2cap_to_fips(
+        self, connection_id: str, timeout: float = 15.0, metadata=None
+    ):
+        if self.l2cap_connections.pop(connection_id, None) is None:
+            raise RadioResourceNotFoundError("LE L2CAP connection was not found")
+        self._emit("ble_l2cap_connection_handed_off", {"connection_id": connection_id})
+
     def connect_device(self, device_id: str, timeout: float = 30.0):
         self._device(device_id)
         self.connected = True
@@ -267,4 +352,6 @@ class Driver(BluetoothDeviceInterface):
         self.advertisements.clear()
         self.subscriptions.clear()
         self.connected = False
+        self.l2cap_listeners.clear()
+        self.l2cap_connections.clear()
         super().close()

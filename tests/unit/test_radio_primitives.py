@@ -1,6 +1,10 @@
 """Unit coverage for capability parsing and policy-free radio lifecycles."""
 
 from types import SimpleNamespace
+from array import array
+import json
+import os
+import socket
 
 import pytest
 
@@ -10,6 +14,8 @@ from totem.devices.network.capabilities import (
     parse_rfkill_json,
 )
 from totem.devices.network.errors import (
+    RadioConflictError,
+    RadioOperationError,
     RadioResourceNotFoundError,
     UnsupportedFeatureError,
     redact_secrets,
@@ -177,6 +183,153 @@ def test_p2p_discovery_group_and_teardown_lifecycle():
     manager.close()
 
 
+def test_l2cap_transport_assigns_psm_and_closes_listener_idempotently():
+    from totem.devices.network.l2cap import L2CAPTransport
+
+    class FakeChannel:
+        def __init__(self):
+            self.closed = False
+            self.bound = None
+
+        def settimeout(self, timeout):
+            pass
+
+        def setsockopt(self, level, option, value):
+            pass
+
+        def bind(self, address):
+            self.bound = address
+
+        def listen(self, backlog):
+            pass
+
+        def getsockname(self):
+            return (self.bound[0], self.bound[1] or 0x0081)
+
+        def accept(self):
+            if self.closed:
+                raise OSError("closed")
+            raise socket.timeout()
+
+        def close(self):
+            self.closed = True
+
+    channels = []
+
+    def factory(*args):
+        channel = FakeChannel()
+        channels.append(channel)
+        return channel
+
+    transport = L2CAPTransport(socket_factory=factory, maximum_listeners=1)
+    listener = transport.create_listener(
+        local_address="02:00:00:00:10:01",
+        service_uuid="9c90b790-2cc5-42c0-9f87-c9cc40648f4c",
+    )
+
+    assert listener.psm == 0x0081
+    assert listener.mtu == 1024
+    with pytest.raises(RadioConflictError) as exc_info:
+        transport.create_listener(
+            local_address="02:00:00:00:10:01",
+            service_uuid="9c90b790-2cc5-42c0-9f87-c9cc40648f4c",
+        )
+    assert getattr(exc_info.value, "code", None) == "radio_concurrency_conflict"
+    transport.close_listener(listener.id)
+    transport.close_listener(listener.id)
+    assert channels[0].closed
+    transport.close()
+
+
+def test_l2cap_handoff_passes_only_descriptor_and_bounded_metadata_to_fips():
+    from totem.devices.network.l2cap import L2CAPTransport
+    from totem.devices.network.models import L2CAPConnection
+
+    transport = L2CAPTransport()
+    channel, peer = socket.socketpair()
+    receiver, fips = socket.socketpair()
+    connection = L2CAPConnection(
+        id="connection-1",
+        listener_id=None,
+        peer_address="02:00:00:00:10:02",
+        address_type="public",
+        psm=0x0081,
+        mtu=1024,
+        connected_at="2026-08-21T00:00:00+00:00",
+    )
+    transport._connections[connection.id] = {
+        "model": connection,
+        "socket": channel,
+    }
+
+    try:
+        transport.handoff(connection.id, receiver, {"lane": "ble"})
+        payload, ancillary, _, _ = fips.recvmsg(
+            4096, socket.CMSG_SPACE(array("i").itemsize)
+        )
+        message = json.loads(payload)
+        descriptor_data = next(
+            data
+            for level, kind, data in ancillary
+            if level == socket.SOL_SOCKET and kind == socket.SCM_RIGHTS
+        )
+        descriptors = array("i")
+        descriptors.frombytes(descriptor_data[: descriptors.itemsize])
+        transferred = descriptors[0]
+        try:
+            assert os.fstat(transferred)
+        finally:
+            os.close(transferred)
+    finally:
+        receiver.close()
+        fips.close()
+        peer.close()
+
+    assert message == {
+        "connection": {
+            "address_type": "public",
+            "id": "connection-1",
+            "mtu": 1024,
+            "peer_address": "02:00:00:00:10:02",
+            "psm": 0x0081,
+        },
+        "metadata": {"lane": "ble"},
+        "protocol": "fips-l2cap-v1",
+    }
+    assert transport.list_connections() == []
+
+
+def test_l2cap_failed_mtu_setup_releases_capacity_and_socket():
+    from totem.devices.network.l2cap import L2CAPTransport
+
+    class RejectedChannel:
+        def __init__(self):
+            self.closed = False
+
+        def setsockopt(self, level, option, value):
+            raise OSError("MTU rejected")
+
+        def close(self):
+            self.closed = True
+
+    channels = []
+
+    def factory(*args):
+        channel = RejectedChannel()
+        channels.append(channel)
+        return channel
+
+    transport = L2CAPTransport(socket_factory=factory, maximum_listeners=1)
+    for _ in range(2):
+        with pytest.raises(RadioOperationError, match="receive MTU"):
+            transport.create_listener(
+                local_address="02:00:00:00:10:01",
+                service_uuid="9c90b790-2cc5-42c0-9f87-c9cc40648f4c",
+            )
+
+    assert all(channel.closed for channel in channels)
+
+
 def test_ble_sessions_do_not_cancel_each_other_and_cleanup_is_idempotent():
     manager = NetworkManager("mock_wifi", allow_mock=True)
 
@@ -211,6 +364,21 @@ def test_ble_advertisement_and_gatt_primitive_lifecycle():
     manager.unsubscribe_gatt_characteristic(subscription)
     manager.unregister_bluetooth_advertisement(advertisement.id)
     manager.unregister_bluetooth_advertisement(advertisement.id)
+    manager.close()
+
+
+def test_mock_l2cap_listener_connection_and_fips_handoff_lifecycle():
+    manager = NetworkManager("mock_wifi", allow_mock=True)
+    listener = manager.create_l2cap_listener("9c90b790-2cc5-42c0-9f87-c9cc40648f4c")
+    connection = manager.connect_l2cap("02:00:00:00:10:02", listener.psm)
+
+    assert manager.list_l2cap_listeners() == [listener]
+    assert manager.list_l2cap_connections() == [connection]
+    manager.handoff_l2cap_to_fips(connection.id)
+    assert manager.list_l2cap_connections() == []
+    manager.close_l2cap_listener(listener.id)
+    manager.close_l2cap_listener(listener.id)
+    assert manager.list_l2cap_listeners() == []
     manager.close()
 
 
@@ -304,6 +472,102 @@ def test_bluez_advertisement_omits_absent_optional_properties():
         "LocalName",
         "Includes",
     }
+
+
+def test_bluez_l2cap_advertises_assigned_psm_as_fips_service_data(monkeypatch):
+    from totem.devices.network.drivers.bluez import Driver, FIPS_SERVICE_UUID
+    from totem.devices.network.models import L2CAPListener, OperationSupport
+
+    listener = L2CAPListener(
+        id="listener-1",
+        local_address="02:00:00:00:10:01",
+        address_type="public",
+        psm=0x0081,
+        mtu=1024,
+        service_uuid=FIPS_SERVICE_UUID,
+        advertisement_id=None,
+        listening=True,
+    )
+
+    class Transport:
+        def create_listener(self, **kwargs):
+            return listener
+
+        def set_listener_advertisement(self, listener_id, advertisement_id):
+            return listener
+
+    driver = Driver(runtime=object())
+    driver.initialized = True
+    driver._adapter_path = "/org/bluez/hci0"
+    driver._l2cap = Transport()
+    monkeypatch.setattr(
+        driver,
+        "get_capabilities",
+        lambda: SimpleNamespace(
+            address=listener.local_address,
+            l2cap=SimpleNamespace(le_coc_listen=OperationSupport(True)),
+        ),
+    )
+    advertisements = []
+    monkeypatch.setattr(
+        driver,
+        "register_advertisement",
+        lambda specification, timeout: advertisements.append(specification),
+    )
+
+    driver.create_l2cap_listener()
+
+    assert advertisements[0]["service_uuids"] == [FIPS_SERVICE_UUID]
+    assert advertisements[0]["service_data"] == {FIPS_SERVICE_UUID: b"\x81\x00"}
+
+
+def test_bluez_l2cap_listener_rolls_back_when_advertising_fails(monkeypatch):
+    from totem.devices.network.drivers.bluez import Driver, FIPS_SERVICE_UUID
+    from totem.devices.network.models import L2CAPListener, OperationSupport
+
+    listener = L2CAPListener(
+        id="listener-1",
+        local_address="02:00:00:00:10:01",
+        address_type="public",
+        psm=0x0081,
+        mtu=1024,
+        service_uuid=FIPS_SERVICE_UUID,
+        advertisement_id=None,
+        listening=True,
+    )
+    closed = []
+
+    class Transport:
+        def create_listener(self, **kwargs):
+            return listener
+
+        def close_listener(self, listener_id):
+            closed.append(listener_id)
+
+    driver = Driver(runtime=object())
+    driver.initialized = True
+    driver._adapter_path = "/org/bluez/hci0"
+    driver._l2cap = Transport()
+    monkeypatch.setattr(
+        driver,
+        "get_capabilities",
+        lambda: SimpleNamespace(
+            address=listener.local_address,
+            l2cap=SimpleNamespace(le_coc_listen=OperationSupport(True)),
+        ),
+    )
+    monkeypatch.setattr(
+        driver,
+        "register_advertisement",
+        lambda specification, timeout: (_ for _ in ()).throw(
+            RadioOperationError("advertising rejected")
+        ),
+    )
+
+    with pytest.raises(RadioOperationError):
+        driver.create_l2cap_listener()
+
+    assert closed == [listener.id]
 
 
 def test_network_manager_peer_signal_does_not_reenter_dbus_loop():

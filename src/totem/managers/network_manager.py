@@ -122,6 +122,49 @@ class NetworkManager:
     ):
         return self.bluetooth_device.unregister_advertisement(advertisement_id, timeout)
 
+    def create_l2cap_listener(
+        self,
+        service_uuid: str,
+        psm: int = 0,
+        mtu: int = 1024,
+        address_type: str = "public",
+        timeout: float = 15.0,
+    ):
+        return self.bluetooth_device.create_l2cap_listener(
+            service_uuid, psm, mtu, address_type, timeout
+        )
+
+    def list_l2cap_listeners(self):
+        return self.bluetooth_device.list_l2cap_listeners()
+
+    def close_l2cap_listener(self, listener_id: str, timeout: float = 15.0):
+        return self.bluetooth_device.close_l2cap_listener(listener_id, timeout)
+
+    def connect_l2cap(
+        self,
+        peer_address: str,
+        psm: int,
+        mtu: int = 1024,
+        address_type: str = "public",
+        timeout: float = 15.0,
+    ):
+        return self.bluetooth_device.connect_l2cap(
+            peer_address, psm, mtu, address_type, timeout
+        )
+
+    def list_l2cap_connections(self):
+        return self.bluetooth_device.list_l2cap_connections()
+
+    def close_l2cap_connection(self, connection_id: str):
+        return self.bluetooth_device.close_l2cap_connection(connection_id)
+
+    def handoff_l2cap_to_fips(
+        self, connection_id: str, timeout: float = 15.0, metadata=None
+    ):
+        return self.bluetooth_device.handoff_l2cap_to_fips(
+            connection_id, timeout, metadata
+        )
+
     def connect_bluetooth_device(self, device_id: str, timeout: float = 30.0):
         return self.bluetooth_device.connect_device(device_id, timeout)
 

@@ -40,6 +40,11 @@ from totem.api.models import (
     GATTSubscriptionResponse,
     GATTValueResponse,
     GATTWriteRequest,
+    L2CAPConnectionRequest,
+    L2CAPConnectionResponse,
+    L2CAPHandoffRequest,
+    L2CAPListenerRequest,
+    L2CAPListenerResponse,
     NFCWriteRequest,
     NetworkCapabilitiesResponse,
     NetworkConfigurationRequest,
@@ -565,6 +570,110 @@ def create_app(
             timeout_seconds,
         )
         return Status(success=True, message="BLE advertisement unregistered")
+
+    @application.post(
+        "/network/bluetooth/l2cap/listeners",
+        response_model=L2CAPListenerResponse,
+    )
+    async def l2cap_listener_create(request: Request, command: L2CAPListenerRequest):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.create_l2cap_listener,
+            command.service_uuid,
+            command.psm,
+            command.mtu,
+            command.address_type,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get(
+        "/network/bluetooth/l2cap/listeners",
+        response_model=list[L2CAPListenerResponse],
+    )
+    async def l2cap_listeners(request: Request):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(request, "network", manager.list_l2cap_listeners)
+        return serialize(values)
+
+    @application.delete(
+        "/network/bluetooth/l2cap/listeners/{listener_id}", response_model=Status
+    )
+    async def l2cap_listener_close(
+        request: Request,
+        listener_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.close_l2cap_listener,
+            listener_id,
+            timeout_seconds,
+        )
+        return Status(success=True, message="LE L2CAP listener closed")
+
+    @application.post(
+        "/network/bluetooth/l2cap/connections",
+        response_model=L2CAPConnectionResponse,
+    )
+    async def l2cap_connection_create(
+        request: Request, command: L2CAPConnectionRequest
+    ):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.connect_l2cap,
+            command.peer_address,
+            command.psm,
+            command.mtu,
+            command.address_type,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get(
+        "/network/bluetooth/l2cap/connections",
+        response_model=list[L2CAPConnectionResponse],
+    )
+    async def l2cap_connections(request: Request):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(
+            request, "network", manager.list_l2cap_connections
+        )
+        return serialize(values)
+
+    @application.delete(
+        "/network/bluetooth/l2cap/connections/{connection_id}",
+        response_model=Status,
+    )
+    async def l2cap_connection_close(request: Request, connection_id: str):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request, "network", manager.close_l2cap_connection, connection_id
+        )
+        return Status(success=True, message="LE L2CAP connection closed")
+
+    @application.post(
+        "/network/bluetooth/l2cap/connections/{connection_id}/fips-handoff",
+        response_model=Status,
+    )
+    async def l2cap_connection_handoff(
+        request: Request, connection_id: str, command: L2CAPHandoffRequest
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.handoff_l2cap_to_fips,
+            connection_id,
+            command.timeout_seconds,
+        )
+        return Status(success=True, message="LE L2CAP connection handed to FIPS")
 
     @application.post(
         "/network/bluetooth/devices/{device_id}/connect",

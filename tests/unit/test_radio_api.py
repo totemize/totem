@@ -136,6 +136,39 @@ def test_ble_advertisement_device_and_gatt_endpoints():
         )
 
 
+def test_l2cap_listener_connection_and_fips_handoff_endpoints():
+    client, _ = make_client()
+    with client:
+        listener_response = client.post("/network/bluetooth/l2cap/listeners", json={})
+        assert listener_response.status_code == 200
+        listener = listener_response.json()
+        assert listener["psm"] == 0x0081
+        assert listener["advertisement_id"]
+        assert client.get("/network/bluetooth/l2cap/listeners").json() == [listener]
+
+        connection_response = client.post(
+            "/network/bluetooth/l2cap/connections",
+            json={"peer_address": "02:00:00:00:10:02", "psm": listener["psm"]},
+        )
+        assert connection_response.status_code == 200
+        connection = connection_response.json()
+        assert connection["peer_address"] == "02:00:00:00:10:02"
+        handoff = client.post(
+            "/network/bluetooth/l2cap/connections/{}/fips-handoff".format(
+                connection["id"]
+            ),
+            json={},
+        )
+        assert handoff.status_code == 200
+        assert client.get("/network/bluetooth/l2cap/connections").json() == []
+        assert (
+            client.delete(
+                "/network/bluetooth/l2cap/listeners/{}".format(listener["id"])
+            ).status_code
+            == 200
+        )
+
+
 def test_radio_errors_map_to_stable_http_statuses():
     class FailingManager:
         def set_event_callback(self, callback):

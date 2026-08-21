@@ -53,6 +53,9 @@ class EventType(str, Enum):
     BLE_ADVERTISEMENT_EXPIRED = "ble_advertisement_expired"
     BLE_CONNECTION_CHANGED = "ble_connection_changed"
     GATT_NOTIFICATION = "gatt_notification"
+    BLE_L2CAP_CONNECTION_OPENED = "ble_l2cap_connection_opened"
+    BLE_L2CAP_CONNECTION_CLOSED = "ble_l2cap_connection_closed"
+    BLE_L2CAP_CONNECTION_HANDED_OFF = "ble_l2cap_connection_handed_off"
 
 
 class DeviceEvent(BaseModel):
@@ -307,6 +310,52 @@ class BLEAdvertisementRequest(BaseModel):
     manufacturer_data_base64: Dict[int, str] = Field(default_factory=dict)
     local_name: Optional[str] = Field(default=None, max_length=248)
     includes: List[str] = Field(default_factory=list)
+    timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+
+
+class L2CAPListenerRequest(BaseModel):
+    service_uuid: str = Field(
+        default="9c90b790-2cc5-42c0-9f87-c9cc40648f4c",
+        min_length=4,
+        max_length=36,
+    )
+    psm: int = Field(default=0, ge=0, le=255)
+    mtu: int = Field(default=1024, ge=23, le=65535)
+    address_type: str = Field(default="public", pattern="^(public|random)$")
+    timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+
+
+class L2CAPListenerResponse(BaseModel):
+    id: str
+    local_address: str
+    address_type: str
+    psm: int = Field(ge=1, le=255)
+    mtu: int = Field(ge=23, le=65535)
+    service_uuid: str
+    advertisement_id: Optional[str] = None
+    listening: bool
+
+
+class L2CAPConnectionRequest(BaseModel):
+    peer_address: str = Field(pattern="^(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+    psm: int = Field(ge=1, le=255)
+    mtu: int = Field(default=1024, ge=23, le=65535)
+    address_type: str = Field(default="public", pattern="^(public|random)$")
+    timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+
+
+class L2CAPConnectionResponse(BaseModel):
+    id: str
+    listener_id: Optional[str] = None
+    peer_address: str
+    address_type: str
+    psm: int = Field(ge=1, le=255)
+    mtu: int = Field(ge=23, le=65535)
+    connected_at: str
+    handed_off: bool
+
+
+class L2CAPHandoffRequest(BaseModel):
     timeout_seconds: float = Field(default=15.0, gt=0, le=120)
 
 

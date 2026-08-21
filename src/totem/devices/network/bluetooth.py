@@ -59,6 +59,50 @@ class BluetoothDeviceInterface(DeviceDriver):
         pass
 
     @abstractmethod
+    def create_l2cap_listener(
+        self,
+        service_uuid: str,
+        psm: int = 0,
+        mtu: int = 1024,
+        address_type: str = "public",
+        timeout: float = 15.0,
+    ):
+        pass
+
+    @abstractmethod
+    def list_l2cap_listeners(self):
+        pass
+
+    @abstractmethod
+    def close_l2cap_listener(self, listener_id: str, timeout: float = 15.0):
+        pass
+
+    @abstractmethod
+    def connect_l2cap(
+        self,
+        peer_address: str,
+        psm: int,
+        mtu: int = 1024,
+        address_type: str = "public",
+        timeout: float = 15.0,
+    ):
+        pass
+
+    @abstractmethod
+    def list_l2cap_connections(self):
+        pass
+
+    @abstractmethod
+    def close_l2cap_connection(self, connection_id: str):
+        pass
+
+    @abstractmethod
+    def handoff_l2cap_to_fips(
+        self, connection_id: str, timeout: float = 15.0, metadata=None
+    ):
+        pass
+
+    @abstractmethod
     def connect_device(self, device_id: str, timeout: float = 30.0):
         pass
 

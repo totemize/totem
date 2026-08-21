@@ -29,6 +29,7 @@ from totem.devices.network.errors import (
     RadioTimeoutError,
     UnsupportedFeatureError,
 )
+from totem.devices.network.l2cap import L2CAPTransport
 from totem.devices.network.models import (
     BLEAdvertisement,
     BLEDevice,
@@ -54,6 +55,8 @@ GATT_SERVICE = "org.bluez.GattService1"
 GATT_CHARACTERISTIC = "org.bluez.GattCharacteristic1"
 MAX_L2CAP_LISTENERS = 4
 MAX_L2CAP_CONNECTIONS = 16
+FIPS_SERVICE_UUID = "9c90b790-2cc5-42c0-9f87-c9cc40648f4c"
+FIPS_L2CAP_HANDOFF_SOCKET = "/run/fips/l2cap-handoff.sock"
 
 
 def _linux_l2cap_socket_support():
@@ -68,7 +71,11 @@ def _linux_l2cap_socket_support():
 
 
 def _fd_handoff_support():
-    if not hasattr(socket, "SCM_RIGHTS") or not hasattr(socket, "AF_UNIX"):
+    if (
+        not hasattr(socket, "SCM_RIGHTS")
+        or not hasattr(socket, "AF_UNIX")
+        or not hasattr(socket.socket, "sendmsg")
+    ):
         return OperationSupport(False, "Unix SCM_RIGHTS descriptor passing unavailable")
     return OperationSupport(True)
 
@@ -171,6 +178,11 @@ class Driver(BluetoothDeviceInterface):
         self._advertisements: Dict[str, Dict[str, Any]] = {}
         self._subscriptions: Dict[str, Dict[str, str]] = {}
         self._connected_by_manager = set()
+        self._l2cap = L2CAPTransport(
+            maximum_listeners=MAX_L2CAP_LISTENERS,
+            maximum_connections=MAX_L2CAP_CONNECTIONS,
+            accepted_callback=self._on_l2cap_accepted,
+        )
 
     def set_event_callback(self, callback) -> None:
         self._event_callback = callback
@@ -178,6 +190,17 @@ class Driver(BluetoothDeviceInterface):
     def _emit(self, event_type: str, data: Dict[str, Any]) -> None:
         if self._event_callback:
             self._event_callback(event_type, data)
+
+    def _on_l2cap_accepted(self, connection) -> None:
+        self._emit(
+            "ble_l2cap_connection_opened",
+            {
+                "connection_id": connection.id,
+                "listener_id": connection.listener_id,
+                "peer_address": connection.peer_address,
+                "psm": connection.psm,
+            },
+        )
 
     def init(self):
         if self.initialized:
@@ -618,6 +641,123 @@ class Driver(BluetoothDeviceInterface):
     def list_advertisements(self):
         return [entry["model"] for entry in self._advertisements.values()]
 
+    def create_l2cap_listener(
+        self,
+        service_uuid: str = FIPS_SERVICE_UUID,
+        psm: int = 0,
+        mtu: int = 1024,
+        address_type: str = "public",
+        timeout: float = 15.0,
+    ):
+        self._ready()
+        support = self.get_capabilities().l2cap.le_coc_listen
+        if not support.supported:
+            raise UnsupportedFeatureError(
+                support.reason or "LE L2CAP CoC listening is unsupported"
+            )
+        local_address = self.get_capabilities().address
+        listener = self._l2cap.create_listener(
+            local_address=local_address,
+            service_uuid=service_uuid,
+            psm=psm,
+            mtu=mtu,
+            address_type=address_type,
+        )
+        advertisement_id = "l2cap_{}".format(listener.id)
+        try:
+            self.register_advertisement(
+                {
+                    "id": advertisement_id,
+                    "type": "peripheral",
+                    "service_uuids": [service_uuid],
+                    # Per-peer PSM discovery is a two-byte little-endian value
+                    # under the FIPS UUID.  It carries no peer identity.
+                    "service_data": {service_uuid: listener.psm.to_bytes(2, "little")},
+                },
+                timeout,
+            )
+        except Exception:
+            # A listener that peers cannot discover is not a usable primitive.
+            self._l2cap.close_listener(listener.id)
+            raise
+        return self._l2cap.set_listener_advertisement(listener.id, advertisement_id)
+
+    def list_l2cap_listeners(self):
+        return self._l2cap.list_listeners()
+
+    def close_l2cap_listener(self, listener_id: str, timeout: float = 15.0):
+        advertisement_id = self._l2cap.close_listener(listener_id)
+        if advertisement_id:
+            self.unregister_advertisement(advertisement_id, timeout)
+
+    def connect_l2cap(
+        self,
+        peer_address: str,
+        psm: int,
+        mtu: int = 1024,
+        address_type: str = "public",
+        timeout: float = 15.0,
+    ):
+        self._ready()
+        support = self.get_capabilities().l2cap.le_coc_connect
+        if not support.supported:
+            raise UnsupportedFeatureError(
+                support.reason or "LE L2CAP CoC connections are unsupported"
+            )
+        connection = self._l2cap.connect(
+            peer_address=peer_address,
+            psm=psm,
+            mtu=mtu,
+            address_type=address_type,
+            timeout=timeout,
+        )
+        self._emit(
+            "ble_l2cap_connection_opened",
+            {
+                "connection_id": connection.id,
+                "peer_address": connection.peer_address,
+                "psm": connection.psm,
+            },
+        )
+        return connection
+
+    def list_l2cap_connections(self):
+        return self._l2cap.list_connections()
+
+    def close_l2cap_connection(self, connection_id: str):
+        self._l2cap.close_connection(connection_id)
+        self._emit("ble_l2cap_connection_closed", {"connection_id": connection_id})
+
+    def handoff_l2cap_to_fips(
+        self,
+        connection_id: str,
+        timeout: float = 15.0,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
+        self._ready()
+        support = self.get_capabilities().l2cap.fd_handoff
+        if not support.supported:
+            raise UnsupportedFeatureError(
+                support.reason or "LE L2CAP descriptor handoff is unsupported"
+            )
+        receiver = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            receiver.settimeout(timeout)
+            receiver.connect(FIPS_L2CAP_HANDOFF_SOCKET)
+            self._l2cap.handoff(connection_id, receiver, metadata)
+        except (TimeoutError, socket.timeout) as exc:
+            raise RadioTimeoutError("FIPS LE L2CAP handoff timed out") from exc
+        except OSError as exc:
+            raise RadioOperationError(
+                "Could not connect to the FIPS LE L2CAP handoff socket: {}".format(exc)
+            )
+        finally:
+            receiver.close()
+        self._emit(
+            "ble_l2cap_connection_handed_off",
+            {"connection_id": connection_id},
+        )
+
     def connect_device(self, device_id: str, timeout: float = 30.0):
         device = self._resolve_device(device_id)
         if device.connected:
@@ -835,6 +975,12 @@ class Driver(BluetoothDeviceInterface):
         if getattr(self, "_closed", False):
             return
         if self.initialized:
+            for listener in list(self._l2cap.list_listeners()):
+                try:
+                    self.close_l2cap_listener(listener.id)
+                except RadioOperationError:
+                    pass
+            self._l2cap.close()
             for session_id in list(self._discovery_sessions):
                 try:
                     self.stop_discovery(session_id)
