@@ -7,6 +7,7 @@ mod app;
 mod model;
 mod protocol;
 mod server;
+mod transport;
 
 const HELP: &str = "totem-myco — Myco-compatible Totem integration
 
@@ -20,7 +21,14 @@ Usage:
   totem-myco unpair <npub>
   totem-myco send <peer-npub> <path> [mime]
   totem-myco accept-file <transfer-id>
-  totem-myco decline-file <transfer-id>";
+  totem-myco decline-file <transfer-id>
+  totem-myco transports
+  totem-myco route <peer-npub> <lan|softap> <udp-endpoint>
+  totem-myco unroute <peer-npub> <lan|softap>
+  totem-myco aware-discover [udp-port] [seconds]
+  totem-myco aware-connect <peer-npub> <match-id> [udp-port]
+  totem-myco aware-remove <data-path-id>
+  totem-myco coc-connect <peer-npub> <bluetooth-address> <psm> [public|random]";
 
 #[tokio::main]
 async fn main() {
@@ -82,6 +90,73 @@ async fn run() -> Result<()> {
             let id = required(args.next(), "transfer id")?;
             print_response(post(&format!("/files/{id}/decline"), None).await?)
         }
+        "transports" => print_response(get("/transports").await?),
+        "route" => {
+            let npub = required(args.next(), "peer npub")?;
+            let transport = required(args.next(), "lan or softap")?;
+            let address = required(args.next(), "peer UDP endpoint")?;
+            print_response(
+                post(
+                    "/transports/routes",
+                    Some(json!({
+                        "peerNpub": npub,
+                        "transport": transport,
+                        "address": address,
+                    })),
+                )
+                .await?,
+            )
+        }
+        "unroute" => {
+            let npub = required(args.next(), "peer npub")?;
+            let transport = required(args.next(), "lan or softap")?;
+            print_response(delete(&format!("/transports/routes/{npub}/{transport}")).await?)
+        }
+        "aware-discover" => {
+            let port = optional_u16(args.next(), "UDP port")?.unwrap_or(4873);
+            let seconds = optional_u16(args.next(), "duration")?.unwrap_or(300);
+            print_response(
+                post(
+                    "/transports/aware/discovery",
+                    Some(json!({"udpPort": port, "durationSeconds": seconds})),
+                )
+                .await?,
+            )
+        }
+        "aware-connect" => {
+            let npub = required(args.next(), "peer npub")?;
+            let match_id = required(args.next(), "match id")?;
+            let port = optional_u16(args.next(), "UDP port")?.unwrap_or(4873);
+            print_response(
+                post(
+                    "/transports/aware/data-paths",
+                    Some(json!({"peerNpub": npub, "matchId": match_id, "port": port})),
+                )
+                .await?,
+            )
+        }
+        "aware-remove" => {
+            let id = required(args.next(), "data path id")?;
+            print_response(delete(&format!("/transports/aware/data-paths/{id}")).await?)
+        }
+        "coc-connect" => {
+            let npub = required(args.next(), "peer npub")?;
+            let peer_address = required(args.next(), "Bluetooth address")?;
+            let psm = optional_u16(args.next(), "PSM")?.context("missing PSM")?;
+            let address_type = args.next().unwrap_or_else(|| "public".into());
+            print_response(
+                post(
+                    "/transports/coc",
+                    Some(json!({
+                        "peerNpub": npub,
+                        "peerAddress": peer_address,
+                        "psm": psm,
+                        "addressType": address_type,
+                    })),
+                )
+                .await?,
+            )
+        }
         "version" | "-V" | "--version" => {
             println!("totem-myco {}", env!("CARGO_PKG_VERSION"));
             Ok(())
@@ -123,6 +198,12 @@ fn credential_path() -> PathBuf {
 
 fn required(value: Option<String>, name: &str) -> Result<String> {
     value.with_context(|| format!("missing {name}"))
+}
+
+fn optional_u16(value: Option<String>, name: &str) -> Result<Option<u16>> {
+    value
+        .map(|value| value.parse().with_context(|| format!("invalid {name}")))
+        .transpose()
 }
 
 async fn get(path: &str) -> Result<serde_json::Value> {

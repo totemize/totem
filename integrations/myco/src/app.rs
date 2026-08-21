@@ -13,6 +13,10 @@ use crate::model::{
     TransferRecord, TransferView, INVITE_TTL_SECS, MAX_TRACKED_TRANSFERS, OFFER_TTL_SECS,
 };
 use crate::protocol::{self, FileMessage, PairPayload};
+use crate::transport::{
+    L2capConnection, NanDataPath, NanDiscovery, PeerLane, TransportKind, TransportManager,
+    TransportStatus,
+};
 
 pub struct App {
     keys: Keys,
@@ -22,6 +26,7 @@ pub struct App {
     received_dir: PathBuf,
     outbox_dir: PathBuf,
     client: reqwest::Client,
+    transport: TransportManager,
 }
 
 impl App {
@@ -42,6 +47,8 @@ impl App {
             .connect_timeout(Duration::from_secs(15))
             .timeout(Duration::from_secs(120))
             .build()?;
+        let device_manager_url = std::env::var("TOTEM_DEVICE_MANAGER_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:8000".into());
         Ok(Arc::new(Self {
             keys,
             store,
@@ -50,6 +57,7 @@ impl App {
             received_dir,
             outbox_dir,
             client,
+            transport: TransportManager::new(device_manager_url)?,
         }))
     }
 
@@ -75,6 +83,72 @@ impl App {
     pub fn circle_npub_for_ip(&self, ip: std::net::Ipv6Addr) -> Option<String> {
         let state = self.store.snapshot();
         protocol::npub_for_ipv6(state.circle.iter().map(|p| p.npub.as_str()), ip)
+    }
+
+    pub async fn transport_status(&self) -> TransportStatus {
+        self.transport.status().await
+    }
+
+    pub async fn connect_udp_lane(
+        &self,
+        npub: &str,
+        address: &str,
+        kind: &str,
+    ) -> Result<PeerLane> {
+        if !self.is_in_circle(npub) {
+            bail!("direct UDP lanes require a Circle peer");
+        }
+        self.transport
+            .connect_udp_lane(npub, address, TransportKind::udp_lane(kind)?)
+            .await
+    }
+
+    pub fn remove_udp_lane(&self, npub: &str, kind: &str) -> Result<()> {
+        self.transport
+            .remove_udp_lane(npub, TransportKind::udp_lane(kind)?);
+        Ok(())
+    }
+
+    pub async fn start_aware_discovery(
+        &self,
+        udp_port: u16,
+        duration: u16,
+    ) -> Result<NanDiscovery> {
+        self.transport
+            .start_aware_discovery(udp_port, duration)
+            .await
+    }
+
+    pub async fn create_aware_path(
+        &self,
+        npub: &str,
+        match_id: &str,
+        port: u16,
+    ) -> Result<NanDataPath> {
+        if !self.is_in_circle(npub) {
+            bail!("Wi-Fi Aware data paths require a Circle peer");
+        }
+        self.transport.create_aware_path(npub, match_id, port).await
+    }
+
+    pub async fn remove_aware_path(&self, data_path_id: &str) -> Result<()> {
+        self.transport.remove_aware_path(data_path_id).await
+    }
+
+    pub async fn connect_coc(
+        &self,
+        npub: &str,
+        peer_address: &str,
+        psm: u16,
+        mtu: u16,
+        address_type: &str,
+    ) -> Result<L2capConnection> {
+        if !self.is_in_circle(npub) {
+            bail!("LE CoC handoff requires a Circle peer");
+        }
+        self.transport
+            .connect_coc(npub, peer_address, psm, mtu, address_type)
+            .await
     }
 
     pub fn create_invite(&self) -> Result<String> {

@@ -41,6 +41,41 @@ file-control and blob listeners MUST reject sources outside the local Circle.
 The loopback operator API is not a mesh or guest interface. Port allocations
 live in `07-conventions.md`.
 
+### Optional radio lanes
+
+The native integration MAY use the policy-free radio operations supplied by
+the device manager, but it MUST preserve the ownership boundary:
+
+1. For LE L2CAP CoC, the integration supplies an observed Bluetooth address
+   and assigned PSM to the device manager. On connection, the device manager
+   passes the descriptor directly to the fixed FIPS receiver with
+   `SCM_RIGHTS`. Myco MUST NOT read or frame the CoC payload.
+2. For Wi-Fi Aware, the integration publishes the fixed service name
+   `myco.fips.v1`. Passive service data contains only the selected UDP port as
+   two little-endian bytes. Once a data path yields a scoped peer IPv6 address,
+   the integration submits `(peer npub, scoped UDP endpoint)` through the
+   existing group-scoped FIPS control socket.
+3. LAN and `!FIPS` SoftAP endpoints use that same FIPS UDP-connect operation.
+   They are not alternate unauthenticated Myco application endpoints.
+
+In every case, the pairing, relay, and encrypted-blob clients continue to use
+the peer's stable FIPS mesh address. FIPS owns Noise identity, framing,
+routing, selection among usable links, and fallback. The device manager owns
+only the bounded radio resources that it creates. The Myco integration records
+which lane it requested, but does not promote that observation into trust.
+
+The radio adapter MUST call the device manager over an explicit loopback URL
+and FIPS through `/run/fips/control.sock`; it MUST NOT receive additional
+Linux capabilities, sudo rules, a copied key, or access to radio payload
+bytes. A failed optional lane leaves the existing FIPS-TUN path intact.
+
+At the current implementation boundary, Linux NAN data-path creation reports a
+typed unsupported result until a production NDP backend is available, and CoC
+handoff requires the separate FIPS receiver implementation. Automatic Android
+Aware identity follow-up messaging and real handset interoperability remain
+hardware-backed completion gates; the operator must not infer them from mock
+data-path success.
+
 ## Totem Nearby napplet
 
 The reference napplet is `napplets/totem-nearby`. Its production payload is a

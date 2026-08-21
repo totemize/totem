@@ -36,6 +36,22 @@ pub async fn serve(app: Arc<App>) -> anyhow::Result<()> {
         .route("/files", post(control_file_send))
         .route("/files/{id}/accept", post(control_file_accept))
         .route("/files/{id}/decline", post(control_file_decline))
+        .route("/transports", get(control_transports))
+        .route("/transports/routes", post(control_route_register))
+        .route(
+            "/transports/routes/{npub}/{kind}",
+            axum::routing::delete(control_route_remove),
+        )
+        .route("/transports/aware/discovery", post(control_aware_discovery))
+        .route(
+            "/transports/aware/data-paths",
+            post(control_aware_data_path),
+        )
+        .route(
+            "/transports/aware/data-paths/{id}",
+            axum::routing::delete(control_aware_data_path_remove),
+        )
+        .route("/transports/coc", post(control_coc_connect))
         .layer(DefaultBodyLimit::max(128 * 1024))
         .with_state(app);
 
@@ -168,6 +184,127 @@ async fn blob_get(
 
 async fn control_state(State(app): State<Arc<App>>) -> Json<crate::model::PublicState> {
     Json(app.public_state())
+}
+
+async fn control_transports(
+    State(app): State<Arc<App>>,
+) -> Json<crate::transport::TransportStatus> {
+    Json(app.transport_status().await)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DirectRouteInput {
+    peer_npub: String,
+    address: String,
+    transport: String,
+}
+
+async fn control_route_register(
+    State(app): State<Arc<App>>,
+    Json(input): Json<DirectRouteInput>,
+) -> Response {
+    match app
+        .connect_udp_lane(&input.peer_npub, &input.address, &input.transport)
+        .await
+    {
+        Ok(route) => Json(route).into_response(),
+        Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string()),
+    }
+}
+
+async fn control_route_remove(
+    State(app): State<Arc<App>>,
+    Path((npub, kind)): Path<(String, String)>,
+) -> Response {
+    match app.remove_udp_lane(&npub, &kind) {
+        Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => error(StatusCode::BAD_REQUEST, &e.to_string()),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AwareDiscoveryInput {
+    duration_seconds: Option<u16>,
+    udp_port: Option<u16>,
+}
+
+async fn control_aware_discovery(
+    State(app): State<Arc<App>>,
+    Json(input): Json<AwareDiscoveryInput>,
+) -> Response {
+    match app
+        .start_aware_discovery(
+            input.udp_port.unwrap_or(4873),
+            input.duration_seconds.unwrap_or(300).clamp(1, 3600),
+        )
+        .await
+    {
+        Ok(session) => Json(session).into_response(),
+        Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AwareDataPathInput {
+    peer_npub: String,
+    match_id: String,
+    port: Option<u16>,
+}
+
+async fn control_aware_data_path(
+    State(app): State<Arc<App>>,
+    Json(input): Json<AwareDataPathInput>,
+) -> Response {
+    match app
+        .create_aware_path(
+            &input.peer_npub,
+            &input.match_id,
+            input.port.unwrap_or(4873),
+        )
+        .await
+    {
+        Ok(path) => Json(path).into_response(),
+        Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
+async fn control_aware_data_path_remove(
+    State(app): State<Arc<App>>,
+    Path(id): Path<String>,
+) -> Response {
+    match app.remove_aware_path(&id).await {
+        Ok(()) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CocInput {
+    peer_npub: String,
+    peer_address: String,
+    psm: u16,
+    mtu: Option<u16>,
+    address_type: Option<String>,
+}
+
+async fn control_coc_connect(State(app): State<Arc<App>>, Json(input): Json<CocInput>) -> Response {
+    match app
+        .connect_coc(
+            &input.peer_npub,
+            &input.peer_address,
+            input.psm,
+            input.mtu.unwrap_or(1024),
+            input.address_type.as_deref().unwrap_or("public"),
+        )
+        .await
+    {
+        Ok(connection) => Json(connection).into_response(),
+        Err(e) => error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
 }
 
 async fn control_invite(State(app): State<Arc<App>>) -> Response {
