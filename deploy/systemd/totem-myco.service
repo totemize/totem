@@ -1,0 +1,25 @@
+[Unit]
+Description=Totem Myco pairing and file-transfer integration
+Wants=fips.service network-online.target
+After=fips.service network-online.target
+
+[Service]
+Type=simple
+User=totem
+Group=totem
+SupplementaryGroups=fips
+StateDirectory=totem-myco
+StateDirectoryMode=0700
+LoadCredential=fips.key:/etc/fips/fips.key
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+Environment=RUST_LOG=totem_myco=info
+Environment="TOTEM_MYCO_NAME=Totem"
+ExecStart=/usr/local/bin/totem-myco serve
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Totem Nearby</title>
+  </head>
+  <body>
+    <main id="app" class="app-shell">
+      <section class="workspace" aria-labelledby="app-title">
+        <header class="masthead">
+          <div>
+            <p class="eyebrow">Totem remote · NIP-5D</p>
+            <h1 id="app-title">Totem Nearby</h1>
+            <p class="lede">Find a Totem service, inspect what it offers, and ask it to act.</p>
+          </div>
+          <output id="status" class="status status-idle" aria-live="polite">Ready</output>
+        </header>
+
+        <section class="panel discovery-panel" aria-labelledby="discovery-title">
+          <div class="section-heading">
+            <div>
+              <p class="step">01 · Discover</p>
+              <h2 id="discovery-title">Nearby Totems</h2>
+            </div>
+            <span id="serverCount" class="count-badge">0 found</span>
+          </div>
+          <form id="discoverForm" class="discover-form">
+            <label class="field grow">
+              <span>Service search</span>
+              <input id="searchInput" type="search" value="Totem" autocomplete="off" />
+            </label>
+            <button id="discoverButton" type="submit">Scan services</button>
+          </form>
+          <div id="serverList" class="server-list" role="list">
+            <p class="empty-state">Scan to find Totem ContextVM services known to this shell.</p>
+          </div>
+        </section>
+
+        <section class="panel tools-panel" aria-labelledby="tools-title">
+          <div class="section-heading">
+            <div>
+              <p class="step">02 · Choose</p>
+              <h2 id="tools-title">Totem tools</h2>
+            </div>
+            <button id="rememberButton" class="button-secondary compact" type="button" hidden>
+              Remember
+            </button>
+          </div>
+          <p id="selectedServer" class="selected-server muted">Select a Totem to inspect its tools.</p>
+          <div id="toolList" class="tool-list" role="list"></div>
+        </section>
+
+        <section class="panel action-panel" aria-labelledby="action-title">
+          <div class="section-heading">
+            <div>
+              <p class="step">03 · Act</p>
+              <h2 id="action-title">Run a tool</h2>
+            </div>
+            <span id="toolName" class="tool-pill">No tool selected</span>
+          </div>
+          <div class="action-grid">
+            <label class="field">
+              <span>Arguments · JSON object</span>
+              <textarea id="argumentsInput" rows="10" spellcheck="false" disabled>{}</textarea>
+            </label>
+            <div class="result-wrap">
+              <div class="result-heading">
+                <span>Result</span>
+                <button id="runButton" type="button" disabled>Run on Totem</button>
+              </div>
+              <pre id="output" class="output" aria-live="polite">Choose a tool to begin.</pre>
+            </div>
+          </div>
+        </section>
+
+        <footer class="boundary-note">
+          Transport, signing, policy, and payment stay in the host shell. This napplet never holds a key or opens a network connection.
+        </footer>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

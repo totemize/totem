@@ -1,0 +1,96 @@
+---
+- name: Install the target Rust standard library for Myco
+  ansible.builtin.command:
+    argv:
+      - rustup
+      - target
+      - add
+      - "{{ totemd_rust_target }}"
+  changed_when: false
+  delegate_to: localhost
+  become: false
+
+- name: Build the Myco integration for the target architecture
+  ansible.builtin.command:
+    argv:
+      - cargo
+      - build
+      - --release
+      - --locked
+      - --target
+      - "{{ totemd_rust_target }}"
+  args:
+    chdir: "{{ totem_repo_root }}/integrations/myco"
+  changed_when: false
+  delegate_to: localhost
+  become: false
+
+- name: Inspect the built Myco integration
+  ansible.builtin.stat:
+    path: >-
+      {{ totem_repo_root }}/integrations/myco/target/{{ totemd_rust_target }}/release/totem-myco
+    checksum_algorithm: sha256
+  register: myco_local_artifact
+  delegate_to: localhost
+  become: false
+
+- name: Require the built Myco integration
+  ansible.builtin.assert:
+    that:
+      - myco_local_artifact.stat.exists
+      - myco_local_artifact.stat.isreg
+
+- name: Install the Myco integration binary
+  ansible.builtin.copy:
+    src: >-
+      {{ totem_repo_root }}/integrations/myco/target/{{ totemd_rust_target }}/release/totem-myco
+    dest: /usr/local/bin/totem-myco
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart Myco integration
+
+- name: Install the Myco integration systemd unit
+  ansible.builtin.template:
+    src: totem-myco.service.j2
+    dest: /etc/systemd/system/totem-myco.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd for Myco integration
+    - Restart Myco integration
+
+- name: Ensure the migration directory exists for standalone Myco deploys
+  ansible.builtin.file:
+    path: "{{ totem_migration_root }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Read the Myco integration migration checkpoint
+  ansible.builtin.stat:
+    path: "{{ totem_migration_root }}/0050-myco-integration.complete"
+  register: myco_checkpoint
+
+- name: Record Myco integration adoption
+  ansible.builtin.copy:
+    dest: "{{ totem_migration_root }}/0050-myco-integration.complete"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      migration=0050-myco-integration
+      sha256={{ myco_local_artifact.stat.checksum }}
+  when: not myco_checkpoint.stat.exists
+
+- name: Enable and start the Myco integration
+  ansible.builtin.systemd_service:
+    name: totem-myco.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply Myco integration changes before verification
+  ansible.builtin.meta: flush_handlers

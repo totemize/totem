@@ -22,6 +22,16 @@ live.
 A totem MUST serve these services on the registered ports on every on-ramp
 (the bus remains loopback-only).
 
+A Myco-enabled totem additionally uses the Myco ports pinned by
+`11-myco.md`:
+
+| Service | Port | Notes |
+|---------|------|-------|
+| Myco file control | **4870** | WebSocket; Circle-gated on the FIPS mesh |
+| Myco pairing | **4873** | HTTP `POST /pair`; signed device events |
+| Myco operator control | **4874** | Loopback only (`127.0.0.1`) |
+| Myco encrypted blobs | **24243** | HTTP GET; Circle-gated on the FIPS mesh |
+
 ## AP network conventions
 
 - **SSID: `!Totem`**, the same on every totem, open security. Same SSID +

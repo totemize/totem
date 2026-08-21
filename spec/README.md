@@ -19,8 +19,9 @@ It is a set of focused documents, iterated as we design and build.
 | [08-stories.md](08-stories.md) | User stories and the demo milestone (acceptance test) | Draft |
 | [09-open-questions.md](09-open-questions.md) | Non-goals, future directions, open questions | Draft |
 | [10-control-plane.md](10-control-plane.md) | totemd: control-plane daemon, net code host, web server, bus | Draft |
+| [11-myco.md](11-myco.md) | Myco interoperability, native file sharing, and the separate Totem napplet | Draft |
 
-Reading order for newcomers: 01 → 06 → 02 → 03 → 04 → 05 → 10, then 07 as
+Reading order for newcomers: 01 → 06 → 02 → 03 → 04 → 05 → 10 → 11, then 07 as
 the compliance checklist. 08 validates the whole; 09 records what is
 deliberately not decided.
 
@@ -57,5 +58,7 @@ RFC 2119.
 - `references/strfry` — strfry: self-contained nostr relay (LMDB), NIP-77 sync,
   plugin interface for policy; our reference relay implementation.
   Upstream: <https://github.com/hoytech/strfry>
+- Myco — paired-device application and native encrypted file-transfer protocol.
+  Upstream: <https://github.com/Origami74/myco>
 
 External: NIP-01, NIP-02, NIP-11, NIP-77, NIP-98 as cited per document.
