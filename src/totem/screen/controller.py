@@ -12,7 +12,7 @@ from totem.screen.render import FrameRenderer
 class Display(Protocol):
     async def wait_ready(self, timeout: float = 60.0) -> None: ...
 
-    async def show(self, image) -> None: ...
+    async def show(self, image, refresh_mode: str = "full") -> None: ...
 
 
 class ReadinessMonitor(Protocol):
@@ -28,10 +28,15 @@ class ScreenController:
         self.display = display
         self.renderer = renderer
         self.current = ScreenFrame(ScreenState.BOOTING, "TOTEM")
+        self._has_drawn = False
 
     async def transition(self, frame: ScreenFrame) -> None:
         logger.info("Screen transition: %s", frame.state.value)
-        await self.display.show(self.renderer.render(frame))
+        await self.display.show(
+            self.renderer.render(frame),
+            refresh_mode="partial" if self._has_drawn else "full",
+        )
+        self._has_drawn = True
         self.current = frame
 
     async def boot(

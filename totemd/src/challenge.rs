@@ -245,13 +245,20 @@ async fn on_candidate_port(st: Arc<AppState>, npub: &str, ip: &str, port: u16) {
         return;
     };
     match prove_port(npub, ip, port).await {
-        Ok(()) if st.recognize(npub, encounter) => {
-            tracing::info!(npub, "peer recognized as a totem");
-            st.push(serde_json::json!({ "type": "totem.recognized", "npub": npub }));
-            // ponytail: friendship membership stays empty until the kind-3 reader lands.
-            sync::start(st, npub.to_owned(), ip.to_owned(), encounter, false);
-        }
-        Ok(()) => tracing::debug!(npub, "discarded stale or duplicate challenge result"),
+        Ok(()) => match st.recognize(npub, encounter) {
+            Ok(Some(known_before)) => {
+                tracing::info!(npub, known_before, "peer recognized as a totem");
+                st.push(serde_json::json!({
+                    "type": "totem.recognized",
+                    "npub": npub,
+                    "known_before": known_before,
+                }));
+                // ponytail: friendship membership stays empty until the kind-3 reader lands.
+                sync::start(st, npub.to_owned(), ip.to_owned(), encounter, false);
+            }
+            Ok(None) => tracing::debug!(npub, "discarded stale or duplicate challenge result"),
+            Err(e) => tracing::error!(npub, error = %e, "could not persist peer recognition"),
+        },
         Err(e) => tracing::info!(npub, error = %e, "challenge failed"),
     }
 }
@@ -333,7 +340,29 @@ mod tests {
         let mut pushes = st.tx.subscribe();
         on_candidate_port(st.clone(), &npub, "127.0.0.1", port).await;
         assert!(st.is_recognized(&npub));
-        assert_eq!(pushes.try_recv().unwrap()["type"], "totem.recognized");
+        let push = pushes.try_recv().unwrap();
+        assert_eq!(push["type"], "totem.recognized");
+        assert_eq!(push["known_before"], false);
+        on_candidate_port(st.clone(), &npub, "127.0.0.1", port).await;
+        assert!(pushes.try_recv().is_err());
+
+        st.forget_recognized(&npub);
+        let mut peers = HashMap::new();
+        peers.insert(
+            npub.clone(),
+            PeerInfo {
+                npub: npub.clone(),
+                ipv6_addr: "127.0.0.1".into(),
+                transport_type: "test".into(),
+                first_seen: 2,
+                last_seen: 2,
+            },
+        );
+        st.set_peers(peers);
+        on_candidate_port(st.clone(), &npub, "127.0.0.1", port).await;
+        let push = pushes.try_recv().unwrap();
+        assert_eq!(push["type"], "totem.recognized");
+        assert_eq!(push["known_before"], true);
         server.abort();
     }
 }

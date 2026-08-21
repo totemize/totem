@@ -58,6 +58,7 @@ defaults. Use `totem` when command-line bind or logging options are needed.
 | `TOTEM_ALLOW_MOCK_DRIVERS` | false | Accepts `1`, `true`, `yes`, or `on` (case-insensitive) to permit explicit mock display, NFC, and Wi-Fi transports. |
 | `TOTEM_STORAGE_ROOT` | driver default | Confines storage reads and writes below one directory. The Ansible deployment sets `/var/lib/totem/storage`. |
 | `TOTEM_EINK_DRIVER` | empty | Exact display driver selected when `DisplayManager` receives no explicit name. An explicit constructor argument still wins. |
+| `TOTEM_EINK_FULL_REFRESH_EVERY` | `0` | Optional non-negative full-refresh cadence. `0` disables scheduled full flashes; a positive value promotes every Nth requested partial frame. Invalid or negative values fail manager initialization. |
 | `TOTEM_UPS_DRIVER` | PiSugar2 fallback | Exact UPS driver selected when `UPSManager` receives no explicit name. Metot is pinned to `pisugar2`; set `waveshare_ups_hat_c` for a Waveshare UPS HAT (C). |
 | `TOTEM_I2C_BUS` | `1` | Linux I2C bus used by UPS drivers. |
 | `EINK_DISPLAY_TYPE` | empty | Guides display auto-detection: `2in13` or `3in7`. Without it, detected Raspberry Pi displays default to the 3.7-inch driver family. |
@@ -78,7 +79,7 @@ The application exposes OpenAPI and Swagger UI using FastAPI's standard paths
 | `GET` | `/` | — | Service name, version, and `status: "running"`. |
 | `GET` | `/health` | — | `status: "healthy"` and the names of managers initialized so far. |
 | `POST` | `/display/text` | `text`, optional `font_size`, `x`, `y` | `Status` |
-| `POST` | `/display/image` | `image_base64` | `Status` |
+| `POST` | `/display/image` | `image_base64`, optional `refresh_mode` (`full` or `partial`) | `Status` |
 | `POST` | `/nfc/read` | — | `Status`; read text is embedded in `message`. |
 | `POST` | `/nfc/write` | `data` | `Status` |
 | `POST` | `/storage/read` | `path` | `StorageReadResponse` with `data_base64`. |
@@ -106,11 +107,15 @@ The body contains the complete PNG or JPEG file as strict base64—not a data
 URL and not a raw framebuffer:
 
 ```json
-{"image_base64":"iVBORw0KGgo…"}
+{"image_base64":"iVBORw0KGgo…","refresh_mode":"partial"}
 ```
 
 The manager decodes the image with Pillow and converts it through the selected
-display driver.
+display driver. `refresh_mode` defaults to `full`, so existing clients keep the
+original behavior. Drivers without a partial-refresh method feature-detect and
+fall back to a full refresh. A partial request also becomes a full refresh when
+the controller has no known baseline or when the configured hygiene cadence is
+reached. Failed updates do not advance that cadence.
 
 ### NFC
 
@@ -208,8 +213,9 @@ the event processor and allocates two locks per manager type:
 - an initialization lock prevents duplicate first-use construction;
 - an operation lock serializes that manager's calls.
 
-Display work can therefore proceed concurrently with storage work, while two
-display calls are serialized. All manager calls run off the async event loop.
+Display work can therefore proceed concurrently with storage work, while full
+and partial display calls share one serialized critical section. All manager
+calls run off the async event loop.
 At shutdown, each initialized manager's `close()` method runs before the event
 processor is cancelled.
 
@@ -286,7 +292,9 @@ the configured root to expose arbitrary block-device paths.
 Automatic selection requires `/dev/i2c-<TOTEM_I2C_BUS>` to exist;
 initialization confirms that the device returns a plausible battery voltage.
 Install `smbus2` through the `raspberry-pi` extra or provide the Debian
-`python3-smbus` package. The Ansible deployment uses the Debian package.
+`python3-smbus` package. The Ansible deployment uses the Debian package and,
+on I2C-enabled hosts, persists and loads `i2c-dev` so the userspace adapter
+node exists after boot.
 The Waveshare driver initializes the INA219 with the calibration and sampling
 configuration from the [Waveshare UPS HAT (C) reference implementation](https://www.waveshare.com/wiki/UPS_HAT_%28C%29).
 These writes affect only the monitor; the driver does not configure the charger
@@ -297,17 +305,26 @@ or power path.
 ### `DisplayManager`
 
 ```python
-DisplayManager(driver_name: str | None = None, *, allow_mock: bool = False)
+DisplayManager(
+    driver_name: str | None = None,
+    *,
+    allow_mock: bool = False,
+    full_refresh_every: int | None = None,
+)
 ```
 
 Methods and properties: `width`, `height`, `clear_screen()`,
-`display_text(text, font_size=24, x=10, y=10, font_name=None)`,
-`display_image_from_file(path)`, `display_image(PIL.Image)`,
-`display_bytes(bytes)`, `display_encoded_image(bytes)`, `sleep()`, `wake()`,
-and `close()`.
+`display_text(text, font_size=24, x=10, y=10, font_name=None,
+refresh_mode="full")`, `display_image_from_file(path,
+refresh_mode="full")`, `display_image(PIL.Image, refresh_mode="full")`,
+`display_bytes(bytes, refresh_mode="full")`, `display_encoded_image(bytes,
+refresh_mode="full")`, `sleep()`, `wake()`, and `close()`.
 
 The display manager has an internal re-entrant lock. Share one instance rather
-than opening the GPIO/SPI transport independently from multiple callers.
+than opening the GPIO/SPI transport independently from multiple callers. The
+V4 driver seeds both controller RAM planes on a full update, tracks the prior
+frame for differential partial updates, and invalidates that baseline after a
+refresh failure.
 
 ### `NFCManager`
 

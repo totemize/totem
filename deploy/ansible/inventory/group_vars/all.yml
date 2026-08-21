@@ -9,8 +9,24 @@ totem_device_manager_enabled: true
 totem_screen_enabled: false
 totem_fips_lan_rendezvous_enabled: true
 totem_eink_driver: ""
+totem_eink_full_refresh_every: 0
 totem_screen_rotation: 0
+totem_screen_snapshot_poll_seconds: 15
+totem_screen_reconnect_seconds: 2
+totem_screen_coalesce_seconds: 2.1
+totem_screen_caption_word_seconds: 1.2
+totem_screen_low_battery_percent: 20
+totem_screen_critical_battery_percent: 8
+totem_screen_sequence_rates: ""
+totem_screen_scene_dwells: ""
+totem_screen_scene_priorities: ""
+totem_screen_max_pending_scenes: 8
 totem_ups_driver: ""
+totem_boot_config_path: /boot/firmware/config.txt
+totem_spi_enabled: false
+totem_i2c_enabled: false
+totem_reboot_on_hardware_config_change: false
+totem_force_hardware_reboot: false
 totem_local_artifact_root: >-
   {{ playbook_dir }}/../artifacts/{{ totem_artifact_arch }}
 

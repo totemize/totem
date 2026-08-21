@@ -60,8 +60,14 @@ class DisplayTextRequest(BaseModel):
     y: int = 10
 
 
+class DisplayRefreshMode(str, Enum):
+    FULL = "full"
+    PARTIAL = "partial"
+
+
 class DisplayImageRequest(BaseModel):
     image_base64: str
+    refresh_mode: DisplayRefreshMode = DisplayRefreshMode.FULL
 
 
 class NFCWriteRequest(BaseModel):

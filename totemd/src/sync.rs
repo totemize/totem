@@ -1,7 +1,7 @@
 //! Periodic per-encounter strfry sync process supervision.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet, VecDeque},
     io::Write,
     path::{Path, PathBuf},
     process::Stdio,
@@ -19,12 +19,13 @@ use tokio::{
     sync::oneshot,
 };
 
-use crate::state::AppState;
+use crate::{fips::PeerInfo, state::AppState};
 
 const RUNNER: &str = "/usr/local/libexec/totem-strfry";
 const RELAY_PORT: u16 = 7777;
 const DEFAULT_TIMEOUT_SECS: u64 = 300;
 const DEFAULT_INTERVAL_SECS: u64 = 300;
+const DEPARTED_SNAPSHOT_CAPACITY: usize = 64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SyncState {
@@ -66,6 +67,10 @@ struct Job {
 
 pub struct SyncSupervisor {
     jobs: Mutex<HashMap<String, Job>>,
+    /// Recently departed peers whose cancellation payoff must remain visible
+    /// to snapshot-only consumers. Replacement encounters remove their prior
+    /// row and the fixed capacity prevents unbounded history growth.
+    departed: Mutex<VecDeque<PeerInfo>>,
     active: AtomicUsize,
     idle: tokio::sync::Notify,
 }
@@ -74,6 +79,7 @@ impl Default for SyncSupervisor {
     fn default() -> Self {
         Self {
             jobs: Mutex::new(HashMap::new()),
+            departed: Mutex::new(VecDeque::with_capacity(DEPARTED_SNAPSHOT_CAPACITY)),
             active: AtomicUsize::new(0),
             idle: tokio::sync::Notify::new(),
         }
@@ -134,13 +140,11 @@ impl SyncSupervisor {
         exit_code: Option<i32>,
         error: Option<String>,
     ) {
-        if let Some(job) = self
-            .jobs
-            .lock()
-            .unwrap()
-            .get_mut(npub)
-            .filter(|job| job.encounter == encounter && job.attempt == attempt)
-        {
+        if let Some(job) = self.jobs.lock().unwrap().get_mut(npub).filter(|job| {
+            job.encounter == encounter
+                && job.attempt == attempt
+                && job.state != SyncState::Cancelled
+        }) {
             job.state = state;
             job.duration_ms = Some(duration_ms);
             job.exit_code = exit_code;
@@ -162,6 +166,7 @@ impl SyncSupervisor {
         self.idle.notify_waiters();
     }
 
+    #[cfg(test)]
     fn cancel(&self, npub: &str) {
         if let Some(cancel) = self
             .jobs
@@ -172,6 +177,83 @@ impl SyncSupervisor {
         {
             let _ = cancel.send(());
         }
+    }
+
+    /// Cancel a departing peer and retain a bounded, explicitly non-live row
+    /// until a replacement encounter arrives (or the retention cap evicts it).
+    fn depart(&self, peer: &PeerInfo) {
+        let (cancel, was_running) = {
+            let mut jobs = self.jobs.lock().unwrap();
+            let Some(job) = jobs
+                .get_mut(&peer.npub)
+                .filter(|job| job.encounter == peer.first_seen)
+            else {
+                return;
+            };
+            let was_running = job.state == SyncState::Running && job.cancel.is_some();
+            if was_running {
+                job.state = SyncState::Cancelled;
+                job.duration_ms = Some(millis(job.started.elapsed()));
+                job.exit_code = None;
+                job.error = None;
+            }
+            (job.cancel.take(), was_running)
+        };
+        if let Some(cancel) = cancel {
+            let _ = cancel.send(());
+        }
+        if !was_running {
+            // A completed round may still own the cancellation sender while
+            // its periodic loop sleeps. Stop that loop, but do not rewrite its
+            // truthful terminal outcome into a departure cancellation.
+            self.remove_terminal_job(peer);
+            return;
+        }
+
+        let evicted = {
+            let mut departed = self.departed.lock().unwrap();
+            departed.retain(|entry| entry.npub != peer.npub || entry.first_seen != peer.first_seen);
+            departed.push_back(peer.clone());
+            (departed.len() > DEPARTED_SNAPSHOT_CAPACITY)
+                .then(|| departed.pop_front())
+                .flatten()
+        };
+        if let Some(evicted) = evicted {
+            self.remove_terminal_job(&evicted);
+        }
+    }
+
+    /// Purge tombstones as soon as any replacement/live encounter is present,
+    /// so an old cancellation token can never attach to a new peer row.
+    pub(crate) fn observe_live<'a>(&self, npubs: impl Iterator<Item = &'a String>) {
+        let live: HashSet<&str> = npubs.map(String::as_str).collect();
+        let removed: Vec<PeerInfo> = {
+            let mut departed = self.departed.lock().unwrap();
+            let removed = departed
+                .iter()
+                .filter(|peer| live.contains(peer.npub.as_str()))
+                .cloned()
+                .collect();
+            departed.retain(|peer| !live.contains(peer.npub.as_str()));
+            removed
+        };
+        for peer in removed {
+            self.remove_terminal_job(&peer);
+        }
+    }
+
+    fn remove_terminal_job(&self, peer: &PeerInfo) {
+        let mut jobs = self.jobs.lock().unwrap();
+        if jobs
+            .get(&peer.npub)
+            .is_some_and(|job| job.encounter == peer.first_seen && job.cancel.is_none())
+        {
+            jobs.remove(&peer.npub);
+        }
+    }
+
+    pub(crate) fn departed_peers(&self) -> Vec<PeerInfo> {
+        self.departed.lock().unwrap().iter().cloned().collect()
     }
 
     fn cancel_all(&self) {
@@ -485,8 +567,13 @@ fn complete_attempt(
     }));
 }
 
+#[cfg(test)]
 pub fn cancel(st: &AppState, npub: &str) {
     st.syncs.cancel(npub);
+}
+
+pub fn depart(st: &AppState, peer: &PeerInfo) {
+    st.syncs.depart(peer);
 }
 
 pub fn cancel_all(st: &AppState) {
@@ -535,7 +622,7 @@ mod tests {
             .collect::<HashMap<_, _>>();
         st.set_peers(map);
         for (npub, _, encounter) in peers {
-            assert!(st.recognize(npub, *encounter));
+            assert!(st.recognize(npub, *encounter).unwrap().is_some());
         }
         st
     }
@@ -572,7 +659,9 @@ mod tests {
         attempt: Option<u64>,
         state: &str,
     ) -> Value {
-        tokio::time::timeout(Duration::from_secs(2), async {
+        // Sync tests spawn real child processes. Leave headroom for loaded
+        // macOS/CI runners while retaining a finite failure bound.
+        tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 let value = fields(st, npub, encounter);
                 if value["sync_state"] == state
@@ -758,7 +847,10 @@ rm "{lock}""#,
             4,
             false,
             slow,
-            Duration::from_millis(20),
+            // Process startup can exceed 20 ms on loaded/macOS runners. The
+            // first attempt still deterministically times out against its
+            // 30-second sleep; the retry has enough time to exit successfully.
+            Duration::from_millis(500),
             Duration::from_millis(20),
         );
         wait_for_attempt(&st, "npub1slow", 4, Some(2), "succeeded").await;
@@ -821,6 +913,119 @@ rm "{lock}""#,
         assert_eq!(fields(&st, "npub1b", 6)["sync_state"], "cancelled");
         let _ = fs::remove_file(marker);
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn departed_cancellation_survives_snapshot_and_expires_on_reencounter() {
+        let (slow, dir) = script("exec /bin/sleep 30");
+        let st = peer_state(Config::default(), &[("npub1farewell", "127.0.0.1", 7)]);
+        start_with(
+            st.clone(),
+            "npub1farewell".into(),
+            "127.0.0.1".into(),
+            7,
+            false,
+            slow,
+            Duration::from_secs(30),
+            Duration::from_secs(30),
+        );
+        wait_for(&st, "npub1farewell", 7, "running").await;
+
+        let departed = st.peers_map().remove("npub1farewell").unwrap();
+        depart(&st, &departed);
+        st.set_peers(HashMap::new());
+        st.forget_recognized("npub1farewell");
+
+        let snapshot = st.peers_snapshot();
+        assert_eq!(st.peer_count(), 0);
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(snapshot[0]["npub"], "npub1farewell");
+        assert_eq!(snapshot[0]["first_seen"], 7);
+        assert_eq!(snapshot[0]["present"], false);
+        assert_eq!(snapshot[0]["recognized"], false);
+        assert_eq!(snapshot[0]["sync_state"], "cancelled");
+        assert_eq!(snapshot[0]["sync_attempt"], 1);
+        let status = crate::bus::handle(json!({"type": "totem.status.get"}), &st);
+        let peers = crate::bus::handle(json!({"type": "totem.peers.get"}), &st);
+        assert_eq!(status["status"]["peers"], 0);
+        assert_eq!(peers["peers"].as_array().unwrap().len(), 1);
+        assert_eq!(peers["peers"][0]["present"], false);
+        st.syncs.wait_idle().await;
+
+        let replacement = PeerInfo {
+            npub: "npub1farewell".into(),
+            ipv6_addr: "127.0.0.2".into(),
+            transport_type: "test".into(),
+            first_seen: 8,
+            last_seen: 8,
+        };
+        st.set_peers(HashMap::from([("npub1farewell".into(), replacement)]));
+        let snapshot = st.peers_snapshot();
+        assert_eq!(st.peer_count(), 1);
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(snapshot[0]["first_seen"], 8);
+        assert_eq!(snapshot[0]["present"], true);
+        assert_eq!(snapshot[0]["sync_state"], Value::Null);
+
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn departure_after_completed_round_does_not_fabricate_cancellation() {
+        let (success, dir) = script("exit 0");
+        let st = peer_state(Config::default(), &[("npub1complete", "127.0.0.1", 9)]);
+        start_with(
+            st.clone(),
+            "npub1complete".into(),
+            "127.0.0.1".into(),
+            9,
+            false,
+            success,
+            Duration::from_secs(1),
+            Duration::from_secs(30),
+        );
+        wait_for(&st, "npub1complete", 9, "succeeded").await;
+
+        let departed = st.peers_map().remove("npub1complete").unwrap();
+        depart(&st, &departed);
+        st.set_peers(HashMap::new());
+        st.forget_recognized("npub1complete");
+        st.syncs.wait_idle().await;
+
+        assert!(st.peers_snapshot().is_empty());
+        assert!(st.syncs.departed_peers().is_empty());
+        assert!(!st.syncs.jobs.lock().unwrap().contains_key("npub1complete"));
+        assert!(!st.event_history().iter().any(|event| {
+            event["type"] == "totem.sync.done" && event["outcome"] == "cancelled"
+        }));
+
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn departed_snapshot_retention_is_bounded_and_evicts_terminal_jobs() {
+        let supervisor = SyncSupervisor::default();
+        for encounter in 0..=DEPARTED_SNAPSHOT_CAPACITY as u64 {
+            let npub = format!("npub1peer{encounter}");
+            let _cancelled = supervisor.begin(&npub, encounter).unwrap();
+            supervisor.depart(&PeerInfo {
+                npub,
+                ipv6_addr: format!("fd00::{encounter:x}"),
+                transport_type: "test".into(),
+                first_seen: encounter,
+                last_seen: encounter,
+            });
+        }
+
+        let retained = supervisor.departed_peers();
+        assert_eq!(retained.len(), DEPARTED_SNAPSHOT_CAPACITY);
+        assert_eq!(retained.first().unwrap().first_seen, 1);
+        assert_eq!(retained.last().unwrap().first_seen, 64);
+        assert_eq!(
+            supervisor.jobs.lock().unwrap().len(),
+            DEPARTED_SNAPSHOT_CAPACITY
+        );
+        assert!(!supervisor.jobs.lock().unwrap().contains_key("npub1peer0"));
     }
 
     #[test]

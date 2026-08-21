@@ -42,13 +42,26 @@ Useful environment variables:
 - `TOTEM_ALLOW_MOCK_DRIVERS=1`: explicitly permit mock transports.
 - `TOTEM_STORAGE_ROOT=/var/lib/totem/storage`: confine filesystem storage.
 - `TOTEM_EINK_DRIVER=waveshare_2in13_v4`: select an exact display driver for `DisplayManager`, the API service, and hardware tests.
+- `TOTEM_EINK_FULL_REFRESH_EVERY=0`: disable scheduled full-refresh promotion; set a positive value only for panels that require an explicit cadence.
 - `TOTEM_SCREEN_ROTATION=0|180`: orient presentation frames for the physical panel mount.
+- `TOTEM_SCREEN_LOW_BATTERY_PERCENT=20` and `TOTEM_SCREEN_CRITICAL_BATTERY_PERCENT=8`: select power-scene thresholds.
+- `TOTEM_SCREEN_SNAPSHOT_POLL_SECONDS=15`, `TOTEM_SCREEN_RECONNECT_SECONDS=2`, and `TOTEM_SCREEN_COALESCE_SECONDS=2.1`: tune continuous snapshot reconciliation and scene quiet time.
+- `TOTEM_SCREEN_CAPTION_WORD_SECONDS=1.2`: set the interval for stable word-by-word scene-caption reveals.
+- `TOTEM_SCREEN_SEQUENCE_RATES=scene=seconds,...`, `TOTEM_SCREEN_SCENE_DWELLS=scene=seconds,...`, and `TOTEM_SCREEN_SCENE_PRIORITIES=scene=integer,...`: override per-scene animation and arbitration policy.
+- `TOTEM_SCREEN_MAX_PENDING_SCENES=8`: bound coalesced one-shot presentation work.
 - `EINK_DISPLAY_TYPE=2in13_v1|2in13_v2|2in13_v3|2in13_v4|3in7`: guide display auto-detection.
 - `TOTEM_HARDWARE_COMPONENTS=display,nfc,network,storage`: select hardware tests.
 
 On display-equipped devices, `totem-screen.service` owns presentation state
-while the device-manager API retains exclusive ownership of SPI/GPIO. Replay
-the boot state machine without rebooting with `totem-screen replay-boot`.
+while the device-manager API retains exclusive ownership of SPI/GPIO. After
+boot it reconciles `totemd`, device health, and UPS snapshots continuously;
+SSE is only a wake-up notification. Replay the boot state machine with
+`totem-screen replay-boot`, or every exact runtime frame with
+`totem-screen replay-states --replay-frame-seconds 2`. Add
+`--atlas-output /tmp/totem-states.png` to save the same rendered frames as a
+contact sheet. Export the exhaustive 140-caption, representative-prefix, and
+face-sequence proof without a long hardware run with
+`totem-screen proof-captions --atlas-output /tmp/totem-captions.png`.
 
 ## Test
 

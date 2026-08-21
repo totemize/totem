@@ -42,7 +42,7 @@ observable, defined, derived, or a gap.
 | System lifecycle | `powered_off`, `powering_on`, `waiting_for_display_api`, `booting`, `ready`, `degraded`, `maintenance`, `updating`, `shutting_down`, `rebooting`, `failed` |
 | systemd unit | `inactive`, `activating`, `active`, `deactivating`, `failed`, restart delay |
 | Boot readiness (`device`, `fips`, `relay`, `totemd`) | waiting, ready, timed out, retrying |
-| Screen | `booting`, `idle`, `new_peer`, `existing_peer`, `error`, `synchronizing` |
+| Runtime screen scene | `idle`, `alone_idle`, `peer_seen`, `candidate`, `newly_recognized`, `returning_recognized`, `sync_running`, `sync_succeeded`, `sync_interrupted`, `non_totem_peer`, `charging`, `low_battery`, `critical_battery`, `mesh_degraded` |
 | Driver | `new`, `ready`, `mock`, `closed`, `failed` |
 | Display activity | idle, rendering, refreshing, sleeping, waking, refresh failed |
 | NFC activity | idle, waiting for card, card present, reading, writing, completed, error |
@@ -90,7 +90,7 @@ axis is currently available to the display process.
 | `waiting_for_display_api` | Observable | `totem-screen` is active and polling the Python device API, but has not rendered the splash. |
 | `booting` | Observable | `ScreenState.BOOTING`; the splash or readiness checklist is being rendered. |
 | `ready` | Observable | The boot controller reached `ScreenState.IDLE` after all four readiness checks passed. |
-| `degraded` | Derived | The device remains useful but one or more required services or hardware capabilities are unhealthy. Continuous post-boot monitoring is not implemented yet. |
+| `degraded` | Derived | The device remains useful but one or more required services or hardware capabilities are unhealthy. The runtime screen currently projects lost FIPS authority as `mesh_degraded`; broader post-boot service health remains a gap. |
 | `maintenance` / `updating` | Gap | Deployment, migration, or operator maintenance is in progress. Ansible/systemd perform these operations but publish no presentation signal. |
 | `shutting_down` | Gap | systemd is stopping services and `totemd` is cancelling sync children. No typed screen event exists. |
 | `rebooting` | Gap | A shutdown whose intended successor is a new boot. Not distinguishable from shutdown today. |
@@ -114,8 +114,10 @@ The boot checklist independently probes four useful interfaces:
 
 The readiness vector has 16 theoretical subsets. The controller renders a
 new frame when it first observes a service as ready, latches that service,
-and never removes a checkmark. It stops monitoring after reaching idle.
-Consequently, post-boot service loss is currently invisible to the screen.
+and never removes a checkmark. Once it reaches idle, the screen switches from
+boot probes to continuous authoritative `totemd`/device-manager snapshots.
+FIPS and UPS changes remain visible; relay and systemd service loss beyond
+those snapshot fields is still not normalized.
 
 `totem-screen.service` is `Type=notify`, starts after `totem.service`, and is
 ordered before FIPS, strfry, and totemd. Its 120-second systemd start timeout
@@ -124,20 +126,70 @@ finishes, a retained partial checklist, and an automatic screen-process retry.
 
 ## 2. Current presentation states
 
-`ScreenState` defines these exact values:
+Boot retains the small `ScreenState` vocabulary and readiness checklist. Once
+ready, `totem-screen` continuously reconciles orthogonal snapshots and selects
+one closed `RuntimeScene`; neither enum becomes device-state authority.
 
-| Value | Status | Current behavior |
-|---|---|---|
-| `booting` | Observable | Used for the splash and readiness checklist. |
-| `idle` | Observable | Used after boot; currently renders `(^_^)`. |
-| `new_peer` | Defined | Renderer accepts it, but no control-plane event selects it. |
-| `existing_peer` | Defined | Renderer accepts it, but no durable encounter history can classify a peer reliably. |
-| `error` | Defined | Renderer accepts it, but boot/runtime failures do not transition to it. |
-| `synchronizing` | Defined | Renderer accepts it, but sync events are not consumed by `totem-screen`. |
+| Runtime scene | Exact frame sequence |
+|---|---|
+| `idle` | `(•‿•)` → `(◐‿◐)` → `(•‿•)` → `(◓‿◓)` → `(•‿•)` → `(◑‿◑)` → `(•‿•)` → `(◒‿◒)` → `(-‿-)` → `(•‿•)`; selected when at least one present peer is recognized |
+| `alone_idle` | `(•‿•)` → `(◐‿◐)` → `(•‿•)` → `(◓‿◓)` → `(•‿•)` → `(◑‿◑)` → `(•‿•)` → `(◒‿◒)` → `(-‿-)` → `(•‿•)`; 12 seconds per frame, without a duplicate centered face at the loop boundary |
+| `peer_seen` | `(•o•)!` → `(•_•)?` |
+| `candidate` | `(•‿•)` → `(˵•‿•˵)` → `(˵•‿-)✧` → `(˵•‿•˵)`; three seconds per frame, plays once per encounter, then holds the final blush |
+| `newly_recognized` | `\(★‿★)/` |
+| `returning_recognized` | `(ﾉ◕ヮ◕)ﾉ` |
+| `sync_running` | `(•‿•)•→(•_•)` → `(•‿•)→•(•o•)` → `(•ᴗ•)⇄(•ᴗ•)` → `(•o•)•←(•‿•)` → `(•_•)←•(•‿•)` → `(•ᴗ•)⇄(•ᴗ•)`; three seconds per frame while sync is authoritatively running |
+| `sync_succeeded` | `(✓‿✓)` |
+| `sync_interrupted` | `(´‿)ﾉ` for both timeout and cancellation |
+| `non_totem_peer` | `(•_•)` → `(¬_¬)` → `( •_•)>⌐■-■` → `(⌐■_■)` → `(⌐■_■) ?` → `( •_•)>⌐■-■` → `(•_•)`; six seconds per frame, with a fixed left-side face origin while the glasses move; only the authoritative `not_totem` verdict selects it |
+| `charging` | `(•‿•)⚡` → `(•ᴗ•)⚡` → `(◕‿◕)⚡` → `(•ω•)⚡` → `(•ᴗ•)⚡` → `(•‿•)⚡`; ten seconds per base frame, with bounded reactions described below |
+| `low_battery` | `(－_－) zz` → `(=_=)` → `(－_－) zz` |
+| `critical_battery` | `(×_×) !` |
+| `mesh_degraded` | `(•_•)⌁` → `(•‿•)⌁` → `(•_•)⌁` |
 
-Only `booting` and `idle` are reached by `ScreenController.boot()`. The other
-values currently render a centered headline through the renderer's generic
-branch. They are presentation vocabulary, not yet state authority.
+Every runtime frame also has a persistent header (device name, FIPS health,
+and rightmost battery) and a footer ordered as mesh size, direct peers, and
+recognized friends (`[•]`) on the left, separated by literal slashes. A paper-note
+glyph and the cached kind-1 note count are aligned to the far right; an unavailable
+count is shown as `?`, never as a fabricated zero. Those counts remain badges while
+the main content changes. Header and footer text use a standard bold face, with
+modest synthetic emboldening only when no bold font is available, so the persistent
+chrome stays legible on the physical e-ink panel.
+
+The ambient fallback is `idle` when any live `totem.peers.get` row is
+recognized, and `alone_idle` otherwise. Mesh size is not used as a proxy for
+company: it measures the wider overlay, while friendship presence comes from
+the same live peer rows that produce the footer friend count. Higher-priority
+peer, sync, power, and health scenes continue to preempt either fallback.
+
+Each authoritative scene admission also selects one of exactly ten approved
+captions from the closed `SCENE_CAPTIONS` catalogue. Selection is random but
+injectable for tests, excludes the caption used by that scene's previous
+admission, and remains fixed across face frames, charging reactions, snapshot
+polls, SSE wake-ups, and display retries. A later genuine admission may choose
+new copy; captions never select or prolong semantic state.
+
+The caption occupies a fixed one-line band below the character and at least
+three pixels above the footer rule. Its complete 8–9 px bold layout is centered
+once, then stable left-anchored prefixes reveal one word every 1.2 seconds, so
+existing words and the character never move. Caption and face deadlines are
+independent and share a display submission only when due together. The first
+runtime submission remains full; face, caption, and chrome changes afterward
+request partial refresh. `totem-screen proof-captions --atlas-output PATH`
+writes a deterministic 253-frame atlas containing all 140 complete captions,
+representative progressive prefixes, and every existing face-sequence frame
+without turning that exhaustive proof into a physical replay.
+
+The runtime selects a scene only from fresh authoritative snapshots. Animation
+advances within that selected scene and is interruptible as soon as arbitration
+admits a different scene; it does not cycle through semantic states. Charging
+may insert a two-second `(-‿-)⚡` blink with 20% probability or a four-second
+`(◑‿◑)⚡` glance with 10% probability after a centered base frame. Reactions
+cannot be consecutive. The first authoritative rise to 100% while plugged in
+shows `(★‿★)⚡` once for ten seconds; it rearms only after charge drops below
+100%. The replay command bypasses randomness and renders both optional
+reactions and the full-charge frame exactly once so the complete catalog can be
+inspected on hardware.
 
 ## 3. Service and process health
 
@@ -277,8 +329,8 @@ report station signal strength or hotspot client count.
 | `fips.connected=false`, `last_error` set | The watcher is degraded; its last peer snapshot remains cached. |
 | `fips.npub=null` | Local identity has not yet arrived through a successful poll. |
 | `fips.mesh_size=0` | No successful estimate yet, or FIPS reported zero. |
-| `peers=0` | No directly authenticated peers in the current snapshot. |
-| `peers>0` | One or more current authenticated FIPS peers. |
+| `peers=0` | No directly authenticated live peers. `totem.peers.get` may still contain a bounded `present=false` cancellation tombstone. |
+| `peers>0` | One or more current authenticated FIPS peers. The count excludes departed tombstones. |
 | `mesh_size>1` | FIPS estimates a multi-node mesh, which may include nodes that are not direct peers. |
 
 Full FIPS health additionally distinguishes `state=running` and
@@ -352,9 +404,9 @@ current source is `totem.peers.get`, reconciled with pushes.
 | `challenge_pending` | Candidate and `recognized=false` immediately after the candidate push | Derived transient |
 | `challenge_failed` | Challenge task completed with an error | Gap: logged only; fields look like a candidate still pending |
 | `challenge_stale` | Proof returned after the peer's encounter token changed | Gap: logged only and discarded |
-| `recognized` | `recognized=true`; `totem.recognized` emitted | Observable for this encounter only |
+| `recognized` | `recognized=true`; `known_before` boolean; `totem.recognized` emitted | Observable for this encounter; history classification is durable |
 | `departing` | Prior peer disappears; active sync is being cancelled | Derived transient |
-| `gone` | `totem.peer.gone` emitted; peer removed and recognition cleared | Observable push; absent from the next snapshot |
+| `gone` | `totem.peer.gone` emitted; peer removed and recognition cleared | Observable push; normally absent from the next snapshot. A running sync interrupted by departure leaves a bounded `present=false`, `sync_state=cancelled` tombstone until replacement or eviction. |
 
 The progression is:
 
@@ -374,12 +426,15 @@ durable “first time ever” timestamp.
 
 ### New versus returning peers
 
-`ScreenState.NEW_PEER` and `EXISTING_PEER` cannot yet be selected reliably.
-Timestamps, verdict caches, counters, and recognition reset on `totemd`
-restart; gone peers leave the current peer map; and the specified encounter
-log is not implemented. A persisted encounter history should expose an
-explicit `encounter_ordinal` or `known_before` field rather than asking the
-display to guess from cache state.
+`totemd` now persists every accepted signed encounter as strict versioned
+JSONL at `/var/lib/totemd/recognized-encounters.jsonl` (override with
+`TOTEMD_ENCOUNTER_HISTORY`). The append, file `fsync`, and directory `fsync`
+must succeed before recognition, push, or sync proceeds. Peer snapshots and
+`totem.recognized` expose `known_before`; it is `false` throughout a peer's
+first recognized encounter and `true` on later encounters, including after a
+daemon restart. A torn unterminated final append is rolled back on load;
+corrupt completed records, unsupported versions, invalid npubs, or unreadable
+history still fail startup closed instead of guessing.
 
 ## 11. Relationship and friendship state
 
@@ -418,6 +473,15 @@ optional exit code, and optional error. `totem.sync.started` and
 `totem.sync.done` carry the encounter token and `direction=both`; the done
 event adds `outcome`, duration, exit code, and error.
 
+Live peer rows expose `present=true`. When departure interrupts a genuinely
+running job, `totemd` first pins it to `cancelled`, then retains a
+`present=false` row with the original encounter and attempt. This makes the
+farewell state reachable through snapshot reconciliation instead of relying
+on lossy SSE. Tombstones are FIFO-bounded to 64, disappear on a replacement
+encounter, and never contribute to direct-peer, recognition, or persistent
+activity scenes. Departure after an already terminal job does not fabricate a
+cancellation.
+
 Useful semantic states that are not represented distinctly are
 `eligible_waiting`, `policy_blocked`, `friends_only_blocked`, and
 `interrupted_resumable`. NIP-77 makes a later attempt resumable, but
@@ -436,7 +500,8 @@ Current authority is sparse:
 |---|---|
 | Relay unavailable/listening | Boot TCP probe only |
 | Encounter sync active/result | Per-peer sync state and pushes |
-| Relay event count | Specified in `totem.status.get`, not implemented |
+| Kind-1 note count | `totemd` caches a bounded `strfry scan --count` query every 15 seconds and publishes it as `totem.status.get.status.notes`; query failure is represented as `null` |
+| Total relay event count | Specified in `totem.status.get`, not implemented |
 | Relay clients connected | Gap |
 | Note received/published | Gap |
 | Events imported/exported by sync | Reserved in spec when runner exposes reliable counts; not present now |
@@ -460,8 +525,8 @@ include:
 | Nostr client connected/disconnected from the relay | Gap |
 | Guest read or posted a note | Gap; relay instrumentation needed |
 | Authenticated FIPS user reached the Totem | FIPS sees the peer, but Totem cannot currently distinguish human node from ordinary non-Totem node beyond the failed/negative Totem probe |
-| Owner authenticated to the web app | NIP-98 claim and owner-signed state streaming are implemented; opening owner mode has no dedicated push |
-| Owner changed policy or approved friendship | Policy changes are implemented and emit `totem.config.changed`; friendship approval remains a gap |
+| Owner authenticated to the web app | Planned NIP-98 owner controls, not implemented |
+| Owner changed policy or approved friendship | Planned, not implemented |
 | NFC card presented/read/written | Driver operations exist; no published event |
 
 These activities should be transient overlays, not device-wide lifecycle
@@ -564,10 +629,34 @@ These are presentation copy, not protocol state:
 - Coalesce simultaneous peer activity into an aggregate frame or a bounded
   queue.
 - Rate-limit ambient changes and prefer badges for slowly changing values.
+- Submit the first runtime frame as a safe full refresh, then request partial
+  updates. The V4 driver seeds both RAM planes once and uses the
+  Pwnagotchi-compatible reset plus new-plane-only partial path; scheduled full
+  promotion is disabled on metot. Unsupported drivers fall back to full safely.
 - Render shutdown intent before services disappear; an e-ink panel will keep
   that frame without power.
 - On screen-process restart, rebuild from snapshots rather than replaying old
   pushes.
+
+### Runtime presentation policy
+
+The deployed defaults and their environment overrides are:
+
+| Variable | Default | Purpose |
+|---|---:|---|
+| `TOTEM_SCREEN_SNAPSHOT_POLL_SECONDS` | `15` | Reconcile a complete snapshot even when SSE is quiet. |
+| `TOTEM_SCREEN_RECONNECT_SECONDS` | `2` | Delay before reopening a failed event stream. |
+| `TOTEM_SCREEN_COALESCE_SECONDS` | `2.1` | Quiet window that collapses the normal two-second encounter ladder. |
+| `TOTEM_SCREEN_CAPTION_WORD_SECONDS` | `1.2` | Positive interval between stable progressive caption prefixes. |
+| `TOTEM_SCREEN_LOW_BATTERY_PERCENT` | `20` | Inclusive upper threshold for the low-battery scene. |
+| `TOTEM_SCREEN_CRITICAL_BATTERY_PERCENT` | `8` | Inclusive threshold for immediate critical-battery preemption. |
+| `TOTEM_SCREEN_SEQUENCE_RATES` | empty | Comma-separated `scene=seconds` per-frame overrides. |
+| `TOTEM_SCREEN_SCENE_DWELLS` | empty | Comma-separated `scene=seconds` minimum-dwell overrides. |
+| `TOTEM_SCREEN_SCENE_PRIORITIES` | empty | Comma-separated `scene=integer` arbitration overrides. |
+| `TOTEM_SCREEN_MAX_PENDING_SCENES` | `8` | Bound on coalesced one-shot payoff work. Consumed-token history is separately bounded to 256. |
+
+Invalid thresholds, non-positive frame timing, unknown scenes, or an unsafe
+queue size fail screen startup rather than silently changing behavior.
 
 ## 17. Signal gaps to close before the full display can ship
 
@@ -575,30 +664,29 @@ Prioritize these additions:
 
 1. **Continuous service snapshot.** Keep monitoring after boot and expose
    required/optional service health rather than latching readiness forever.
-2. **Durable encounter history.** Implement the specified encounter log and
-   expose `known_before`/`encounter_ordinal` so new versus returning Totems is
-   authoritative.
-3. **Explicit challenge state.** Add pending/passed/failed/stale outcome and a
+2. **Explicit challenge state.** Add pending/passed/failed/stale outcome and a
    failure event; a candidate currently looks pending forever after failure.
-4. **Relationship state.** Implement the kind-3 reader/writer, owner-approval
+3. **Relationship state.** Implement the kind-3 reader/writer, owner-approval
    pending state, and success/failure events.
-5. **Sync eligibility reason.** Distinguish not-started from policy-blocked
+4. **Sync eligibility reason.** Distinguish not-started from policy-blocked
    and invalid-address states instead of overloading `null`.
-6. **Power normalization.** Expose stable power-source/charge-mode semantics
-   and configurable low/critical thresholds.
-7. **Host-health normalization.** Expose board temperature/throttle flags,
+5. **Power authority.** Normalize boards whose external-power signal is
+   unavailable; the screen already applies configurable low/critical
+   thresholds to the common battery snapshot.
+6. **Host-health normalization.** Expose board temperature/throttle flags,
    resource pressure, clock validity, and filesystem capacity with
    device-policy thresholds.
-8. **Relay/storage facts.** Add event counts, event deltas per sync, client
-   activity, and remaining storage.
-9. **System intent.** Publish boot-complete, updating, shutdown, and reboot
+7. **Relay/storage facts.** Extend the available kind-1 note count with total
+   event counts, event deltas per sync, client activity, and remaining storage.
+8. **System intent.** Publish boot-complete, updating, shutdown, and reboot
    intent early enough for the e-ink process to render them.
-10. **Hardware event bridge.** Connect the Python device-event channel to the
+9. **Hardware event bridge.** Connect the Python device-event channel to the
    control-plane bus or define one authoritative local snapshot surface.
-11. **Sequencing metadata.** Give pushes a timestamp/sequence and retain
+10. **Sequencing metadata.** Give pushes a timestamp/sequence and retain
     snapshot authority so the display can coalesce without inventing order.
 
-Until these land, a truthful first interactive version can already implement
-boot progress, idle, FIPS health/mesh badges, peer seen/candidate/recognized,
-all five sync outcomes, peer departure, UPS telemetry, and generic degraded
-service screens.
+The shipped interactive projection covers boot progress, idle, FIPS
+health/mesh badges, peer seen/candidate/recognized, new-versus-returning
+classification, running/success/timeout/cancel sync scenes, non-Totem peers,
+UPS charging/low/critical states, and an explicit mesh-degraded scene. Failed
+sync remains diagnostic because no requested runtime frame claims otherwise.

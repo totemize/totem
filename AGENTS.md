@@ -31,7 +31,8 @@ journal into this file or the specs; the journal keeps the story.
 ### totem (test unit #1)
 
 - Raspberry Pi (armv6l, Raspbian 13) at `192.168.8.136`.
-- No e-ink display is attached. Do not use this host for display tests.
+- The same Waveshare 2.13-inch V4 e-ink display used by metot is attached, with
+  the same 180-degree output orientation. Its HAT exposes no EEPROM identity.
 - FIPS npub: `npub1eu0clm0nsxwavcsj07at3sy7v52tuwgw4qpeqsyxgkeqg7krc7ps77c20q`
 - Runs `fips.service` (FIPS mesh daemon, binary at `/usr/local/bin/fips`,
   config at `/etc/fips/fips.yaml`, identity key `/etc/fips/fips.key` —

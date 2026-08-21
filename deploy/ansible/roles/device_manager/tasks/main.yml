@@ -1,4 +1,67 @@
 ---
+- name: Inspect the Raspberry Pi boot configuration
+  ansible.builtin.stat:
+    path: "{{ totem_boot_config_path }}"
+  register: totem_boot_config
+  when:
+    - totem_spi_enabled | bool or totem_i2c_enabled | bool
+
+- name: Require the configured Raspberry Pi boot configuration
+  ansible.builtin.assert:
+    that:
+      - totem_boot_config.stat.exists
+      - totem_boot_config.stat.isreg
+    fail_msg: >-
+      {{ totem_boot_config_path }} is absent; set totem_boot_config_path for
+      this image before enabling SPI or I2C hardware.
+  when:
+    - totem_spi_enabled | bool or totem_i2c_enabled | bool
+
+- name: Enable configured Raspberry Pi hardware interfaces globally
+  ansible.builtin.blockinfile:
+    path: "{{ totem_boot_config_path }}"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK: Totem hardware interfaces"
+    insertafter: EOF
+    block: |
+      [all]
+      {% if totem_spi_enabled | bool %}
+      dtparam=spi=on
+      {% endif %}
+      {% if totem_i2c_enabled | bool %}
+      dtparam=i2c_arm=on
+      {% endif %}
+  when:
+    - totem_spi_enabled | bool or totem_i2c_enabled | bool
+  register: totem_boot_parameters
+
+- name: Reboot after changing Raspberry Pi hardware interfaces
+  ansible.builtin.reboot:
+    msg: Rebooting to activate Totem hardware interfaces
+    reboot_timeout: 180
+  when:
+    - totem_reboot_on_hardware_config_change | bool
+    - >-
+      (totem_boot_parameters.changed | default(false) | bool)
+      or (totem_force_hardware_reboot | bool)
+
+- name: Persist the I2C userspace adapter module
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/totem-i2c.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      i2c-dev
+  when: totem_i2c_enabled | bool
+
+- name: Load the I2C userspace adapter module
+  ansible.builtin.command:
+    argv:
+      - /sbin/modprobe
+      - i2c-dev
+  changed_when: false
+  when: totem_i2c_enabled | bool
+
 - name: Hash the deployable Python source tree
   ansible.builtin.command:
     argv:
@@ -213,6 +276,9 @@
     enabled: true
     state: started
     daemon_reload: true
+
+- name: Apply device-manager changes before starting the screen
+  ansible.builtin.meta: flush_handlers
 
 - name: Enable and start the screen state service
   ansible.builtin.systemd_service:

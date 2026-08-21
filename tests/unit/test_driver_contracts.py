@@ -242,6 +242,230 @@ def test_waveshare_2in13_v4_waits_for_complete_refresh_cycle(monkeypatch):
     assert driver.last_refresh_confirmed_by_busy is True
 
 
+def test_waveshare_2in13_v4_full_refresh_seeds_both_ram_planes(monkeypatch):
+    from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
+
+    driver = Driver()
+    driver.initialized = True
+    payload = bytes([0xA5]) * driver.FRAME_BYTES
+    events = []
+    monkeypatch.setattr(
+        driver, "send_command", lambda value: events.append(("cmd", value))
+    )
+    monkeypatch.setattr(
+        driver, "send_data", lambda value: events.append(("data", value))
+    )
+    monkeypatch.setattr(
+        driver, "_prepare_frame_write", lambda: events.append(("prepare",))
+    )
+    monkeypatch.setattr(driver, "_update", lambda: events.append(("update",)))
+
+    driver.display_bytes(payload)
+
+    assert events == [
+        ("cmd", driver.BORDER_WAVEFORM_CONTROL),
+        ("data", driver.FULL_BORDER_WAVEFORM),
+        ("prepare",),
+        ("cmd", driver.WRITE_RAM),
+        ("data", payload),
+        ("cmd", driver.WRITE_RAM_PREVIOUS),
+        ("data", payload),
+        ("update",),
+    ]
+    assert driver._previous_frame == payload
+    assert driver.partial_refresh_ready is True
+
+
+def test_waveshare_2in13_v4_partial_refresh_uses_high_contrast_sequence(
+    monkeypatch,
+):
+    from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
+
+    driver = Driver()
+    driver.initialized = True
+    payload = bytes([0x00]) * driver.FRAME_BYTES
+    driver._previous_frame = bytes([0xFF]) * driver.FRAME_BYTES
+    events = []
+
+    class FakeGPIO:
+        HIGH = 1
+        LOW = 0
+
+        @staticmethod
+        def output(pin, value):
+            events.append(("gpio", pin, value))
+
+    driver.GPIO = FakeGPIO
+    monkeypatch.setattr(
+        "totem.devices.display.drivers.waveshare_2in13_v4.time.sleep",
+        lambda value: events.append(("sleep", value)),
+    )
+    monkeypatch.setattr(
+        driver, "send_command", lambda value: events.append(("cmd", value))
+    )
+    monkeypatch.setattr(
+        driver, "send_data", lambda value: events.append(("data", value))
+    )
+    monkeypatch.setattr(
+        driver, "_prepare_frame_write", lambda: events.append(("prepare",))
+    )
+    monkeypatch.setattr(driver, "_update_partial", lambda: events.append(("partial",)))
+
+    driver.display_bytes_partial(payload)
+
+    assert events == [
+        ("gpio", driver.reset_pin, FakeGPIO.LOW),
+        ("sleep", driver.PARTIAL_RESET_SECONDS),
+        ("gpio", driver.reset_pin, FakeGPIO.HIGH),
+        ("cmd", driver.BORDER_WAVEFORM_CONTROL),
+        ("data", driver.PARTIAL_BORDER_WAVEFORM),
+        ("cmd", driver.DRIVER_OUTPUT_CONTROL),
+        ("data", 0xF9),
+        ("data", 0x00),
+        ("data", 0x00),
+        ("cmd", driver.DATA_ENTRY_MODE_SETTING),
+        ("data", 0x03),
+        ("prepare",),
+        ("cmd", driver.WRITE_RAM),
+        ("data", payload),
+        ("partial",),
+    ]
+    assert driver._previous_frame == payload
+    assert driver._partial_mode_active is True
+
+
+def test_waveshare_2in13_v4_resets_before_every_partial_frame(
+    monkeypatch,
+):
+    from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
+
+    driver = Driver()
+    driver.initialized = True
+    driver._previous_frame = bytes([0xFF]) * driver.FRAME_BYTES
+    outputs = []
+
+    class FakeGPIO:
+        HIGH = 1
+        LOW = 0
+
+        @staticmethod
+        def output(pin, value):
+            outputs.append((pin, value))
+
+    driver.GPIO = FakeGPIO
+    monkeypatch.setattr(
+        "totem.devices.display.drivers.waveshare_2in13_v4.time.sleep",
+        lambda _: None,
+    )
+    monkeypatch.setattr(driver, "send_command", lambda _: None)
+    monkeypatch.setattr(driver, "send_data", lambda _: None)
+    monkeypatch.setattr(driver, "_prepare_frame_write", lambda: None)
+    monkeypatch.setattr(driver, "_update_partial", lambda: None)
+
+    driver.display_bytes_partial(bytes([0xAA]) * driver.FRAME_BYTES)
+    driver.display_bytes_partial(bytes([0x55]) * driver.FRAME_BYTES)
+
+    assert outputs == [
+        (driver.reset_pin, FakeGPIO.LOW),
+        (driver.reset_pin, FakeGPIO.HIGH),
+        (driver.reset_pin, FakeGPIO.LOW),
+        (driver.reset_pin, FakeGPIO.HIGH),
+    ]
+
+
+def test_waveshare_2in13_v4_partial_update_control_and_busy_wait(monkeypatch):
+    from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
+
+    driver = Driver()
+    commands = []
+    data = []
+    waits = []
+    monkeypatch.setattr(driver, "send_command", commands.append)
+    monkeypatch.setattr(driver, "send_data", data.append)
+    monkeypatch.setattr(
+        driver,
+        "wait_for_refresh",
+        lambda **kwargs: waits.append(kwargs) or True,
+    )
+
+    driver._update_partial()
+
+    assert commands == [
+        driver.DISPLAY_UPDATE_CONTROL_2,
+        driver.MASTER_ACTIVATION,
+    ]
+    assert data == [driver.PARTIAL_UPDATE_CONTROL]
+    assert waits == [
+        {
+            "busy_assert_timeout": driver.BUSY_ASSERT_TIMEOUT_SECONDS,
+            "fallback_timeout": driver.REFRESH_FALLBACK_SECONDS,
+        }
+    ]
+
+
+def test_waveshare_2in13_v4_partial_error_forces_new_full_baseline(monkeypatch):
+    from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
+
+    driver = Driver()
+    driver.initialized = True
+    driver._previous_frame = bytes([0xFF]) * driver.FRAME_BYTES
+    driver._partial_mode_active = True
+    monkeypatch.setattr(driver, "send_command", lambda _: None)
+    monkeypatch.setattr(driver, "send_data", lambda _: None)
+    monkeypatch.setattr(driver, "_prepare_frame_write", lambda: None)
+    monkeypatch.setattr(
+        driver,
+        "_update_partial",
+        lambda: (_ for _ in ()).throw(TimeoutError("busy")),
+    )
+
+    with pytest.raises(TimeoutError, match="busy"):
+        driver.display_bytes_partial(bytes([0x00]) * driver.FRAME_BYTES)
+
+    assert driver._previous_frame is None
+    assert driver._partial_mode_active is False
+
+
+@pytest.mark.parametrize("operation", ("full", "partial"))
+def test_waveshare_2in13_v4_early_io_error_invalidates_partial_baseline(
+    monkeypatch,
+    operation,
+):
+    from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
+
+    driver = Driver()
+    driver.initialized = True
+    driver._previous_frame = bytes([0xFF]) * driver.FRAME_BYTES
+    driver._partial_mode_active = True
+    monkeypatch.setattr(
+        driver,
+        "send_command",
+        lambda _: (_ for _ in ()).throw(OSError("spi")),
+    )
+
+    with pytest.raises(OSError, match="spi"):
+        if operation == "full":
+            driver.display_bytes(bytes([0xAA]) * driver.FRAME_BYTES)
+        else:
+            driver.display_bytes_partial(bytes([0xAA]) * driver.FRAME_BYTES)
+
+    assert driver._previous_frame is None
+    assert driver._partial_mode_active is False
+
+
+def test_waveshare_2in13_v4_partial_rejects_bad_frame_before_io(monkeypatch):
+    from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
+
+    driver = Driver()
+    commands = []
+    monkeypatch.setattr(driver, "send_command", commands.append)
+
+    with pytest.raises(ValueError, match="Incorrect framebuffer size"):
+        driver.display_bytes_partial(b"short")
+
+    assert commands == []
+
+
 def test_waveshare_refresh_wait_catches_late_busy_assertion(monkeypatch):
     from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
 
