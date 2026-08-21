@@ -29,6 +29,7 @@ working environment.
 
 | Date | Summary |
 |------|---------|
+| [2026-08-21 — neutral idle versus lonely idle](journal/2026-08-21.md#neutral-idle-versus-lonely-idle) | Split ambient presentation by authoritative live friendship presence, reproduced the four-peer/two-friend regression, and deployed/converged only on metot. |
 | [2026-08-21 — totem display enablement](journal/2026-08-21.md#totem-display-enablement) | Enabled the same V4 screen profile on the older totem host, fixed fresh-screen deployment ordering, camera-verified the live UI, and converged with `changed=0`. |
 | [2026-08-21 — state-specific word-reveal captions](journal/2026-08-21.md#state-specific-word-reveal-captions) | Added stable randomized captions for all 13 authoritative scenes, independent word timing, exhaustive deterministic proof, and [physical metot evidence](proofs/2026-08-21/state-captions/README.md). |
 | [2026-08-21 — authoritative footer note count](journal/2026-08-21.md#authoritative-footer-note-count) | Replaced the friend star with `[•]`, added the cached kind-1 note count at bottom right, and physically verified live `404` rendering on metot. |

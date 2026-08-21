@@ -42,7 +42,7 @@ observable, defined, derived, or a gap.
 | System lifecycle | `powered_off`, `powering_on`, `waiting_for_display_api`, `booting`, `ready`, `degraded`, `maintenance`, `updating`, `shutting_down`, `rebooting`, `failed` |
 | systemd unit | `inactive`, `activating`, `active`, `deactivating`, `failed`, restart delay |
 | Boot readiness (`device`, `fips`, `relay`, `totemd`) | waiting, ready, timed out, retrying |
-| Runtime screen scene | `alone_idle`, `peer_seen`, `candidate`, `newly_recognized`, `returning_recognized`, `sync_running`, `sync_succeeded`, `sync_interrupted`, `non_totem_peer`, `charging`, `low_battery`, `critical_battery`, `mesh_degraded` |
+| Runtime screen scene | `idle`, `alone_idle`, `peer_seen`, `candidate`, `newly_recognized`, `returning_recognized`, `sync_running`, `sync_succeeded`, `sync_interrupted`, `non_totem_peer`, `charging`, `low_battery`, `critical_battery`, `mesh_degraded` |
 | Driver | `new`, `ready`, `mock`, `closed`, `failed` |
 | Display activity | idle, rendering, refreshing, sleeping, waking, refresh failed |
 | NFC activity | idle, waiting for card, card present, reading, writing, completed, error |
@@ -132,6 +132,7 @@ one closed `RuntimeScene`; neither enum becomes device-state authority.
 
 | Runtime scene | Exact frame sequence |
 |---|---|
+| `idle` | `(•‿•)` → `(◐‿◐)` → `(•‿•)` → `(◓‿◓)` → `(•‿•)` → `(◑‿◑)` → `(•‿•)` → `(◒‿◒)` → `(-‿-)` → `(•‿•)`; selected when at least one present peer is recognized |
 | `alone_idle` | `(•‿•)` → `(◐‿◐)` → `(•‿•)` → `(◓‿◓)` → `(•‿•)` → `(◑‿◑)` → `(•‿•)` → `(◒‿◒)` → `(-‿-)` → `(•‿•)`; 12 seconds per frame, without a duplicate centered face at the loop boundary |
 | `peer_seen` | `(•o•)!` → `(•_•)?` |
 | `candidate` | `(•‿•)` → `(˵•‿•˵)` → `(˵•‿-)✧` → `(˵•‿•˵)`; three seconds per frame, plays once per encounter, then holds the final blush |
@@ -155,6 +156,12 @@ the main content changes. Header and footer text use a standard bold face, with
 modest synthetic emboldening only when no bold font is available, so the persistent
 chrome stays legible on the physical e-ink panel.
 
+The ambient fallback is `idle` when any live `totem.peers.get` row is
+recognized, and `alone_idle` otherwise. Mesh size is not used as a proxy for
+company: it measures the wider overlay, while friendship presence comes from
+the same live peer rows that produce the footer friend count. Higher-priority
+peer, sync, power, and health scenes continue to preempt either fallback.
+
 Each authoritative scene admission also selects one of exactly ten approved
 captions from the closed `SCENE_CAPTIONS` catalogue. Selection is random but
 injectable for tests, excludes the caption used by that scene's previous
@@ -169,7 +176,7 @@ existing words and the character never move. Caption and face deadlines are
 independent and share a display submission only when due together. The first
 runtime submission remains full; face, caption, and chrome changes afterward
 request partial refresh. `totem-screen proof-captions --atlas-output PATH`
-writes a deterministic 229-frame atlas containing all 130 complete captions,
+writes a deterministic 253-frame atlas containing all 140 complete captions,
 representative progressive prefixes, and every existing face-sequence frame
 without turning that exhaustive proof into a physical replay.
 

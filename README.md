@@ -59,7 +59,7 @@ SSE is only a wake-up notification. Replay the boot state machine with
 `totem-screen replay-boot`, or every exact runtime frame with
 `totem-screen replay-states --replay-frame-seconds 2`. Add
 `--atlas-output /tmp/totem-states.png` to save the same rendered frames as a
-contact sheet. Export the exhaustive 130-caption, representative-prefix, and
+contact sheet. Export the exhaustive 140-caption, representative-prefix, and
 face-sequence proof without a long hardware run with
 `totem-screen proof-captions --atlas-output /tmp/totem-captions.png`.
 

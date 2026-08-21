@@ -55,6 +55,18 @@ pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
 
 
 EXPECTED_SEQUENCES = {
+    RuntimeScene.IDLE: (
+        "(•‿•)",
+        "(◐‿◐)",
+        "(•‿•)",
+        "(◓‿◓)",
+        "(•‿•)",
+        "(◑‿◑)",
+        "(•‿•)",
+        "(◒‿◒)",
+        "(-‿-)",
+        "(•‿•)",
+    ),
     RuntimeScene.ALONE_IDLE: (
         "(•‿•)",
         "(◐‿◐)",
@@ -115,7 +127,7 @@ EXPECTED_CHARGING_REACTIONS = (
 )
 
 EXPECTED_CAPTION_CATALOG_SHA256 = (
-    "c00c9133bef5fc0d7b017eb7a510d45703771eedb10b8fc0e612ee18a282d5c8"
+    "19202dbd508a2188a664fd871617baf0a4629450a08affcc828fd5de15f2e80b"
 )
 
 
@@ -180,7 +192,7 @@ def test_given_caption_catalog_when_loaded_then_every_exact_option_is_present():
 
     assert set(SCENE_CAPTIONS) == set(RuntimeScene)
     assert all(len(SCENE_CAPTIONS[scene]) == 10 for scene in RuntimeScene)
-    assert sum(len(options) for options in SCENE_CAPTIONS.values()) == 130
+    assert sum(len(options) for options in SCENE_CAPTIONS.values()) == 140
     payload = json.dumps(
         [[scene.value, list(SCENE_CAPTIONS[scene])] for scene in RuntimeScene],
         ensure_ascii=False,
@@ -562,6 +574,49 @@ def test_given_unsupported_probe_and_sync_results_then_no_extra_scene_is_invente
     assert _scene(snapshot) == RuntimeScene.ALONE_IDLE
 
 
+def test_given_online_friend_after_payoffs_then_neutral_idle_replaces_lonely_idle():
+    """Given present recognized company, ambient copy must not claim loneliness."""
+
+    snapshot = _snapshot(
+        PeerSnapshot("unreachable-a", 1, probe_verdict="unreachable"),
+        PeerSnapshot("unreachable-b", 1, probe_verdict="unreachable"),
+        PeerSnapshot(
+            "friend-a",
+            7,
+            probe_verdict="candidate",
+            recognized=True,
+            known_before=True,
+            sync_state="succeeded",
+            sync_attempt=3,
+        ),
+        PeerSnapshot(
+            "friend-b",
+            4,
+            probe_verdict="candidate",
+            recognized=True,
+            known_before=True,
+            sync_state="succeeded",
+            sync_attempt=2,
+        ),
+    )
+    projector = ProjectionEngine(RuntimePolicy(coalesce_seconds=0))
+    projector.seed(snapshot)
+
+    assert (snapshot.peer_count, snapshot.recognized_count) == (4, 2)
+    assert projector.select(snapshot).scene == RuntimeScene.IDLE
+
+    departed = _snapshot(
+        PeerSnapshot(
+            "friend",
+            7,
+            recognized=True,
+            known_before=True,
+            present=False,
+        )
+    )
+    assert projector.select(departed).scene == RuntimeScene.ALONE_IDLE
+
+
 def test_given_departed_tombstone_then_only_cancelled_payoff_is_projected():
     """Given a departed row, when projected, then it cannot masquerade as live."""
 
@@ -633,7 +688,7 @@ def test_given_startup_snapshot_when_seeded_then_stale_payoffs_are_not_replayed(
     projector = ProjectionEngine(RuntimePolicy(coalesce_seconds=0))
     projector.seed(initial)
 
-    assert projector.select(initial).scene == RuntimeScene.ALONE_IDLE
+    assert projector.select(initial).scene == RuntimeScene.IDLE
     next_encounter = _snapshot(
         PeerSnapshot("peer", 2, recognized=True, known_before=True)
     )
@@ -740,7 +795,7 @@ def test_given_many_simultaneous_peers_when_projected_then_queue_is_bounded():
     assert choice.scene == RuntimeScene.NEWLY_RECOGNIZED
     assert len(choice.tokens) == 2
     projector.mark_presented(choice)
-    assert projector.select(snapshot).scene == RuntimeScene.ALONE_IDLE
+    assert projector.select(snapshot).scene == RuntimeScene.IDLE
 
 
 def test_given_departed_and_old_encounters_then_consumed_history_is_pruned():
@@ -1688,7 +1743,7 @@ def test_given_caption_proof_when_rendered_then_every_phrase_and_prefix_exists(
     controller = RuntimeController(display, renderer)
     snapshot = synthetic_snapshot("metot")
     frames = controller.caption_proof_frames(snapshot)
-    assert len(frames) == 229
+    assert len(frames) == 253
 
     complete = {
         (frame.scene, frame.caption)
@@ -1836,6 +1891,9 @@ FEATURE_BINDINGS = {
     ),
     "Process restart does not replay stale payoffs": (
         test_given_startup_snapshot_when_seeded_then_stale_payoffs_are_not_replayed
+    ),
+    "Ambient copy distinguishes company from loneliness": (
+        test_given_online_friend_after_payoffs_then_neutral_idle_replaces_lonely_idle
     ),
     "A departed sync is reconciled without reviving its peer": (
         test_given_departed_tombstone_then_only_cancelled_payoff_is_projected

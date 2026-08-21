@@ -10,6 +10,7 @@ Feature: Continuous Totem e-ink presentation
 
     Examples:
       | scene                 |
+      | idle                  |
       | alone_idle            |
       | peer_seen             |
       | candidate             |
@@ -65,6 +66,12 @@ Feature: Continuous Totem e-ink presentation
     Then those existing one-shot tokens are treated as consumed
     And a later encounter or sync attempt can still produce a new payoff
 
+  Scenario: Ambient copy distinguishes company from loneliness
+    Given live peer rows include recognized friends
+    When no higher-priority scene remains
+    Then the ambient scene is idle rather than alone_idle
+    And departed friends do not prevent alone_idle
+
   Scenario: A departed sync is reconciled without reviving its peer
     Given peers.get retains a bounded row with present false and cancelled sync
     When the projector reconciles that tombstone
@@ -95,7 +102,7 @@ Feature: Continuous Totem e-ink presentation
   Scenario: Every caption can be proofed without a long hardware replay
     Given the proof-captions command
     When an operator exports its deterministic atlas
-    Then all 130 complete captions are rendered
+    Then all 140 complete captions are rendered
     And representative word prefixes and every face sequence are included
     And captions remain inside the fixed band above the unchanged footer
 

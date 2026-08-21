@@ -584,7 +584,12 @@ class ProjectionEngine:
             scenes.append(RuntimeScene.CHARGING)
         if not snapshot.fips_connected:
             scenes.append(RuntimeScene.MESH_DEGRADED)
-        scenes.append(RuntimeScene.ALONE_IDLE)
+        has_online_friend = any(
+            peer.present and peer.recognized for peer in snapshot.peers
+        )
+        scenes.append(
+            RuntimeScene.IDLE if has_online_friend else RuntimeScene.ALONE_IDLE
+        )
         return scenes
 
     def select(self, snapshot: RuntimeSnapshot) -> SceneChoice:

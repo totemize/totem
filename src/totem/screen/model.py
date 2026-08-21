@@ -40,6 +40,7 @@ class ScreenFrame:
 class RuntimeScene(str, Enum):
     """The complete, closed post-boot scene vocabulary."""
 
+    IDLE = "idle"
     ALONE_IDLE = "alone_idle"
     PEER_SEEN = "peer_seen"
     CANDIDATE = "candidate"
@@ -57,19 +58,23 @@ class RuntimeScene(str, Enum):
 
 # These strings are product copy.  They are centralized so the projector,
 # renderer, replay command, and contract tests cannot silently drift apart.
+AMBIENT_LOOK_SEQUENCE = (
+    "(•‿•)",
+    "(◐‿◐)",
+    "(•‿•)",
+    "(◓‿◓)",
+    "(•‿•)",
+    "(◑‿◑)",
+    "(•‿•)",
+    "(◒‿◒)",
+    "(-‿-)",
+    "(•‿•)",
+)
+
+
 SCENE_SEQUENCES = {
-    RuntimeScene.ALONE_IDLE: (
-        "(•‿•)",
-        "(◐‿◐)",
-        "(•‿•)",
-        "(◓‿◓)",
-        "(•‿•)",
-        "(◑‿◑)",
-        "(•‿•)",
-        "(◒‿◒)",
-        "(-‿-)",
-        "(•‿•)",
-    ),
+    RuntimeScene.IDLE: AMBIENT_LOOK_SEQUENCE,
+    RuntimeScene.ALONE_IDLE: AMBIENT_LOOK_SEQUENCE,
     RuntimeScene.PEER_SEEN: ("(•o•)!", "(•_•)?"),
     RuntimeScene.CANDIDATE: (
         "(•‿•)",
@@ -117,6 +122,18 @@ SCENE_SEQUENCES = {
 # ends.  Keeping the closed catalogue beside the face catalogue makes drift
 # visible in tests and deterministic proof output.
 SCENE_CAPTIONS = {
+    RuntimeScene.IDLE: (
+        "friends nearby. behaving normally.",
+        "company present. mischief pending.",
+        "quiet, but socially occupied.",
+        "pleasantly not alone.",
+        "familiar signals in the room.",
+        "friends online. eyebrows relaxed.",
+        "the usual suspects remain.",
+        "company detected. composure maintained.",
+        "not alone. still supervising.",
+        "good company. low ceremony.",
+    ),
     RuntimeScene.ALONE_IDLE: (
         "nothing moved. i checked.",
         "nobody here. suspicious.",
@@ -382,5 +399,6 @@ DEFAULT_SCENE_SPECS: Mapping[RuntimeScene, SceneSpec] = {
     RuntimeScene.NON_TOTEM_PEER: SceneSpec(30, 6.0, 18.0),
     RuntimeScene.CHARGING: SceneSpec(20, 10.0, 30.0),
     RuntimeScene.MESH_DEGRADED: SceneSpec(15, 12.0, 12.0),
+    RuntimeScene.IDLE: SceneSpec(10, 12.0, 60.0),
     RuntimeScene.ALONE_IDLE: SceneSpec(10, 12.0, 60.0),
 }

@@ -55,7 +55,7 @@ ssh metot 'totem-screen proof-captions --atlas-output /tmp/totem-captions.png'
 ```
 
 The caption proof writes its exhaustive atlas without submitting hundreds of
-frames to the physical panel. Normal runtime and the 49-frame face replay still
+frames to the physical panel. Normal runtime and the 59-frame face replay still
 use the safe first-full, later-partial display path.
 
 The device-manager package set includes `python3-smbus` for read-only PiSugar2
