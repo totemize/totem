@@ -60,28 +60,87 @@ class RuntimeScene(str, Enum):
 SCENE_SEQUENCES = {
     RuntimeScene.ALONE_IDLE: (
         "(•‿•)",
-        "(•ᴗ•)",
-        "(•ω•)",
-        "(´‿)",
+        "(◐‿◐)",
+        "(•‿•)",
+        "(◓‿◓)",
+        "(•‿•)",
+        "(◑‿◑)",
+        "(•‿•)",
+        "(◒‿◒)",
+        "(-‿-)",
         "(•‿•)",
     ),
     RuntimeScene.PEER_SEEN: ("(•o•)!", "(•_•)?"),
-    RuntimeScene.CANDIDATE: ("(¬‿¬)?",),
+    RuntimeScene.CANDIDATE: (
+        "(•‿•)",
+        "(˵•‿•˵)",
+        "(˵•‿-)✧",
+        "(˵•‿•˵)",
+    ),
     RuntimeScene.NEWLY_RECOGNIZED: ("\\(★‿★)/",),
     RuntimeScene.RETURNING_RECOGNIZED: ("(ﾉ◕ヮ◕)ﾉ",),
     RuntimeScene.SYNC_RUNNING: (
-        "(•‿•)⇄(•‿•)",
-        "(•ᴗ•)↔(•ᴗ•)",
-        "(•ω•)⇄(•ω•)",
+        "(•‿•)•→(•_•)",
+        "(•‿•)→•(•o•)",
+        "(•ᴗ•)⇄(•ᴗ•)",
+        "(•o•)•←(•‿•)",
+        "(•_•)←•(•‿•)",
+        "(•ᴗ•)⇄(•ᴗ•)",
     ),
     RuntimeScene.SYNC_SUCCEEDED: ("(✓‿✓)",),
     RuntimeScene.SYNC_INTERRUPTED: ("(´‿)ﾉ",),
-    RuntimeScene.NON_TOTEM_PEER: ("(•_•)", "(¬_¬)", "(•_•)"),
-    RuntimeScene.CHARGING: ("(•ڡ•)⚡", "(•ω•)⚡", "(•ڡ•)⚡"),
+    RuntimeScene.NON_TOTEM_PEER: (
+        "(•_•)",
+        "(¬_¬)",
+        "( •_•)>⌐■-■",
+        "(⌐■_■)",
+        "(⌐■_■) ?",
+        "( •_•)>⌐■-■",
+        "(•_•)",
+    ),
+    RuntimeScene.CHARGING: (
+        "(•‿•)⚡",
+        "(•ᴗ•)⚡",
+        "(◕‿◕)⚡",
+        "(•ω•)⚡",
+        "(•ᴗ•)⚡",
+        "(•‿•)⚡",
+    ),
     RuntimeScene.LOW_BATTERY: ("(－_－) zz", "(=_=)", "(－_－) zz"),
     RuntimeScene.CRITICAL_BATTERY: ("(×_×) !",),
     RuntimeScene.MESH_DEGRADED: ("(•_•)⌁", "(•‿•)⌁", "(•_•)⌁"),
 }
+
+
+@dataclass(frozen=True)
+class AnimationReaction:
+    """A bounded optional frame inserted into a deterministic base loop."""
+
+    name: str
+    expression: str
+    dwell_seconds: float
+    probability: float = 0.0
+
+
+CHARGING_CENTER_EXPRESSION = "(•‿•)⚡"
+CHARGING_REACTIONS = (
+    AnimationReaction("blink", "(-‿-)⚡", 2.0, 0.20),
+    AnimationReaction("glance", "(◑‿◑)⚡", 4.0, 0.10),
+)
+CHARGING_FULL_REACTION = AnimationReaction("full", "(★‿★)⚡", 10.0)
+
+
+def replay_sequence(scene: RuntimeScene) -> Tuple[str, ...]:
+    """Return every frame an operator must be able to proof deterministically."""
+
+    sequence = SCENE_SEQUENCES[scene]
+    if scene != RuntimeScene.CHARGING:
+        return sequence
+    return (
+        sequence
+        + tuple(reaction.expression for reaction in CHARGING_REACTIONS)
+        + (CHARGING_FULL_REACTION.expression,)
+    )
 
 
 @dataclass(frozen=True)
@@ -140,6 +199,7 @@ class SceneSpec:
     frame_seconds: float
     minimum_dwell: float
     transient: bool = False
+    loop: bool = True
 
 
 DEFAULT_SCENE_SPECS: Mapping[RuntimeScene, SceneSpec] = {
@@ -149,7 +209,7 @@ DEFAULT_SCENE_SPECS: Mapping[RuntimeScene, SceneSpec] = {
     RuntimeScene.SYNC_RUNNING: SceneSpec(60, 3.0, 9.0),
     RuntimeScene.SYNC_SUCCEEDED: SceneSpec(50, 4.0, 4.0, True),
     RuntimeScene.SYNC_INTERRUPTED: SceneSpec(50, 4.0, 4.0, True),
-    RuntimeScene.CANDIDATE: SceneSpec(45, 3.0, 3.0),
+    RuntimeScene.CANDIDATE: SceneSpec(45, 3.0, 3.0, loop=False),
     RuntimeScene.PEER_SEEN: SceneSpec(40, 2.0, 4.0),
     RuntimeScene.LOW_BATTERY: SceneSpec(35, 12.0, 12.0),
     RuntimeScene.NON_TOTEM_PEER: SceneSpec(30, 6.0, 18.0),

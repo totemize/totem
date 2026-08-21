@@ -10,6 +10,7 @@ becoming state authority.
 import asyncio
 import json
 import os
+import random
 from collections import OrderedDict
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -34,14 +35,19 @@ from PIL import Image
 from totem.logging import logger
 from totem.screen.display import DeviceManagerDisplay
 from totem.screen.model import (
+    CHARGING_CENTER_EXPRESSION,
+    CHARGING_FULL_REACTION,
+    CHARGING_REACTIONS,
     DEFAULT_SCENE_SPECS,
     SCENE_SEQUENCES,
+    AnimationReaction,
     PeerSnapshot,
     PowerSnapshot,
     RuntimeFrame,
     RuntimeScene,
     RuntimeSnapshot,
     SceneSpec,
+    replay_sequence,
 )
 from totem.screen.render import FrameRenderer
 
@@ -680,6 +686,157 @@ class SceneArbitrator:
         return max(quiet_at, self.entered_at + current_spec.minimum_dwell)
 
 
+@dataclass(frozen=True)
+class AnimationStep:
+    """One scheduled frame and the time it must remain visible."""
+
+    scene: RuntimeScene
+    expression: str
+    sequence_index: int
+    dwell_seconds: float
+    kind: str = "base"
+
+
+class SceneAnimator:
+    """Advance one authoritative scene through deterministic, proofable frames."""
+
+    def __init__(
+        self,
+        policy: RuntimePolicy,
+        reaction_random: Optional[Callable[[], float]] = None,
+    ):
+        self.policy = policy
+        self.reaction_random = reaction_random or random.random
+        self.scene: Optional[RuntimeScene] = None
+        self.sequence_index = 0
+        self.held = False
+        self._active_reaction: Optional[AnimationReaction] = None
+        self._battery_was_full = False
+        self._full_charge_pending = False
+
+    @staticmethod
+    def advance_index(sequence: Sequence[str], index: int) -> int:
+        following = (index + 1) % len(sequence)
+        if following == 0 and len(sequence) > 1 and sequence[-1] == sequence[0]:
+            return 1
+        return following
+
+    @staticmethod
+    def _is_full_charge(snapshot: RuntimeSnapshot) -> bool:
+        power = snapshot.power
+        return bool(
+            power.available
+            and power.power_plugged is True
+            and power.battery_percent is not None
+            and power.battery_percent >= 100.0
+        )
+
+    def observe(self, snapshot: RuntimeSnapshot) -> bool:
+        """Latch the rising edge of authoritative 100% charging telemetry."""
+
+        full = self._is_full_charge(snapshot)
+        became_pending = full and not self._battery_was_full
+        if became_pending:
+            self._full_charge_pending = True
+            # A threshold reaction supersedes a queued cosmetic reaction so
+            # optional frames can never appear back-to-back.
+            self._active_reaction = None
+        elif not full:
+            self._full_charge_pending = False
+        self._battery_was_full = full
+        return became_pending
+
+    def activate(self, scene: RuntimeScene, snapshot: RuntimeSnapshot) -> None:
+        self.observe(snapshot)
+        self.scene = scene
+        self.sequence_index = 0
+        self.held = False
+        self._active_reaction = None
+
+    @staticmethod
+    def _reaction_index(reaction: AnimationReaction) -> int:
+        base_count = len(SCENE_SEQUENCES[RuntimeScene.CHARGING])
+        if reaction == CHARGING_FULL_REACTION:
+            return base_count + len(CHARGING_REACTIONS)
+        return base_count + CHARGING_REACTIONS.index(reaction)
+
+    def current_step(self) -> AnimationStep:
+        if self.scene is None:
+            raise RuntimeError("Animation scene has not been activated")
+        if self.scene == RuntimeScene.CHARGING and self._full_charge_pending:
+            reaction = CHARGING_FULL_REACTION
+            return AnimationStep(
+                self.scene,
+                reaction.expression,
+                self._reaction_index(reaction),
+                reaction.dwell_seconds,
+                "full_charge",
+            )
+        if self.scene == RuntimeScene.CHARGING and self._active_reaction is not None:
+            reaction = self._active_reaction
+            return AnimationStep(
+                self.scene,
+                reaction.expression,
+                self._reaction_index(reaction),
+                reaction.dwell_seconds,
+                "reaction",
+            )
+        expression = SCENE_SEQUENCES[self.scene][self.sequence_index]
+        return AnimationStep(
+            self.scene,
+            expression,
+            self.sequence_index,
+            self.policy.scene_specs[self.scene].frame_seconds,
+        )
+
+    def _choose_charging_reaction(self) -> None:
+        roll = float(self.reaction_random())
+        if not 0.0 <= roll < 1.0:
+            raise ValueError("Charging reaction chooser must return 0 <= value < 1")
+        threshold = 0.0
+        for reaction in CHARGING_REACTIONS:
+            threshold += reaction.probability
+            if roll < threshold:
+                self._active_reaction = reaction
+                return
+
+    def mark_presented(self, step: AnimationStep) -> None:
+        """Advance only after the frame crossed the display boundary."""
+
+        if step.kind == "full_charge":
+            self._full_charge_pending = False
+            self._active_reaction = None
+            return
+        if step.kind == "reaction":
+            self._active_reaction = None
+            return
+
+        sequence = SCENE_SEQUENCES[step.scene]
+        spec = self.policy.scene_specs[step.scene]
+        if not spec.loop:
+            if self.sequence_index < len(sequence) - 1:
+                self.sequence_index += 1
+            else:
+                self.held = True
+            return
+
+        self.sequence_index = self.advance_index(sequence, self.sequence_index)
+        if (
+            step.scene == RuntimeScene.CHARGING
+            and step.expression == CHARGING_CENTER_EXPRESSION
+            and not self._full_charge_pending
+        ):
+            self._choose_charging_reaction()
+
+    @property
+    def has_next_frame(self) -> bool:
+        if self._full_charge_pending or self._active_reaction is not None:
+            return True
+        if self.scene is None:
+            return False
+        return self.policy.scene_specs[self.scene].loop or not self.held
+
+
 class RuntimeController:
     """Animate the selected scene while coalescing authoritative updates."""
 
@@ -688,12 +845,14 @@ class RuntimeController:
         display: DeviceManagerDisplay,
         renderer: FrameRenderer,
         policy: Optional[RuntimePolicy] = None,
+        reaction_random: Optional[Callable[[], float]] = None,
     ):
         self.display = display
         self.renderer = renderer
         self.policy = policy or RuntimePolicy()
         self.projector = ProjectionEngine(self.policy)
         self.arbitrator = SceneArbitrator(self.projector, self.policy)
+        self.animator = SceneAnimator(self.policy, reaction_random)
 
     @staticmethod
     def _presentation_signature(snapshot: RuntimeSnapshot) -> Tuple[Any, ...]:
@@ -712,10 +871,22 @@ class RuntimeController:
 
     @staticmethod
     def _advance_index(sequence: Sequence[str], index: int) -> int:
-        following = (index + 1) % len(sequence)
-        if following == 0 and len(sequence) > 1 and sequence[-1] == sequence[0]:
-            return 1
-        return following
+        return SceneAnimator.advance_index(sequence, index)
+
+    @staticmethod
+    def _animation_key(choice: SceneChoice) -> Tuple[Any, ...]:
+        if choice.scene != RuntimeScene.CANDIDATE:
+            return (choice.scene, choice.tokens)
+        encounters = tuple(
+            sorted(
+                (peer.npub, peer.encounter)
+                for peer in choice.snapshot.peers
+                if peer.present
+                and peer.probe_verdict == "candidate"
+                and not peer.recognized
+            )
+        )
+        return (choice.scene, encounters)
 
     async def _produce(self, source: RuntimeSource, queue: asyncio.Queue) -> None:
         async for update in source.updates():
@@ -734,7 +905,6 @@ class RuntimeController:
         loop = asyncio.get_running_loop()
         active_key = None
         active_signature = None
-        sequence_index = 0
         next_frame_at: Optional[float] = None
         last_frame_at: Optional[float] = None
         first_runtime_frame = True
@@ -743,11 +913,12 @@ class RuntimeController:
                 now = loop.time()
                 choice = self.arbitrator.resolve(now)
                 if choice is not None:
-                    key = (choice.scene, choice.tokens)
+                    full_charge_due = self.animator.observe(choice.snapshot)
+                    key = self._animation_key(choice)
                     if key != active_key:
                         active_key = key
                         active_signature = self._presentation_signature(choice.snapshot)
-                        sequence_index = 0
+                        self.animator.activate(choice.scene, choice.snapshot)
                         next_frame_at = now
                     else:
                         signature = self._presentation_signature(choice.snapshot)
@@ -764,22 +935,25 @@ class RuntimeController:
                                         ].frame_seconds,
                                     )
                                 next_frame_at = earliest
+                        if full_charge_due and choice.scene == RuntimeScene.CHARGING:
+                            next_frame_at = now
 
-                    sequence = SCENE_SEQUENCES[choice.scene]
                     if next_frame_at is not None and now >= next_frame_at:
-                        expression = sequence[sequence_index]
+                        step = self.animator.current_step()
+                        catalog_size = len(replay_sequence(choice.scene))
                         frame = RuntimeFrame(
                             choice.scene,
-                            expression,
-                            sequence_index,
+                            step.expression,
+                            step.sequence_index,
                             choice.snapshot,
                         )
                         logger.info(
-                            "Screen runtime frame: %s %d/%d %s",
+                            "Screen runtime frame: %s %d/%d %s%s",
                             choice.scene.value,
-                            sequence_index + 1,
-                            len(sequence),
-                            expression,
+                            step.sequence_index + 1,
+                            catalog_size,
+                            step.expression,
+                            " [{}]".format(step.kind) if step.kind != "base" else "",
                         )
                         try:
                             image = self.renderer.render_runtime(frame)
@@ -802,18 +976,11 @@ class RuntimeController:
                             )
                         else:
                             self.arbitrator.mark_presented(choice)
+                            self.animator.mark_presented(step)
                             first_runtime_frame = False
                             last_frame_at = loop.time()
-                            sequence_index = self._advance_index(
-                                sequence, sequence_index
-                            )
-                            if len(sequence) > 1:
-                                next_frame_at = (
-                                    loop.time()
-                                    + self.policy.scene_specs[
-                                        choice.scene
-                                    ].frame_seconds
-                                )
+                            if self.animator.has_next_frame:
+                                next_frame_at = loop.time() + step.dwell_seconds
                             else:
                                 next_frame_at = None
 
@@ -862,12 +1029,12 @@ class RuntimeController:
         if frame_seconds < 0:
             raise ValueError("Replay frame dwell cannot be negative")
         await self.display.wait_ready()
-        total = sum(len(SCENE_SEQUENCES[scene]) for scene in RuntimeScene)
+        total = sum(len(replay_sequence(scene)) for scene in RuntimeScene)
         ordinal = 0
         rendered: List[Image.Image] = []
         first_runtime_frame = True
         for scene in RuntimeScene:
-            sequence = SCENE_SEQUENCES[scene]
+            sequence = replay_sequence(scene)
             for index, expression in enumerate(sequence):
                 ordinal += 1
                 logger.info(

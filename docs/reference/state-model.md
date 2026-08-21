@@ -132,16 +132,16 @@ one closed `RuntimeScene`; neither enum becomes device-state authority.
 
 | Runtime scene | Exact frame sequence |
 |---|---|
-| `alone_idle` | `(•‿•)` → `(•ᴗ•)` → `(•ω•)` → `(´‿)` → `(•‿•)` |
+| `alone_idle` | `(•‿•)` → `(◐‿◐)` → `(•‿•)` → `(◓‿◓)` → `(•‿•)` → `(◑‿◑)` → `(•‿•)` → `(◒‿◒)` → `(-‿-)` → `(•‿•)`; 12 seconds per frame, without a duplicate centered face at the loop boundary |
 | `peer_seen` | `(•o•)!` → `(•_•)?` |
-| `candidate` | `(¬‿¬)?` |
+| `candidate` | `(•‿•)` → `(˵•‿•˵)` → `(˵•‿-)✧` → `(˵•‿•˵)`; three seconds per frame, plays once per encounter, then holds the final blush |
 | `newly_recognized` | `\(★‿★)/` |
 | `returning_recognized` | `(ﾉ◕ヮ◕)ﾉ` |
-| `sync_running` | `(•‿•)⇄(•‿•)` → `(•ᴗ•)↔(•ᴗ•)` → `(•ω•)⇄(•ω•)` |
+| `sync_running` | `(•‿•)•→(•_•)` → `(•‿•)→•(•o•)` → `(•ᴗ•)⇄(•ᴗ•)` → `(•o•)•←(•‿•)` → `(•_•)←•(•‿•)` → `(•ᴗ•)⇄(•ᴗ•)`; three seconds per frame while sync is authoritatively running |
 | `sync_succeeded` | `(✓‿✓)` |
 | `sync_interrupted` | `(´‿)ﾉ` for both timeout and cancellation |
-| `non_totem_peer` | `(•_•)` → `(¬_¬)` → `(•_•)`; only the authoritative `not_totem` verdict selects it |
-| `charging` | `(•ڡ•)⚡` → `(•ω•)⚡` → `(•ڡ•)⚡` |
+| `non_totem_peer` | `(•_•)` → `(¬_¬)` → `( •_•)>⌐■-■` → `(⌐■_■)` → `(⌐■_■) ?` → `( •_•)>⌐■-■` → `(•_•)`; six seconds per frame, with a fixed left-side face origin while the glasses move; only the authoritative `not_totem` verdict selects it |
+| `charging` | `(•‿•)⚡` → `(•ᴗ•)⚡` → `(◕‿◕)⚡` → `(•ω•)⚡` → `(•ᴗ•)⚡` → `(•‿•)⚡`; ten seconds per base frame, with bounded reactions described below |
 | `low_battery` | `(－_－) zz` → `(=_=)` → `(－_－) zz` |
 | `critical_battery` | `(×_×) !` |
 | `mesh_degraded` | `(•_•)⌁` → `(•‿•)⌁` → `(•_•)⌁` |
@@ -152,6 +152,17 @@ recognized peers, separated by literal slashes. Those counts remain badges
 while the main content changes. Header and footer text use a standard bold face,
 with modest synthetic emboldening only when no bold font is available, so the
 persistent chrome stays legible on the physical e-ink panel.
+
+The runtime selects a scene only from fresh authoritative snapshots. Animation
+advances within that selected scene and is interruptible as soon as arbitration
+admits a different scene; it does not cycle through semantic states. Charging
+may insert a two-second `(-‿-)⚡` blink with 20% probability or a four-second
+`(◑‿◑)⚡` glance with 10% probability after a centered base frame. Reactions
+cannot be consecutive. The first authoritative rise to 100% while plugged in
+shows `(★‿★)⚡` once for ten seconds; it rearms only after charge drops below
+100%. The replay command bypasses randomness and renders both optional
+reactions and the full-charge frame exactly once so the complete catalog can be
+inspected on hardware.
 
 ## 3. Service and process health
 
@@ -588,8 +599,9 @@ These are presentation copy, not protocol state:
   queue.
 - Rate-limit ambient changes and prefer badges for slowly changing values.
 - Submit the first runtime frame as a safe full refresh, then request partial
-  updates. The V4 driver seeds both RAM planes and promotes every twentieth partial
-  request to full refresh; unsupported drivers fall back to full safely.
+  updates. The V4 driver seeds both RAM planes once and uses the
+  Pwnagotchi-compatible reset plus new-plane-only partial path; scheduled full
+  promotion is disabled on metot. Unsupported drivers fall back to full safely.
 - Render shutdown intent before services disappear; an e-ink panel will keep
   that frame without power.
 - On screen-process restart, rebuild from snapshots rather than replaying old

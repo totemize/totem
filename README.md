@@ -42,7 +42,7 @@ Useful environment variables:
 - `TOTEM_ALLOW_MOCK_DRIVERS=1`: explicitly permit mock transports.
 - `TOTEM_STORAGE_ROOT=/var/lib/totem/storage`: confine filesystem storage.
 - `TOTEM_EINK_DRIVER=waveshare_2in13_v4`: select an exact display driver for `DisplayManager`, the API service, and hardware tests.
-- `TOTEM_EINK_FULL_REFRESH_EVERY=20`: promote every twentieth requested partial frame to a full e-ink refresh.
+- `TOTEM_EINK_FULL_REFRESH_EVERY=0`: disable scheduled full-refresh promotion; set a positive value only for panels that require an explicit cadence.
 - `TOTEM_SCREEN_ROTATION=0|180`: orient presentation frames for the physical panel mount.
 - `TOTEM_SCREEN_LOW_BATTERY_PERCENT=20` and `TOTEM_SCREEN_CRITICAL_BATTERY_PERCENT=8`: select power-scene thresholds.
 - `TOTEM_SCREEN_SNAPSHOT_POLL_SECONDS=15`, `TOTEM_SCREEN_RECONNECT_SECONDS=2`, and `TOTEM_SCREEN_COALESCE_SECONDS=2.1`: tune continuous snapshot reconciliation and scene quiet time.

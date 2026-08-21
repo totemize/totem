@@ -29,6 +29,7 @@ working environment.
 
 | Date | Summary |
 |------|---------|
+| [2026-08-21 — interactive face animations](journal/2026-08-21.md#authoritative-interactive-face-animations) | Added state-bound idle, charging, sync, suspicious-peer, and flirty-candidate motion; deterministic 49-frame replay and [camera proof](proofs/2026-08-21/interactive-animations/README.md) passed on metot with a fixed left-side glasses sequence. |
 | [2026-08-21 — V4 e-ink quality](journal/2026-08-21.md#waveshare-v4-contrast-and-flash-correction) | Hardware A/B on metot identified the old-plane rewrite as the contrast regression; the Pwnagotchi-compatible partial waveform stayed crisp through 201 updates with no scheduled full flash. |
 | [2026-08-20 — runtime face renderer](journal/2026-08-20.md#totem-runtime-face-renderer-and-v4-partial-refresh) | Added the authoritative 28-frame runtime projection, durable recognition history, cancellation tombstones, efficient V4 partial refresh with cadence 20, metot-only convergent deployment, and [physical camera proof](proofs/2026-08-20/totem-renderer/README.md). |
 | [2026-08-20 — periodic reconciliation](journal/2026-08-20.md#totemd-periodic-reconciliation-and-event-history) | Added bounded event history, five-minute non-overlapping NIP-77 rounds, and readable per-round reconciliation summaries with optional set-difference counts. |

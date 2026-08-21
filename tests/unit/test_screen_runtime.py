@@ -12,12 +12,15 @@ from totem.screen.__main__ import _parser
 from totem.screen.controller import ScreenController
 from totem.screen.display import DeviceManagerDisplay
 from totem.screen.model import (
+    CHARGING_FULL_REACTION,
+    CHARGING_REACTIONS,
     SCENE_SEQUENCES,
     PeerSnapshot,
     PowerSnapshot,
     RuntimeFrame,
     RuntimeScene,
     RuntimeSnapshot,
+    replay_sequence,
 )
 from totem.screen.render import (
     FALLBACK_PERSISTENT_TEXT_STROKE,
@@ -32,6 +35,7 @@ from totem.screen.runtime import (
     RuntimeController,
     RuntimePolicy,
     RuntimeSource,
+    SceneAnimator,
     SceneArbitrator,
     SourceUpdate,
     TotemSnapshotClient,
@@ -46,28 +50,62 @@ pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
 EXPECTED_SEQUENCES = {
     RuntimeScene.ALONE_IDLE: (
         "(•‿•)",
-        "(•ᴗ•)",
-        "(•ω•)",
-        "(´‿)",
+        "(◐‿◐)",
+        "(•‿•)",
+        "(◓‿◓)",
+        "(•‿•)",
+        "(◑‿◑)",
+        "(•‿•)",
+        "(◒‿◒)",
+        "(-‿-)",
         "(•‿•)",
     ),
     RuntimeScene.PEER_SEEN: ("(•o•)!", "(•_•)?"),
-    RuntimeScene.CANDIDATE: ("(¬‿¬)?",),
+    RuntimeScene.CANDIDATE: (
+        "(•‿•)",
+        "(˵•‿•˵)",
+        "(˵•‿-)✧",
+        "(˵•‿•˵)",
+    ),
     RuntimeScene.NEWLY_RECOGNIZED: ("\\(★‿★)/",),
     RuntimeScene.RETURNING_RECOGNIZED: ("(ﾉ◕ヮ◕)ﾉ",),
     RuntimeScene.SYNC_RUNNING: (
-        "(•‿•)⇄(•‿•)",
-        "(•ᴗ•)↔(•ᴗ•)",
-        "(•ω•)⇄(•ω•)",
+        "(•‿•)•→(•_•)",
+        "(•‿•)→•(•o•)",
+        "(•ᴗ•)⇄(•ᴗ•)",
+        "(•o•)•←(•‿•)",
+        "(•_•)←•(•‿•)",
+        "(•ᴗ•)⇄(•ᴗ•)",
     ),
     RuntimeScene.SYNC_SUCCEEDED: ("(✓‿✓)",),
     RuntimeScene.SYNC_INTERRUPTED: ("(´‿)ﾉ",),
-    RuntimeScene.NON_TOTEM_PEER: ("(•_•)", "(¬_¬)", "(•_•)"),
-    RuntimeScene.CHARGING: ("(•ڡ•)⚡", "(•ω•)⚡", "(•ڡ•)⚡"),
+    RuntimeScene.NON_TOTEM_PEER: (
+        "(•_•)",
+        "(¬_¬)",
+        "( •_•)>⌐■-■",
+        "(⌐■_■)",
+        "(⌐■_■) ?",
+        "( •_•)>⌐■-■",
+        "(•_•)",
+    ),
+    RuntimeScene.CHARGING: (
+        "(•‿•)⚡",
+        "(•ᴗ•)⚡",
+        "(◕‿◕)⚡",
+        "(•ω•)⚡",
+        "(•ᴗ•)⚡",
+        "(•‿•)⚡",
+    ),
     RuntimeScene.LOW_BATTERY: ("(－_－) zz", "(=_=)", "(－_－) zz"),
     RuntimeScene.CRITICAL_BATTERY: ("(×_×) !",),
     RuntimeScene.MESH_DEGRADED: ("(•_•)⌁", "(•‿•)⌁", "(•_•)⌁"),
 }
+
+EXPECTED_CHARGING_REACTIONS = (
+    "(-‿-)⚡",
+    "(◑‿◑)⚡",
+    "(★‿★)⚡",
+)
 
 
 def _snapshot(
@@ -119,13 +157,22 @@ def test_given_the_product_catalog_when_loaded_then_only_exact_sequences_exist()
 
     assert set(RuntimeScene) == set(EXPECTED_SEQUENCES)
     assert SCENE_SEQUENCES == EXPECTED_SEQUENCES
+    assert replay_sequence(RuntimeScene.CHARGING) == (
+        EXPECTED_SEQUENCES[RuntimeScene.CHARGING] + EXPECTED_CHARGING_REACTIONS
+    )
+    assert all(
+        replay_sequence(scene) == sequence
+        for scene, sequence in EXPECTED_SEQUENCES.items()
+        if scene != RuntimeScene.CHARGING
+    )
 
 
 @pytest.mark.parametrize(
     "scene,index,expression",
     [
         (scene, index, expression)
-        for scene, sequence in EXPECTED_SEQUENCES.items()
+        for scene in RuntimeScene
+        for sequence in (replay_sequence(scene),)
         for index, expression in enumerate(sequence)
     ],
 )
@@ -143,7 +190,57 @@ def test_given_each_exact_frame_when_rendered_then_vector_ink_is_visible(
     assert image.size == (250, 122)
     bounds = _content_ink_bounds(image)
     assert bounds is not None
-    assert abs((bounds[0] + bounds[2]) / 2 - image.width / 2) <= 4
+    assert 8 <= bounds[0] < bounds[2] <= image.width - 8
+    assert bounds[1] >= 0
+    assert bounds[3] <= 79
+    if scene == RuntimeScene.NON_TOTEM_PEER:
+        assert bounds[0] == 8
+    else:
+        assert abs((bounds[0] + bounds[2]) / 2 - image.width / 2) <= 4
+
+
+def test_given_suspicious_animation_when_props_move_then_face_origin_stays_left():
+    """Given glasses motion, when frames change, then the face does not drift."""
+
+    renderer = FrameRenderer()
+    origins = []
+    heights = []
+    for index, expression in enumerate(replay_sequence(RuntimeScene.NON_TOTEM_PEER)):
+        image = renderer.render_runtime(
+            RuntimeFrame(
+                RuntimeScene.NON_TOTEM_PEER,
+                expression,
+                index,
+                synthetic_snapshot("metot"),
+            )
+        )
+        bounds = _content_ink_bounds(image)
+        assert bounds is not None
+        origins.append(bounds[0])
+        heights.append(bounds[3] - bounds[1])
+
+    assert origins == [8] * len(origins)
+    assert len(set(heights)) == 1
+
+
+def test_given_every_animation_frame_then_persistent_chrome_never_moves():
+    """Given animation, when expressions change, then chrome bytes stay exact."""
+
+    renderer = FrameRenderer()
+    snapshot = synthetic_snapshot("metot")
+    chrome = None
+    for scene in RuntimeScene:
+        for index, expression in enumerate(replay_sequence(scene)):
+            image = renderer.render_runtime(
+                RuntimeFrame(scene, expression, index, snapshot)
+            )
+            sample = (
+                image.crop((0, 0, image.width, 22)).tobytes()
+                + image.crop((0, 101, image.width, image.height)).tobytes()
+            )
+            if chrome is None:
+                chrome = sample
+            assert sample == chrome
 
 
 def test_given_runtime_facts_when_rendered_then_layout_contract_is_stable():
@@ -884,6 +981,129 @@ def test_given_rate_overrides_when_applied_then_each_sequence_is_configurable():
     assert policy.scene_specs[RuntimeScene.CHARGING].priority == 25
 
 
+def test_given_interactive_scenes_then_exact_dwell_and_loop_policy_is_explicit():
+    """Given approved motion, when scheduled, then timings match the contract."""
+
+    specs = RuntimePolicy().scene_specs
+    assert specs[RuntimeScene.ALONE_IDLE].frame_seconds == 12
+    assert specs[RuntimeScene.CHARGING].frame_seconds == 10
+    assert specs[RuntimeScene.SYNC_RUNNING].frame_seconds == 3
+    assert specs[RuntimeScene.NON_TOTEM_PEER].frame_seconds == 6
+    assert specs[RuntimeScene.CANDIDATE].frame_seconds == 3
+    assert specs[RuntimeScene.CANDIDATE].loop is False
+    assert tuple(
+        (reaction.expression, reaction.dwell_seconds, reaction.probability)
+        for reaction in CHARGING_REACTIONS
+    ) == (("(-‿-)⚡", 2.0, 0.20), ("(◑‿◑)⚡", 4.0, 0.10))
+    assert (
+        CHARGING_FULL_REACTION.expression,
+        CHARGING_FULL_REACTION.dwell_seconds,
+    ) == ("(★‿★)⚡", 10.0)
+
+
+def test_given_candidate_encounter_then_wink_plays_once_and_final_blush_holds():
+    """Given a candidate, when frames complete, then wink cannot loop."""
+
+    animator = SceneAnimator(RuntimePolicy(), reaction_random=lambda: 0.99)
+    snapshot = _snapshot(PeerSnapshot("candidate", 1, probe_verdict="candidate"))
+    animator.activate(RuntimeScene.CANDIDATE, snapshot)
+
+    rendered = []
+    while animator.has_next_frame:
+        step = animator.current_step()
+        rendered.append(step.expression)
+        animator.mark_presented(step)
+
+    assert tuple(rendered) == EXPECTED_SEQUENCES[RuntimeScene.CANDIDATE]
+    assert animator.held is True
+    assert animator.current_step().expression == "(˵•‿•˵)"
+    assert animator.has_next_frame is False
+
+
+def test_given_candidate_replacement_then_animation_identity_restarts():
+    """Given another encounter, when reconciled, then its bashful sequence is new."""
+
+    first = ProjectionEngine(RuntimePolicy(coalesce_seconds=0)).select(
+        _snapshot(PeerSnapshot("candidate", 1, probe_verdict="candidate"))
+    )
+    second = ProjectionEngine(RuntimePolicy(coalesce_seconds=0)).select(
+        _snapshot(PeerSnapshot("candidate", 2, probe_verdict="candidate"))
+    )
+
+    assert RuntimeController._animation_key(first) != RuntimeController._animation_key(
+        second
+    )
+
+
+@pytest.mark.parametrize(
+    "roll,expected,dwell",
+    ((0.10, "(-‿-)⚡", 2.0), (0.25, "(◑‿◑)⚡", 4.0)),
+)
+def test_given_charging_center_then_seeded_reaction_is_bounded(roll, expected, dwell):
+    """Given injected chance, when center succeeds, then one reaction is proofable."""
+
+    animator = SceneAnimator(RuntimePolicy(), reaction_random=lambda: roll)
+    animator.activate(RuntimeScene.CHARGING, _snapshot(battery=75, plugged=True))
+    center = animator.current_step()
+    animator.mark_presented(center)
+    reaction = animator.current_step()
+
+    assert center.expression == "(•‿•)⚡"
+    assert reaction.expression == expected
+    assert reaction.dwell_seconds == dwell
+    assert reaction.kind == "reaction"
+
+    animator.mark_presented(reaction)
+    following = animator.current_step()
+    assert following.kind == "base"
+    assert following.expression == "(•ᴗ•)⚡"
+
+
+def test_given_charging_center_then_no_reaction_roll_continues_base_loop():
+    """Given the remaining probability, when selected, then no insert appears."""
+
+    animator = SceneAnimator(RuntimePolicy(), reaction_random=lambda: 0.90)
+    animator.activate(RuntimeScene.CHARGING, _snapshot(battery=75, plugged=True))
+    animator.mark_presented(animator.current_step())
+
+    assert animator.current_step().expression == "(•ᴗ•)⚡"
+    assert animator.current_step().kind == "base"
+
+
+def test_given_full_charge_edge_then_star_retries_and_commits_once():
+    """Given 100%, when display succeeds, then the one-shot latches per edge."""
+
+    animator = SceneAnimator(RuntimePolicy(), reaction_random=lambda: 0.99)
+    below = _snapshot(battery=99, plugged=True)
+    full = _snapshot(battery=100, plugged=True)
+    animator.activate(RuntimeScene.CHARGING, below)
+
+    assert animator.observe(full) is True
+    first_attempt = animator.current_step()
+    assert first_attempt.expression == "(★‿★)⚡"
+    assert first_attempt.kind == "full_charge"
+    # No mark means a failed display retries the exact one-shot.
+    assert animator.current_step() == first_attempt
+
+    animator.mark_presented(first_attempt)
+    assert animator.observe(full) is False
+    assert animator.current_step().expression == "(•‿•)⚡"
+
+    assert animator.observe(below) is False
+    assert animator.observe(full) is True
+    assert animator.current_step().kind == "full_charge"
+
+
+def test_given_invalid_charging_randomizer_then_failure_is_explicit():
+    """Given a broken chooser, when center commits, then it fails closed."""
+
+    animator = SceneAnimator(RuntimePolicy(), reaction_random=lambda: 1.0)
+    animator.activate(RuntimeScene.CHARGING, _snapshot(battery=75, plugged=True))
+
+    with pytest.raises(ValueError, match="0 <= value < 1"):
+        animator.mark_presented(animator.current_step())
+
+
 def test_given_a_closed_animation_loop_when_advanced_then_no_frame_repeats():
     """Given first equals last, when looping, then the next distinct frame wins."""
 
@@ -921,6 +1141,69 @@ def test_given_runtime_run_when_boot_hands_off_then_full_seeds_partial_animation
     display = asyncio.run(scenario())
 
     assert len(display.images) == 2
+    assert display.refresh_modes == ["full", "partial"]
+
+
+def test_given_higher_priority_state_then_current_animation_is_interrupted_now():
+    """Given candidate motion, when sync starts, then no candidate timer blocks it."""
+
+    async def scenario():
+        stop = asyncio.Event()
+        candidate_drawn = asyncio.Event()
+
+        class StateSource:
+            async def updates(self):
+                candidate = PeerSnapshot("peer", 1, probe_verdict="candidate")
+                yield SourceUpdate(_snapshot(candidate))
+                await candidate_drawn.wait()
+                syncing = PeerSnapshot("peer", 1, sync_state="running")
+                yield SourceUpdate(_snapshot(syncing))
+                await asyncio.Event().wait()
+
+        display = FakeDeviceManager()
+        original_show = display.show
+
+        async def show(image, refresh_mode="full"):
+            await original_show(image, refresh_mode)
+            if len(display.images) == 1:
+                candidate_drawn.set()
+            elif len(display.images) == 2:
+                stop.set()
+
+        display.show = show
+        policy = RuntimePolicy(coalesce_seconds=0).with_frame_rates(
+            ("candidate=30", "sync_running=30")
+        )
+        controller = RuntimeController(
+            display,
+            FrameRenderer(),
+            policy,
+            reaction_random=lambda: 0.99,
+        )
+        await asyncio.wait_for(controller.run(StateSource(), stop), timeout=1)
+        return display
+
+    display = asyncio.run(scenario())
+    renderer = FrameRenderer()
+    candidate = renderer.render_runtime(
+        RuntimeFrame(
+            RuntimeScene.CANDIDATE,
+            EXPECTED_SEQUENCES[RuntimeScene.CANDIDATE][0],
+            0,
+            _snapshot(PeerSnapshot("peer", 1, probe_verdict="candidate")),
+        )
+    )
+    syncing = renderer.render_runtime(
+        RuntimeFrame(
+            RuntimeScene.SYNC_RUNNING,
+            EXPECTED_SEQUENCES[RuntimeScene.SYNC_RUNNING][0],
+            0,
+            _snapshot(PeerSnapshot("peer", 1, sync_state="running")),
+        )
+    )
+
+    assert display.images[0].tobytes() == candidate.tobytes()
+    assert display.images[1].tobytes() == syncing.tobytes()
     assert display.refresh_modes == ["full", "partial"]
 
 
@@ -1065,13 +1348,14 @@ def test_given_replay_command_when_run_then_refreshes_are_seeded_and_exported(
         )
     )
 
-    expected_count = sum(len(sequence) for sequence in EXPECTED_SEQUENCES.values())
+    expected_count = sum(len(replay_sequence(scene)) for scene in RuntimeScene)
     assert display.waited
     assert len(display.images) == expected_count
     assert display.refresh_modes == ["full"] + ["partial"] * (expected_count - 1)
     assert atlas.is_file()
     with Image.open(str(atlas)) as image:
-        assert image.size == (renderer.width * 4, renderer.height * 7)
+        expected_rows = (expected_count + 3) // 4
+        assert image.size == (renderer.width * 4, renderer.height * expected_rows)
 
 
 def test_given_cli_when_parsed_then_both_replay_spellings_are_available():
@@ -1096,7 +1380,8 @@ def _feature_scenario_names():
 
 def _bind_exact_catalog():
     test_given_the_product_catalog_when_loaded_then_only_exact_sequences_exist()
-    for scene, sequence in EXPECTED_SEQUENCES.items():
+    for scene in RuntimeScene:
+        sequence = replay_sequence(scene)
         for index, expression in enumerate(sequence):
             test_given_each_exact_frame_when_rendered_then_vector_ink_is_visible(
                 scene, index, expression

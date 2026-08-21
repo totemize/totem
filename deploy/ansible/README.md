@@ -36,7 +36,9 @@ service renders through the local device-manager API, presents the boot splash
 before releasing the remaining services, then continuously projects
 authoritative control-plane/device/UPS snapshots. The deployed defaults use a
 2.1-second coalescing window, 15-second safety poll, 20% low and 8% critical
-battery thresholds, and one full refresh per twenty requested partial frames.
+battery thresholds. Metot pins scheduled full-refresh promotion to zero after
+the initial safe full frame, preserving the Pwnagotchi-compatible V4 partial
+path without periodic full-panel flashes.
 Inventory can also pin comma-separated sequence-rate, minimum-dwell, and
 priority overrides plus the bounded pending-scene capacity; empty override
 strings retain the reviewed built-in policy.

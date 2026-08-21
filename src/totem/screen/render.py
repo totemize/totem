@@ -7,7 +7,13 @@ from typing import Dict, Iterable, Optional, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 
-from totem.screen.model import RuntimeFrame, RuntimeSnapshot, ScreenFrame, ScreenState
+from totem.screen.model import (
+    RuntimeFrame,
+    RuntimeScene,
+    RuntimeSnapshot,
+    ScreenFrame,
+    ScreenState,
+)
 
 FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -40,6 +46,10 @@ class VectorKaomoji:
         "(": 3,
         ")": 3,
         "•": 4,
+        "◐": 6,
+        "◑": 6,
+        "◒": 6,
+        "◓": 6,
         "‿": 6,
         "ᴗ": 6,
         "ω": 7,
@@ -48,7 +58,13 @@ class VectorKaomoji:
         "!": 3,
         "_": 5,
         "?": 5,
+        "-": 5,
+        ">": 5,
         "¬": 5,
+        "⌐": 6,
+        "■": 6,
+        "˵": 4,
+        "✧": 7,
         "★": 7,
         "\\": 5,
         "/": 5,
@@ -57,6 +73,8 @@ class VectorKaomoji:
         "ヮ": 7,
         "⇄": 9,
         "↔": 9,
+        "→": 9,
+        "←": 9,
         "✓": 6,
         "ڡ": 7,
         "⚡": 7,
@@ -77,6 +95,9 @@ class VectorKaomoji:
         draw: ImageDraw.ImageDraw,
         text: str,
         bounds: Tuple[int, int, int, int],
+        *,
+        left_aligned: bool = False,
+        fixed_scale: Optional[int] = None,
     ) -> Tuple[int, int, int, int]:
         if not cls.supports(text):
             missing = sorted(set(text) - set(cls.WIDTHS))
@@ -85,10 +106,15 @@ class VectorKaomoji:
         left, top, right, bottom = bounds
         units = sum(cls.WIDTHS[character] for character in text)
         units += max(0, len(text) - 1)
-        scale = max(1, min(5, int(min((right - left) / units, (bottom - top) / 10))))
+        maximum_scale = max(
+            1, min(5, int(min((right - left) / units, (bottom - top) / 10)))
+        )
+        scale = maximum_scale if fixed_scale is None else fixed_scale
+        if scale < 1 or scale > maximum_scale:
+            raise ValueError("Vector glyph scale does not fit the requested bounds")
         ink_width = units * scale
         ink_height = 9 * scale
-        x = left + (right - left - ink_width) // 2
+        x = left if left_aligned else left + (right - left - ink_width) // 2
         y = top + (bottom - top - ink_height) // 2
         origin = (x, y)
         for character in text:
@@ -144,6 +170,16 @@ class VectorKaomoji:
                 (mid_x - radius, mid_y - radius, mid_x + radius, mid_y + radius),
                 fill=0,
             )
+        elif character in ("◐", "◑", "◒", "◓"):
+            eye = (x, y + scale, right, bottom - scale)
+            angles = {
+                "◐": (90, 270),
+                "◑": (270, 450),
+                "◒": (0, 180),
+                "◓": (180, 360),
+            }
+            draw.pieslice(eye, *angles[character], fill=0)
+            draw.ellipse(eye, outline=0, width=stroke)
         elif character == "‿":
             draw.arc(
                 (x, y + scale, right, bottom - scale),
@@ -191,6 +227,16 @@ class VectorKaomoji:
             )
         elif character == "_" or character == "－":
             line(((x, y + 6 * scale), (right, y + 6 * scale)))
+        elif character == "-":
+            line(((x, mid_y), (right, mid_y)))
+        elif character == ">":
+            line(
+                (
+                    (x + scale, y + 2 * scale),
+                    (right - scale, mid_y),
+                    (x + scale, bottom - 2 * scale),
+                )
+            )
         elif character == "?":
             line(
                 (
@@ -209,6 +255,39 @@ class VectorKaomoji:
         elif character == "¬":
             line(((x, y + 3 * scale), (right, y + 3 * scale)))
             line(((right, y + 3 * scale), (right, y + 6 * scale)))
+        elif character == "⌐":
+            line(((x + scale, y + 3 * scale), (right, y + 3 * scale)))
+            line(((x + scale, y + 3 * scale), (x + scale, y + 7 * scale)))
+        elif character == "■":
+            draw.rectangle(
+                (x + scale, y + 2 * scale, right - scale, bottom - 2 * scale),
+                fill=0,
+            )
+        elif character == "˵":
+            line(
+                (
+                    (x, y + 6 * scale),
+                    (x + scale, y + 7 * scale),
+                )
+            )
+            line(
+                (
+                    (x + 2 * scale, y + 5 * scale),
+                    (x + 3 * scale, y + 6 * scale),
+                )
+            )
+        elif character == "✧":
+            line(
+                (
+                    (mid_x, y),
+                    (right, mid_y),
+                    (mid_x, bottom),
+                    (x, mid_y),
+                    (mid_x, y),
+                )
+            )
+            line(((mid_x, y + 2 * scale), (mid_x, bottom - 2 * scale)))
+            line(((x + 2 * scale, mid_y), (right - 2 * scale, mid_y)))
         elif character == "★":
             cls._star(draw, x, y, width, scale)
         elif character == "\\" or character == "ﾉ":
@@ -248,7 +327,12 @@ class VectorKaomoji:
                         (right - 3 * scale, upper + 2 * scale),
                     )
                 )
-                line(((x + scale, lower), (right - scale, lower)))
+                line(
+                    (
+                        (x + scale, lower),
+                        (right - scale, lower),
+                    )
+                )
                 line(
                     (
                         (x + 3 * scale, lower - 2 * scale),
@@ -271,6 +355,25 @@ class VectorKaomoji:
                         (right - 3 * scale, middle - 2 * scale),
                         (right - scale, middle),
                         (right - 3 * scale, middle + 2 * scale),
+                    )
+                )
+        elif character in ("→", "←"):
+            middle = y + 5 * scale
+            line(((x + scale, middle), (right - scale, middle)))
+            if character == "→":
+                line(
+                    (
+                        (right - 3 * scale, middle - 2 * scale),
+                        (right - scale, middle),
+                        (right - 3 * scale, middle + 2 * scale),
+                    )
+                )
+            else:
+                line(
+                    (
+                        (x + 3 * scale, middle - 2 * scale),
+                        (x + scale, middle),
+                        (x + 3 * scale, middle + 2 * scale),
                     )
                 )
         elif character == "✓":
@@ -480,11 +583,19 @@ class FrameRenderer:
             width=PERSISTENT_ICON_STROKE,
         )
         self._render_header(draw, frame.snapshot, header_bottom)
-        VectorKaomoji.draw(
-            draw,
-            frame.expression,
-            (8, header_bottom + 3, self.width - 8, footer_top - 3),
-        )
+        content_bounds = (8, header_bottom + 3, self.width - 8, footer_top - 3)
+        if frame.scene == RuntimeScene.NON_TOTEM_PEER:
+            # The glasses are props, not a camera move.  Hold the face at one
+            # left-side origin and one scale while the props extend rightward.
+            VectorKaomoji.draw(
+                draw,
+                frame.expression,
+                content_bounds,
+                left_aligned=True,
+                fixed_scale=3,
+            )
+        else:
+            VectorKaomoji.draw(draw, frame.expression, content_bounds)
         self._render_footer(draw, frame.snapshot, footer_top)
         return image.rotate(self.rotation)
 
