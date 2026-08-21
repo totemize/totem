@@ -8,6 +8,7 @@
     - {host: '::1', port: 7777}
     - {host: '::1', port: 8080}
     - {host: '127.0.0.1', port: 8081}
+    - {host: '127.0.0.1', port: 4874}
 
 - name: Wait for the Python device-manager port
   ansible.builtin.wait_for:
@@ -29,6 +30,7 @@
     - fips.service
     - strfry.service
     - totemd.service
+    - totem-myco.service
 
 - name: Require the Python device manager to be enabled and running
   ansible.builtin.assert:
@@ -167,6 +169,20 @@
         'totem.events.get.result'
       - (totemd_history_command.stdout | from_json).events is sequence
 
+- name: Read Myco integration state
+  ansible.builtin.command:
+    argv: [totem-myco, status]
+  register: myco_status_command
+  changed_when: false
+
+- name: Validate the Myco integration identity and protocol
+  ansible.builtin.assert:
+    that:
+      - (myco_status_command.stdout | from_json).protocol == 'myco/852bcda'
+      - (myco_status_command.stdout | from_json).npub == totem_npub
+      - (myco_status_command.stdout | from_json).circle is sequence
+      - (myco_status_command.stdout | from_json).transfers is sequence
+
 - name: Read Python device-manager health
   ansible.builtin.uri:
     url: http://127.0.0.1:8000/health
@@ -239,7 +255,7 @@
     that:
       - >-
         migration_checkpoints.matched | int >=
-        (5 if totem_device_manager_enabled | bool else 4)
+        (6 if totem_device_manager_enabled | bool else 5)
     fail_msg: >-
       Expected the enabled roles' migration checkpoints, found
       {{ migration_checkpoints.matched }}.

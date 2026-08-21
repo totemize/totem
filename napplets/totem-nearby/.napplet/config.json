@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "sourceDir": ".",
+  "relays": [],
+  "blossomServers": [],
+  "defaultTarget": "named",
+  "named": [
+    "totem-nearby"
+  ],
+  "discover": {
+    "enabled": true,
+    "roots": [
+      "."
+    ]
+  },
+  "signing": {
+    "mode": "interactive"
+  },
+  "conformance": {
+    "command": "napplet-conformance"
+  },
+  "paja": {
+    "command": "kehto"
+  },
+  "metadata": {
+    "name": "totem-nearby",
+    "title": "Totem Nearby",
+    "description": "Discover and interact with nearby Totems through a shell-mediated ContextVM bridge.",
+    "archetypes": []
+  }
+}

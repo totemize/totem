@@ -1,0 +1,10 @@
+---
+- name: Reload systemd for Myco integration
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart Myco integration
+  ansible.builtin.systemd_service:
+    name: totem-myco.service
+    state: restarted
+  when: totem_service_restarts_enabled | bool
