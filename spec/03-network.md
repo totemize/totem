@@ -52,9 +52,15 @@ The device manager is the policy-free hardware boundary. It exposes:
 - station scan/connect/disconnect and AP create/stop;
 - Wi-Fi Direct discovery, peer inventory, and create-or-join/list/remove group
   lifecycle;
+- Wi-Fi Aware/NAN capability detection, bounded publish/subscribe discovery,
+  match inventory, and typed NAN data-path support or an explicit unsupported
+  reason;
 - bounded, independently identified BLE discovery sessions, structured
   advertisements, advertising lifecycle, generic connection state, and GATT
   client inventory/read/write/notification lifecycle;
+- bounded LE L2CAP CoC listeners and connections, assigned-PSM advertising,
+  and descriptor handoff that leaves payload framing, identity, cryptography,
+  routing, and peer policy with FIPS;
 - typed hardware events plus explicit operation timeouts and idempotent
   teardown.
 
@@ -62,6 +68,19 @@ It MUST NOT decide which role to prefer, when to switch, which peer to trust,
 whether to sync, or what packets to send. A higher-level controller uses the
 capability and status APIs, applies operator/product policy, and binds traffic
 to the interface/address returned for the selected link.
+
+An LE CoC listener MUST fail closed when its PSM advertisement cannot be
+registered: an undiscoverable open listener is not a successful primitive.
+The advertisement carries only the FIPS service UUID and the assigned 16-bit
+PSM, never an npub or trust decision. A NAN discovery function likewise
+carries caller-supplied opaque service information; the device manager does
+not interpret it as peer identity. NAN data-path results MUST return a scoped
+IPv6 address and interface suitable for interface-bound FIPS UDP, or report
+`supported: false` without changing infrastructure Wi-Fi, FIPS, or routes.
+Support reporting MUST include the current process authority required by the
+platform control surface; the implementation MUST NOT grant broad network
+administration capability to the device-manager service merely to turn a
+hardware mode into `supported: true`.
 
 ### Measured Pi Zero W concurrency
 

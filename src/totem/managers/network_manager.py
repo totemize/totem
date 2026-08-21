@@ -70,6 +70,8 @@ class NetworkManager:
             wifi_interfaces=self.wifi_device.list_interfaces(),
             p2p_discovering=self.wifi_device.is_p2p_discovering(),
             p2p_groups=self.wifi_device.list_p2p_groups(),
+            nan_discovery_sessions=self.wifi_device.list_nan_discovery_sessions(),
+            nan_data_paths=self.wifi_device.list_nan_data_paths(),
             bluetooth_radio=self.bluetooth_device.get_radio_state(),
             bluetooth_discovery_sessions=self.bluetooth_device.discovery_session_count(),
             bluetooth_advertisements=self.bluetooth_device.list_advertisements(),
@@ -104,6 +106,37 @@ class NetworkManager:
 
     def remove_p2p_group(self, group_id: str, timeout: float = 15.0):
         return self.wifi_device.remove_p2p_group(group_id, timeout)
+
+    def start_nan_discovery(
+        self,
+        service_name: str,
+        service_info: bytes = b"",
+        duration_seconds: int = 300,
+        timeout: float = 15.0,
+    ):
+        return self.wifi_device.start_nan_discovery(
+            service_name, service_info, duration_seconds, timeout
+        )
+
+    def stop_nan_discovery(self, session_id: str, timeout: float = 15.0):
+        return self.wifi_device.stop_nan_discovery(session_id, timeout)
+
+    def list_nan_discovery_sessions(self):
+        return self.wifi_device.list_nan_discovery_sessions()
+
+    def list_nan_matches(self, session_id=None):
+        return self.wifi_device.list_nan_matches(session_id)
+
+    def create_nan_data_path(
+        self, match_id: str, port: int = 4873, timeout: float = 30.0
+    ):
+        return self.wifi_device.create_nan_data_path(match_id, port, timeout)
+
+    def list_nan_data_paths(self):
+        return self.wifi_device.list_nan_data_paths()
+
+    def remove_nan_data_path(self, data_path_id: str, timeout: float = 15.0):
+        return self.wifi_device.remove_nan_data_path(data_path_id, timeout)
 
     def start_bluetooth_discovery(self, **kwargs):
         return self.bluetooth_device.start_discovery(**kwargs)

@@ -29,6 +29,7 @@ working environment.
 
 | Date | Summary |
 |------|---------|
+| [2026-08-21 — CoC and Wi-Fi Aware radio substrate](journal/2026-08-21.md#coc-and-wi-fi-aware-extension-for-the-radio-substrate) | Rebased PR #22 on master; added typed CoC/NAN capabilities, bounded payload-blind CoC with assigned-PSM advertising and FIPS FD handoff, upstream-iw NAN discovery, honest unsupported Linux NDP reporting, mocks and local tests; no device testing while hardware is unallocated. |
 | [2026-08-20 — static Svelte web app](journal/2026-08-20.md#totemd-static-svelte-web-app) | Replaced the SSR root with embedded Svelte 5/Vite; retained NIP-98 controls; added public aggregate and owner-signed live state without exposing the bus; deployed to totem, then added a nos2x LAN-HTTP bridge and deployed it to motown with claimed profile preserved. |
 | [2026-08-20 — e-ink boot POC](journal/2026-08-20.md#e-ink-boot-presentation-state-machine) | Fleet-generic screen artifacts with inventory-gated activation; composable boot presentation service; synthetic replay and real reboot camera verification on metot; cross-layer Totem state catalog and display arbitration model. |
 | [2026-08-20 — periodic reconciliation](journal/2026-08-20.md#totemd-periodic-reconciliation-and-event-history) | Added bounded event history, five-minute non-overlapping NIP-77 rounds, and readable per-round reconciliation summaries with optional set-difference counts. |

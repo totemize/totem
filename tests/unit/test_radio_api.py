@@ -169,6 +169,44 @@ def test_l2cap_listener_connection_and_fips_handoff_endpoints():
         )
 
 
+def test_wifi_aware_discovery_match_data_path_and_teardown_endpoints():
+    client, _ = make_client()
+    with client:
+        discovery = client.post(
+            "/network/wifi/aware/discovery",
+            json={"service_info_base64": base64.b64encode(b'{"port":4873}').decode()},
+        )
+        assert discovery.status_code == 200
+        session = discovery.json()
+        matches = client.get(
+            "/network/wifi/aware/matches", params={"session_id": session["id"]}
+        ).json()
+        assert len(matches) == 1
+
+        data_path_response = client.post(
+            "/network/wifi/aware/data-paths", json={"match_id": matches[0]["id"]}
+        )
+        assert data_path_response.status_code == 200
+        data_path = data_path_response.json()
+        assert data_path["peer_ipv6"].endswith("%aware_data0")
+        status = client.get("/network/status").json()
+        assert status["nan_discovery_sessions"] == [session]
+        assert status["nan_data_paths"] == [data_path]
+
+        assert (
+            client.delete(
+                "/network/wifi/aware/data-paths/{}".format(data_path["id"])
+            ).status_code
+            == 200
+        )
+        assert (
+            client.delete(
+                "/network/wifi/aware/discovery/{}".format(session["id"])
+            ).status_code
+            == 200
+        )
+
+
 def test_radio_errors_map_to_stable_http_statuses():
     class FailingManager:
         def set_event_callback(self, callback):

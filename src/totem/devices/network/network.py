@@ -86,6 +86,42 @@ class WiFiDeviceInterface(DeviceDriver):
     def remove_p2p_group(self, group_id: str, timeout: float = 15.0):
         pass
 
+    @abstractmethod
+    def start_nan_discovery(
+        self,
+        service_name: str,
+        service_info: bytes = b"",
+        duration_seconds: int = 300,
+        timeout: float = 15.0,
+    ):
+        pass
+
+    @abstractmethod
+    def stop_nan_discovery(self, session_id: str, timeout: float = 15.0):
+        pass
+
+    @abstractmethod
+    def list_nan_discovery_sessions(self):
+        pass
+
+    @abstractmethod
+    def list_nan_matches(self, session_id: Optional[str] = None):
+        pass
+
+    @abstractmethod
+    def create_nan_data_path(
+        self, match_id: str, port: int = 4873, timeout: float = 30.0
+    ):
+        pass
+
+    @abstractmethod
+    def list_nan_data_paths(self):
+        pass
+
+    @abstractmethod
+    def remove_nan_data_path(self, data_path_id: str, timeout: float = 15.0):
+        pass
+
 
 WIFI_DRIVERS = DriverRegistry(
     WiFiDeviceInterface,
@@ -210,3 +246,34 @@ class WiFi:
 
     def remove_p2p_group(self, group_id: str, timeout: float = 15.0):
         return self.driver.remove_p2p_group(group_id, timeout)
+
+    def start_nan_discovery(
+        self,
+        service_name: str,
+        service_info: bytes = b"",
+        duration_seconds: int = 300,
+        timeout: float = 15.0,
+    ):
+        return self.driver.start_nan_discovery(
+            service_name, service_info, duration_seconds, timeout
+        )
+
+    def stop_nan_discovery(self, session_id: str, timeout: float = 15.0):
+        return self.driver.stop_nan_discovery(session_id, timeout)
+
+    def list_nan_discovery_sessions(self):
+        return self.driver.list_nan_discovery_sessions()
+
+    def list_nan_matches(self, session_id: Optional[str] = None):
+        return self.driver.list_nan_matches(session_id)
+
+    def create_nan_data_path(
+        self, match_id: str, port: int = 4873, timeout: float = 30.0
+    ):
+        return self.driver.create_nan_data_path(match_id, port, timeout)
+
+    def list_nan_data_paths(self):
+        return self.driver.list_nan_data_paths()
+
+    def remove_nan_data_path(self, data_path_id: str, timeout: float = 15.0):
+        return self.driver.remove_nan_data_path(data_path_id, timeout)

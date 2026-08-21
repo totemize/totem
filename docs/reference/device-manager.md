@@ -163,8 +163,13 @@ Capability and status responses include:
 - Bluetooth controller address/type/name, HCI version/manufacturer/modalias,
   central/peripheral roles, advertisement instance/length limits, and
   supported includes;
+- explicit LE L2CAP CoC listen/connect/descriptor-handoff capability and
+  bounded resource limits;
+- explicit NAN discovery and data-path capability, including the control and
+  data interface modes independently;
 - Wi-Fi and Bluetooth soft/hard block state, every active Wi-Fi interface with
-  mode/channel/addresses, P2P discovery/groups, and active BLE work.
+  mode/channel/addresses, P2P discovery/groups, NAN sessions/data paths, and
+  active BLE work.
 
 The complete HTTP surface is:
 
@@ -180,9 +185,15 @@ The complete HTTP surface is:
 | P2P discovery | `POST`, `DELETE /network/wifi/p2p/discovery` | Start a bounded NetworkManager find or stop it idempotently. |
 | P2P peers | `GET /network/wifi/p2p/peers` | Return peer ID/path/address, signal, last-seen clock, flags, and optional identity fields. |
 | P2P groups | `POST`, `GET /network/wifi/p2p/groups`; `DELETE /network/wifi/p2p/groups/{id}` | Create-or-join with a peer, list live state/interface/addresses, or remove it. |
+| NAN discovery | `POST`, `GET /network/wifi/aware/discovery`; `DELETE /network/wifi/aware/discovery/{id}` | Own bounded publish/subscribe functions for a caller-supplied service name and opaque base64 information. |
+| NAN matches | `GET /network/wifi/aware/matches` | Return match/session IDs, peer MAC, local/peer instance IDs, opaque information, and last-seen time. |
+| NAN data paths | `POST`, `GET /network/wifi/aware/data-paths`; `DELETE /network/wifi/aware/data-paths/{id}` | Return or remove a NAN data interface plus scoped local/peer IPv6 and FIPS UDP port when the platform backend supports negotiation. |
 | BLE discovery | `POST`, `DELETE /network/bluetooth/discovery` | Start/stop one independently identified, bounded scan session. |
 | BLE observations | `GET /network/bluetooth/devices` | Return address/type/name, UUIDs, base64 data, RSSI/Tx power, timestamps, and connection state. |
 | BLE advertising | `POST /network/bluetooth/advertisements`; `DELETE /network/bluetooth/advertisements/{id}` | Register/unregister a caller-defined BlueZ advertisement. |
+| LE CoC listeners | `POST`, `GET /network/bluetooth/l2cap/listeners`; `DELETE /network/bluetooth/l2cap/listeners/{id}` | Bind a bounded LE CoC listener and atomically advertise its assigned PSM under the FIPS UUID. |
+| LE CoC connections | `POST`, `GET /network/bluetooth/l2cap/connections`; `DELETE /network/bluetooth/l2cap/connections/{id}` | Connect/list/close payload-blind LE CoC channels. |
+| FIPS CoC handoff | `POST /network/bluetooth/l2cap/connections/{id}/fips-handoff` | Transfer the connected descriptor to the fixed local FIPS receiver with `SCM_RIGHTS`; no payload crosses HTTP. |
 | BLE connection | `POST /network/bluetooth/devices/{id}/connect` or `/disconnect` | Connect/disconnect a discovered generic device. |
 | GATT inventory | `GET /network/bluetooth/devices/{id}/gatt` | Return services and characteristics with UUIDs, flags, values, and notification state. |
 | GATT value | `GET`, `PUT /network/bluetooth/devices/{id}/gatt/characteristics/{characteristic_id}` | Read or write strict-base64 characteristic bytes. |
@@ -225,9 +236,36 @@ Advertisement service/manufacturer data and GATT values use strict base64 at
 the HTTP boundary. Passwords, PSKs, PINs, and credentials are recursively
 redacted from driver errors and are never included in event data.
 
+LE CoC uses the FIPS UUID `9c90b790-2cc5-42c0-9f87-c9cc40648f4c`. Listener
+PSMs are advertised as two-byte little-endian service data beneath that UUID.
+Listener creation rolls back the socket if BlueZ rejects the advertisement.
+After connect or accept, the manager does not read or write channel payloads;
+the fixed `/run/fips/l2cap-handoff.sock` receiver gets the descriptor and
+bounded transport metadata. FIPS remains the sole owner of framing, Noise,
+identity, routing, and link payload. The handoff operation requires a matching
+receiver in the running FIPS build; an absent receiver returns a stable radio
+operation error and leaves the manager-owned connection available for retry or
+explicit close.
+
+The Linux NAN discovery backend creates a manager-owned `totemnan0` interface,
+starts nl80211 NAN through `iw`, installs paired publish/subscribe functions,
+parses match events, and removes only its own functions and interface. Service
+information is base64url-encoded on the `iw` carrier and remains strict base64
+at HTTP. Discovery is supported only when the PHY advertises `NAN` and the
+calling process already has `CAP_NET_ADMIN`; the deployment does not grant
+that capability to the unprivileged API service or weaken its systemd
+boundary. Without a future narrow broker, the service therefore reports a
+typed unsupported reason. NAN data paths are a separate capability: the
+production backend currently reports
+`supported: false` even if a new kernel advertises `NAN-data`, because this
+tree does not yet contain a Linux NDP negotiation backend. The deterministic
+mock exercises the eventual `aware_dataN` result shape, including scoped
+link-local IPv6 suitable for interface-bound FIPS UDP.
+
 Every mutating primitive has an explicit operation timeout. Teardown is
-idempotent, and `close()` removes P2P groups, BLE advertisements/connections,
-scan sessions, and subscriptions created by that manager instance. Station
+idempotent, and `close()` removes P2P groups, NAN functions/interfaces, LE CoC
+listeners/connections, BLE advertisements/connections, scan sessions, and
+subscriptions created by that manager instance. Station
 and AP links have explicit disconnect/stop primitives rather than implicit
 shutdown policy. Cleanup does not disable Wi-Fi, stop FIPS, alter routes, or
 tear down unrelated NetworkManager/BlueZ state.
@@ -352,8 +390,10 @@ Automatic NFC probing is Linux-only.
 The real drivers use NetworkManager: `nmcli` for station/AP state and the
 persistent system D-Bus client for P2P discovery and group lifecycle. `iw`
 provides PHY modes/channels/concurrency, `ethtool` supplies driver/firmware
-inventory, and `rfkill` reports block state. Detection is Linux-only and uses
-the interface names under `/sys/class/net`.
+inventory, `rfkill` reports block state, and the bounded NAN discovery
+controller uses the upstream `iw ... nan` control surface without changing
+NetworkManager connections. Detection is Linux-only and uses the interface
+names under `/sys/class/net`.
 
 Bluetooth is composed with the selected Wi-Fi driver. Real hardware uses the
 allow-listed `bluez` driver and persistent BlueZ/system-D-Bus ownership;
@@ -442,8 +482,9 @@ The compatibility methods remain `scan_networks()`,
 
 The full contract also provides `get_capabilities()`, `get_status()`, both
 radio setters/getters, Wi-Fi interface/network inventory, station/AP teardown,
-P2P discovery/peer/group lifecycle, BLE discovery/device/advertisement and
-connection lifecycle, GATT inventory/read/write/subscription lifecycle,
+P2P discovery/peer/group lifecycle, NAN discovery/match/data-path lifecycle,
+BLE discovery/device/advertisement and connection lifecycle, LE CoC lifecycle
+and FIPS descriptor handoff, GATT inventory/read/write/subscription lifecycle,
 `set_event_callback()`, and idempotent `close()`.
 
 ### `UPSManager`
@@ -475,8 +516,9 @@ connection alive. Published events have this shape:
 
 Device types are `display`, `nfc`, `storage`, `network`, and `ups`. In addition
 to the generic event types, radio events include Wi-Fi/Bluetooth radio state,
-P2P peer found/lost and group formed/removed, BLE device found/expired,
-advertisement received, connection changes, and GATT value changes.
+P2P peer found/lost and group formed/removed, NAN match/data-path changes, BLE
+device found/expired, LE CoC open/close/handoff, advertisement received,
+connection changes, and GATT value changes.
 
 The radio drivers publish from D-Bus threads through a thread-safe bridge into
 the existing `EventManager` and WebSocket fan-out. These are hardware facts,

@@ -1,5 +1,7 @@
 """Deterministic mock with parity to the complete Wi-Fi contract."""
 
+import base64
+from datetime import datetime, timezone
 import time
 import threading
 from typing import Any, Callable, Dict, Optional
@@ -9,6 +11,9 @@ from totem.devices.network.errors import RadioResourceNotFoundError
 from totem.devices.network.models import (
     ConcurrentInterfaceCombination,
     InterfaceLimit,
+    NanDataPath,
+    NanDiscoverySession,
+    NanMatch,
     OperationSupport,
     P2PGroup,
     P2PGroupState,
@@ -37,6 +42,10 @@ class Driver(WiFiDeviceInterface):
         self.p2p_discovering = False
         self._p2p_discovery_timer: Optional[threading.Timer] = None
         self.groups: Dict[str, P2PGroup] = {}
+        self.nan_sessions: Dict[str, NanDiscoverySession] = {}
+        self.nan_matches: Dict[str, NanMatch] = {}
+        self.nan_data_paths: Dict[str, NanDataPath] = {}
+        self._nan_cookie = 1
         self._event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None
 
     def set_event_callback(self, callback) -> None:
@@ -120,6 +129,7 @@ class Driver(WiFiDeviceInterface):
                 "P2P-GO",
                 "P2P-device",
                 "NAN",
+                "NAN-data",
             ],
             concurrent_combinations=[
                 ConcurrentInterfaceCombination(
@@ -146,6 +156,7 @@ class Driver(WiFiDeviceInterface):
                 discovery=supported,
                 data_path=supported,
                 interface_mode="NAN",
+                data_interface_mode="NAN-data",
             ),
         )
 
@@ -167,6 +178,17 @@ class Driver(WiFiDeviceInterface):
         if self.p2p_discovering:
             interfaces.append(
                 WiFiInterfaceState("p2p-dev-wlan-mock", "P2P-device", "disconnected")
+            )
+        if self.nan_sessions:
+            interfaces.append(WiFiInterfaceState("totemnan0", "NAN", "connected"))
+        for data_path in self.nan_data_paths.values():
+            interfaces.append(
+                WiFiInterfaceState(
+                    data_path.interface,
+                    "NAN-data",
+                    "connected",
+                    addresses=[data_path.local_ipv6],
+                )
             )
         return interfaces
 
@@ -238,6 +260,111 @@ class Driver(WiFiDeviceInterface):
         if self.groups.pop(group_id, None) is not None:
             self._emit("wifi_p2p_group_removed", {"group_id": group_id})
 
+    def start_nan_discovery(
+        self,
+        service_name: str,
+        service_info: bytes = b"",
+        duration_seconds: int = 300,
+        timeout: float = 15.0,
+    ):
+        self._ready()
+        session_id = uuid.uuid4().hex
+        publish_cookie = self._nan_cookie
+        subscribe_cookie = self._nan_cookie + 1
+        self._nan_cookie += 2
+        now = datetime.now(timezone.utc).isoformat()
+        session = NanDiscoverySession(
+            id=session_id,
+            interface="totemnan0",
+            service_name=service_name,
+            publish_cookie=publish_cookie,
+            subscribe_cookie=subscribe_cookie,
+            service_info_base64=base64.b64encode(service_info).decode("ascii"),
+            started_at=now,
+            duration_seconds=duration_seconds,
+            active=True,
+        )
+        match_id = "{}_02_00_00_00_20_02".format(session_id)
+        match = NanMatch(
+            id=match_id,
+            session_id=session_id,
+            peer_address="02:00:00:00:20:02",
+            local_instance_id=1,
+            peer_instance_id=2,
+            service_info_base64=base64.b64encode(b"mock-peer").decode("ascii"),
+            last_seen_at=now,
+        )
+        self.nan_sessions[session_id] = session
+        self.nan_matches[match_id] = match
+        self._emit(
+            "wifi_nan_match_found",
+            {
+                "match_id": match_id,
+                "session_id": session_id,
+                "peer_address": match.peer_address,
+            },
+        )
+        return session
+
+    def stop_nan_discovery(self, session_id: str, timeout: float = 15.0):
+        self.nan_sessions.pop(session_id, None)
+        self.nan_matches = {
+            key: value
+            for key, value in self.nan_matches.items()
+            if value.session_id != session_id
+        }
+
+    def list_nan_discovery_sessions(self):
+        return list(self.nan_sessions.values())
+
+    def list_nan_matches(self, session_id: Optional[str] = None):
+        if session_id and session_id not in self.nan_sessions:
+            raise RadioResourceNotFoundError("NAN discovery session was not found")
+        return [
+            value
+            for value in self.nan_matches.values()
+            if session_id is None or value.session_id == session_id
+        ]
+
+    def create_nan_data_path(
+        self, match_id: str, port: int = 4873, timeout: float = 30.0
+    ):
+        self._ready()
+        match = self.nan_matches.get(match_id)
+        if match is None:
+            raise RadioResourceNotFoundError("NAN match was not found")
+        path_id = uuid.uuid4().hex[:8]
+        interface = "aware_data{}".format(len(self.nan_data_paths))
+        path = NanDataPath(
+            id=path_id,
+            match_id=match_id,
+            interface=interface,
+            peer_address=match.peer_address,
+            local_ipv6="fe80::1%{}".format(interface),
+            peer_ipv6="fe80::2%{}".format(interface),
+            port=port,
+            state="active",
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        self.nan_data_paths[path_id] = path
+        self._emit(
+            "wifi_nan_data_path_ready",
+            {
+                "data_path_id": path_id,
+                "interface": interface,
+                "peer_ipv6": path.peer_ipv6,
+                "port": port,
+            },
+        )
+        return path
+
+    def list_nan_data_paths(self):
+        return list(self.nan_data_paths.values())
+
+    def remove_nan_data_path(self, data_path_id: str, timeout: float = 15.0):
+        if self.nan_data_paths.pop(data_path_id, None) is not None:
+            self._emit("wifi_nan_data_path_removed", {"data_path_id": data_path_id})
+
     def close(self):
         if getattr(self, "_closed", False):
             return
@@ -247,4 +374,7 @@ class Driver(WiFiDeviceInterface):
             self._p2p_discovery_timer.cancel()
             self._p2p_discovery_timer = None
         self.groups.clear()
+        self.nan_sessions.clear()
+        self.nan_matches.clear()
+        self.nan_data_paths.clear()
         super().close()

@@ -48,6 +48,10 @@ class EventType(str, Enum):
     WIFI_P2P_PEER_LOST = "wifi_p2p_peer_lost"
     WIFI_P2P_GROUP_FORMED = "wifi_p2p_group_formed"
     WIFI_P2P_GROUP_REMOVED = "wifi_p2p_group_removed"
+    WIFI_NAN_MATCH_FOUND = "wifi_nan_match_found"
+    WIFI_NAN_MATCH_UPDATED = "wifi_nan_match_updated"
+    WIFI_NAN_DATA_PATH_READY = "wifi_nan_data_path_ready"
+    WIFI_NAN_DATA_PATH_REMOVED = "wifi_nan_data_path_removed"
     BLE_ADVERTISEMENT_FOUND = "ble_advertisement_found"
     BLE_ADVERTISEMENT_UPDATED = "ble_advertisement_updated"
     BLE_ADVERTISEMENT_EXPIRED = "ble_advertisement_expired"
@@ -106,6 +110,7 @@ class WiFiAwareCapabilitiesResponse(BaseModel):
     discovery: OperationSupportResponse
     data_path: OperationSupportResponse
     interface_mode: Optional[str] = None
+    data_interface_mode: Optional[str] = None
 
 
 class L2CAPCapabilitiesResponse(BaseModel):
@@ -252,6 +257,53 @@ class P2PGroupResponse(BaseModel):
     state: str
 
 
+class NanDiscoveryRequest(BaseModel):
+    service_name: str = Field(default="myco.fips.v1", pattern="^[A-Za-z0-9.-]{1,255}$")
+    service_info_base64: str = ""
+    duration_seconds: int = Field(default=300, ge=1, le=3600)
+    timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+
+
+class NanDiscoverySessionResponse(BaseModel):
+    id: str
+    interface: str
+    service_name: str
+    publish_cookie: int = Field(ge=1)
+    subscribe_cookie: int = Field(ge=1)
+    service_info_base64: str
+    started_at: str
+    duration_seconds: int
+    active: bool
+
+
+class NanMatchResponse(BaseModel):
+    id: str
+    session_id: str
+    peer_address: str
+    local_instance_id: int = Field(ge=1)
+    peer_instance_id: int = Field(ge=1)
+    service_info_base64: str
+    last_seen_at: str
+
+
+class NanDataPathRequest(BaseModel):
+    match_id: str = Field(min_length=1, max_length=256)
+    port: int = Field(default=4873, ge=1, le=65535)
+    timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+
+
+class NanDataPathResponse(BaseModel):
+    id: str
+    match_id: str
+    interface: str
+    peer_address: str
+    local_ipv6: str
+    peer_ipv6: str
+    port: int = Field(ge=1, le=65535)
+    state: str
+    created_at: str
+
+
 class BLEAdvertisementResponse(BaseModel):
     id: str
     path: str
@@ -267,6 +319,8 @@ class NetworkStatusResponse(BaseModel):
     wifi_interfaces: List[WiFiInterfaceResponse]
     p2p_discovering: bool
     p2p_groups: List[P2PGroupResponse]
+    nan_discovery_sessions: List[NanDiscoverySessionResponse]
+    nan_data_paths: List[NanDataPathResponse]
     bluetooth_radio: BluetoothRadioResponse
     bluetooth_discovery_sessions: int
     bluetooth_advertisements: List[BLEAdvertisementResponse]

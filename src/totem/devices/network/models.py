@@ -18,6 +18,7 @@ class WiFiMode(str, Enum):
     IBSS = "IBSS"
     MONITOR = "monitor"
     NAN = "NAN"
+    NAN_DATA = "NAN-data"
 
 
 class P2PGroupState(str, Enum):
@@ -38,6 +39,7 @@ class WiFiAwareCapabilities:
     discovery: OperationSupport
     data_path: OperationSupport
     interface_mode: Optional[str] = None
+    data_interface_mode: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -141,6 +143,43 @@ class P2PGroup:
     channel: Optional[int]
     addresses: List[str]
     state: P2PGroupState
+
+
+@dataclass(frozen=True)
+class NanDiscoverySession:
+    id: str
+    interface: str
+    service_name: str
+    publish_cookie: int
+    subscribe_cookie: int
+    service_info_base64: str
+    started_at: str
+    duration_seconds: int
+    active: bool
+
+
+@dataclass(frozen=True)
+class NanMatch:
+    id: str
+    session_id: str
+    peer_address: str
+    local_instance_id: int
+    peer_instance_id: int
+    service_info_base64: str
+    last_seen_at: str
+
+
+@dataclass(frozen=True)
+class NanDataPath:
+    id: str
+    match_id: str
+    interface: str
+    peer_address: str
+    local_ipv6: str
+    peer_ipv6: str
+    port: int
+    state: str
+    created_at: str
 
 
 @dataclass(frozen=True)
@@ -257,6 +296,8 @@ class NetworkStatus:
     wifi_interfaces: List[WiFiInterfaceState]
     p2p_discovering: bool
     p2p_groups: List[P2PGroup]
+    nan_discovery_sessions: List[NanDiscoverySession]
+    nan_data_paths: List[NanDataPath]
     bluetooth_radio: BluetoothRadioState
     bluetooth_discovery_sessions: int
     bluetooth_advertisements: List[BLEAdvertisement]

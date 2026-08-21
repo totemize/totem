@@ -46,6 +46,11 @@ from totem.api.models import (
     L2CAPListenerRequest,
     L2CAPListenerResponse,
     NFCWriteRequest,
+    NanDataPathRequest,
+    NanDataPathResponse,
+    NanDiscoveryRequest,
+    NanDiscoverySessionResponse,
+    NanMatchResponse,
     NetworkCapabilitiesResponse,
     NetworkConfigurationRequest,
     NetworkStatusResponse,
@@ -476,6 +481,106 @@ def create_app(
             timeout_seconds,
         )
         return Status(success=True, message="Wi-Fi Direct group removed")
+
+    @application.post(
+        "/network/wifi/aware/discovery",
+        response_model=NanDiscoverySessionResponse,
+    )
+    async def nan_discovery_start(request: Request, command: NanDiscoveryRequest):
+        manager = await _get_manager(request, "network")
+        service_info = _decode_base64(
+            command.service_info_base64, "service_info_base64"
+        )
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.start_nan_discovery,
+            command.service_name,
+            service_info,
+            command.duration_seconds,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get(
+        "/network/wifi/aware/discovery",
+        response_model=list[NanDiscoverySessionResponse],
+    )
+    async def nan_discovery_sessions(request: Request):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(
+            request, "network", manager.list_nan_discovery_sessions
+        )
+        return serialize(values)
+
+    @application.delete(
+        "/network/wifi/aware/discovery/{session_id}", response_model=Status
+    )
+    async def nan_discovery_stop(
+        request: Request,
+        session_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.stop_nan_discovery,
+            session_id,
+            timeout_seconds,
+        )
+        return Status(success=True, message="Wi-Fi Aware discovery stopped")
+
+    @application.get(
+        "/network/wifi/aware/matches", response_model=list[NanMatchResponse]
+    )
+    async def nan_matches(request: Request, session_id: Optional[str] = None):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(
+            request, "network", manager.list_nan_matches, session_id
+        )
+        return serialize(values)
+
+    @application.post(
+        "/network/wifi/aware/data-paths", response_model=NanDataPathResponse
+    )
+    async def nan_data_path_create(request: Request, command: NanDataPathRequest):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.create_nan_data_path,
+            command.match_id,
+            command.port,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get(
+        "/network/wifi/aware/data-paths", response_model=list[NanDataPathResponse]
+    )
+    async def nan_data_paths(request: Request):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(request, "network", manager.list_nan_data_paths)
+        return serialize(values)
+
+    @application.delete(
+        "/network/wifi/aware/data-paths/{data_path_id}", response_model=Status
+    )
+    async def nan_data_path_remove(
+        request: Request,
+        data_path_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.remove_nan_data_path,
+            data_path_id,
+            timeout_seconds,
+        )
+        return Status(success=True, message="Wi-Fi Aware data path removed")
 
     @application.post(
         "/network/bluetooth/discovery", response_model=BLEDiscoveryResponse

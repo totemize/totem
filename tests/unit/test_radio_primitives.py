@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 from array import array
+import base64
 import json
 import os
 import socket
@@ -119,6 +120,7 @@ def test_mock_radios_report_real_shape_and_transition_idempotently():
     assert capabilities.wifi.aware.discovery.supported
     assert capabilities.wifi.aware.data_path.supported
     assert capabilities.wifi.aware.interface_mode == "NAN"
+    assert capabilities.wifi.aware.data_interface_mode == "NAN-data"
     assert capabilities.bluetooth.operations["gatt_client"].supported
     assert capabilities.bluetooth.l2cap.le_coc_listen.supported
     assert capabilities.bluetooth.l2cap.le_coc_connect.supported
@@ -144,27 +146,75 @@ def test_network_manager_reports_nan_absence_as_typed_unsupported(monkeypatch):
     assert not capabilities.aware.discovery.supported
     assert not capabilities.aware.data_path.supported
     assert capabilities.aware.interface_mode is None
+    assert capabilities.aware.data_interface_mode is None
     assert capabilities.operations["nan_discovery"].reason == (
         "nl80211 NAN interface mode absent"
     )
 
 
 def test_network_manager_detects_nan_interface_mode(monkeypatch):
-    from totem.devices.network.drivers.network_manager_wifi import (
-        NetworkManagerWiFiDriver,
-    )
+    from totem.devices.network.drivers import network_manager_wifi
+
+    NetworkManagerWiFiDriver = network_manager_wifi.NetworkManagerWiFiDriver
 
     driver = NetworkManagerWiFiDriver("wlan0", runtime=object())
     driver.initialized = True
     nan_phy = IW_PHY.replace("\t\t * AP\n", "\t\t * AP\n\t\t * NAN\n")
     monkeypatch.setattr(driver, "_run", lambda command, timeout=20.0: nan_phy)
     monkeypatch.setattr(driver, "_driver_info", lambda: {})
+    monkeypatch.setattr(network_manager_wifi, "_process_has_net_admin", lambda: True)
 
     capabilities = driver.get_capabilities()
 
     assert capabilities.aware.discovery.supported
-    assert capabilities.aware.data_path.supported
+    assert not capabilities.aware.data_path.supported
+    assert capabilities.aware.data_path.reason == (
+        "nl80211 NAN data interface mode absent"
+    )
     assert capabilities.aware.interface_mode == "NAN"
+
+
+def test_network_manager_does_not_claim_data_path_without_negotiation_backend(
+    monkeypatch,
+):
+    from totem.devices.network.drivers import network_manager_wifi
+
+    NetworkManagerWiFiDriver = network_manager_wifi.NetworkManagerWiFiDriver
+
+    driver = NetworkManagerWiFiDriver("wlan0", runtime=object())
+    driver.initialized = True
+    nan_phy = IW_PHY.replace("\t\t * AP\n", "\t\t * AP\n\t\t * NAN\n\t\t * NAN-data\n")
+    monkeypatch.setattr(driver, "_run", lambda command, timeout=20.0: nan_phy)
+    monkeypatch.setattr(driver, "_driver_info", lambda: {})
+    monkeypatch.setattr(network_manager_wifi, "_process_has_net_admin", lambda: True)
+
+    capabilities = driver.get_capabilities()
+
+    assert capabilities.aware.discovery.supported
+    assert capabilities.aware.data_interface_mode == "NAN-data"
+    assert not capabilities.aware.data_path.supported
+    assert capabilities.aware.data_path.reason == (
+        "Linux NAN data-path negotiation backend unavailable"
+    )
+
+
+def test_network_manager_does_not_weaken_privileges_for_nan(monkeypatch):
+    from totem.devices.network.drivers import network_manager_wifi
+
+    driver = network_manager_wifi.NetworkManagerWiFiDriver("wlan0", runtime=object())
+    driver.initialized = True
+    nan_phy = IW_PHY.replace("\t\t * AP\n", "\t\t * AP\n\t\t * NAN\n")
+    monkeypatch.setattr(driver, "_run", lambda command, timeout=20.0: nan_phy)
+    monkeypatch.setattr(driver, "_driver_info", lambda: {})
+    monkeypatch.setattr(network_manager_wifi, "_process_has_net_admin", lambda: False)
+
+    capabilities = driver.get_capabilities()
+
+    assert capabilities.aware.interface_mode == "NAN"
+    assert not capabilities.aware.discovery.supported
+    assert capabilities.aware.discovery.reason == (
+        "CAP_NET_ADMIN unavailable for nl80211 NAN lifecycle"
+    )
 
 
 def test_p2p_discovery_group_and_teardown_lifecycle():
@@ -181,6 +231,118 @@ def test_p2p_discovery_group_and_teardown_lifecycle():
     manager.stop_p2p_discovery()
     assert manager.list_p2p_groups() == []
     manager.close()
+
+
+def test_nan_controller_publish_match_and_cleanup_lifecycle():
+    from totem.devices.network.nan import NanDiscoveryController
+
+    commands = []
+
+    def runner(arguments, timeout):
+        commands.append(arguments)
+        if "add_func" in arguments and "publish" in arguments:
+            return "instance_id: 1, cookie: 101\n"
+        if "add_func" in arguments and "subscribe" in arguments:
+            return "instance_id: 2, cookie: 102\n"
+        return ""
+
+    class Monitor:
+        def __init__(self):
+            self.stdout = []
+            self.terminated = False
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout):
+            return 0
+
+        def kill(self):
+            self.terminated = True
+
+    monitor = Monitor()
+    events = []
+    controller = NanDiscoveryController(
+        phy_name="phy9",
+        interface="totemnan0",
+        iw_path="/usr/bin/iw",
+        runner=runner,
+        popen_factory=lambda *args, **kwargs: monitor,
+        event_callback=lambda event, data: events.append((event, data)),
+    )
+
+    session = controller.start_session(
+        service_name="myco.fips.v1",
+        service_info=b'{"port":4873}',
+        duration_seconds=60,
+    )
+    match = controller.process_event_line(
+        "NAN(cookie=101): DiscoveryResult, peer_id=7, local_id=1, "
+        "peer_mac=02:00:00:00:20:02, info=cGVlci1pbmZv"
+    )
+
+    assert session.publish_cookie == 101
+    assert session.subscribe_cookie == 102
+    assert base64.b64decode(session.service_info_base64) == b'{"port":4873}'
+    assert match is not None
+    assert base64.b64decode(match.service_info_base64) == b"peer-info"
+    assert controller.list_matches(session.id) == [match]
+    assert events[0][0] == "wifi_nan_match_found"
+    publish = next(command for command in commands if "publish" in command)
+    assert "eyJwb3J0Ijo0ODczfQ" in publish
+
+    controller.stop_session(session.id)
+    controller.stop_session(session.id)
+    assert monitor.terminated
+    assert controller.list_sessions() == []
+    assert [command[-1] for command in commands if "rm_func" in command] == [
+        "101",
+        "102",
+    ]
+    assert ["/usr/bin/iw", "dev", "totemnan0", "del"] in commands
+    controller.close()
+
+
+def test_nan_controller_rolls_back_cluster_when_subscription_fails():
+    from totem.devices.network.nan import NanDiscoveryController
+
+    commands = []
+
+    def runner(arguments, timeout):
+        commands.append(arguments)
+        if "publish" in arguments:
+            return "instance_id: 1, cookie: 101\n"
+        if "subscribe" in arguments:
+            raise RadioOperationError("subscribe failed")
+        return ""
+
+    class Monitor:
+        stdout = []
+
+        def terminate(self):
+            pass
+
+        def wait(self, timeout):
+            return 0
+
+        def kill(self):
+            pass
+
+    controller = NanDiscoveryController(
+        phy_name="phy9",
+        interface="totemnan0",
+        iw_path="iw",
+        runner=runner,
+        popen_factory=lambda *args, **kwargs: Monitor(),
+    )
+
+    with pytest.raises(RadioOperationError, match="subscribe failed"):
+        controller.start_session(service_name="myco.fips.v1")
+
+    assert ["iw", "dev", "totemnan0", "nan", "rm_func", "cookie", "101"] in commands
+    assert ["iw", "dev", "totemnan0", "nan", "stop"] in commands
+    assert ["iw", "dev", "totemnan0", "del"] in commands
+    assert controller.list_sessions() == []
 
 
 def test_l2cap_transport_assigns_psm_and_closes_listener_idempotently():
@@ -379,6 +541,28 @@ def test_mock_l2cap_listener_connection_and_fips_handoff_lifecycle():
     manager.close_l2cap_listener(listener.id)
     manager.close_l2cap_listener(listener.id)
     assert manager.list_l2cap_listeners() == []
+    manager.close()
+
+
+def test_mock_nan_match_data_path_uses_scoped_ipv6_and_tears_down():
+    manager = NetworkManager("mock_wifi", allow_mock=True)
+    session = manager.start_nan_discovery(
+        "myco.fips.v1", b'{"port":4873}', duration_seconds=60
+    )
+    match = manager.list_nan_matches(session.id)[0]
+    data_path = manager.create_nan_data_path(match.id)
+
+    assert data_path.interface == "aware_data0"
+    assert data_path.local_ipv6 == "fe80::1%aware_data0"
+    assert data_path.peer_ipv6 == "fe80::2%aware_data0"
+    assert data_path.port == 4873
+    assert manager.list_nan_data_paths() == [data_path]
+    manager.remove_nan_data_path(data_path.id)
+    manager.remove_nan_data_path(data_path.id)
+    manager.stop_nan_discovery(session.id)
+    manager.stop_nan_discovery(session.id)
+    assert manager.list_nan_data_paths() == []
+    assert manager.list_nan_discovery_sessions() == []
     manager.close()
 
 

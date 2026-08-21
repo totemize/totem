@@ -1,6 +1,7 @@
 """NetworkManager-owned Linux Wi-Fi implementation."""
 
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -25,6 +26,7 @@ from totem.devices.network.errors import (
     RadioResourceNotFoundError,
     UnsupportedFeatureError,
 )
+from totem.devices.network.nan import NanDiscoveryController
 from totem.devices.network.models import (
     OperationSupport,
     P2PGroup,
@@ -50,6 +52,18 @@ NM_WIFI_P2P = "org.freedesktop.NetworkManager.Device.WifiP2P"
 NM_P2P_PEER = "org.freedesktop.NetworkManager.WifiP2PPeer"
 NM_ACTIVE = "org.freedesktop.NetworkManager.Connection.Active"
 NM_IP4 = "org.freedesktop.NetworkManager.IP4Config"
+CAP_NET_ADMIN = 12
+
+
+def _process_has_net_admin() -> bool:
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        return True
+    try:
+        status = Path("/proc/self/status").read_text()
+    except OSError:
+        return False
+    match = re.search(r"^CapEff:\s*([0-9a-fA-F]+)$", status, re.MULTILINE)
+    return bool(match and int(match.group(1), 16) & (1 << CAP_NET_ADMIN))
 
 
 def _tool(name: str) -> str:
@@ -98,6 +112,7 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
         self._p2p_discovering = False
         self._p2p_discovery_timer: Optional[threading.Timer] = None
         self._managed_groups: Dict[str, P2PGroup] = {}
+        self._nan: Optional[NanDiscoveryController] = None
 
     def set_event_callback(self, callback) -> None:
         self._event_callback = callback
@@ -309,21 +324,35 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
 
     def get_capabilities(self) -> WiFiCapabilities:
         self._require_ready()
-        try:
-            phy_name = (
-                Path("/sys/class/net/{}/phy80211/name".format(self.interface))
-                .read_text()
-                .strip()
-            )
-        except OSError:
-            phy_name = "phy0"
+        phy_name = self._phy_name()
         iw_output = self._run([_tool("iw"), "phy", phy_name, "info"])
         modes, bands, combinations = parse_iw_phy(iw_output)
         driver_info = self._driver_info()
         p2p_supported = self._p2p_path is not None and "P2P-device" in modes
         nan_mode = next((mode for mode in modes if mode.upper() == "NAN"), None)
-        nan_supported = nan_mode is not None
-        nan_reason = None if nan_supported else "nl80211 NAN interface mode absent"
+        nan_mode_supported = nan_mode is not None
+        nan_privileged = _process_has_net_admin()
+        nan_supported = nan_mode_supported and nan_privileged
+        if not nan_mode_supported:
+            nan_reason = "nl80211 NAN interface mode absent"
+        elif not nan_privileged:
+            nan_reason = "CAP_NET_ADMIN unavailable for nl80211 NAN lifecycle"
+        else:
+            nan_reason = None
+        nan_data_mode = next(
+            (
+                mode
+                for mode in modes
+                if re.sub(r"[^a-z]", "", mode.lower()) == "nandata"
+            ),
+            None,
+        )
+        if not nan_mode_supported:
+            nan_data_reason = "nl80211 NAN interface mode absent"
+        elif nan_data_mode is None:
+            nan_data_reason = "nl80211 NAN data interface mode absent"
+        else:
+            nan_data_reason = "Linux NAN data-path negotiation backend unavailable"
         operations = {
             "radio_toggle": OperationSupport(True),
             "infrastructure_scan": OperationSupport(True),
@@ -343,7 +372,7 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
                 None if p2p_supported else "NetworkManager P2P device absent",
             ),
             "nan_discovery": OperationSupport(nan_supported, nan_reason),
-            "nan_data_path": OperationSupport(nan_supported, nan_reason),
+            "nan_data_path": OperationSupport(False, nan_data_reason),
         }
         return WiFiCapabilities(
             radios=[
@@ -365,7 +394,93 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
                 discovery=operations["nan_discovery"],
                 data_path=operations["nan_data_path"],
                 interface_mode=nan_mode,
+                data_interface_mode=nan_data_mode,
             ),
+        )
+
+    def _phy_name(self) -> str:
+        try:
+            return (
+                Path("/sys/class/net/{}/phy80211/name".format(self.interface))
+                .read_text()
+                .strip()
+            )
+        except OSError:
+            return "phy0"
+
+    def _preflight_nan(self) -> None:
+        capabilities = self.get_capabilities()
+        support = capabilities.aware.discovery
+        if not support.supported:
+            raise UnsupportedFeatureError(
+                support.reason or "Wi-Fi Aware discovery is unsupported"
+            )
+        active_modes = [
+            interface.mode
+            for interface in self.list_interfaces()
+            if interface.state in ("connected", "connecting") and interface.mode
+        ]
+        can_run = any(
+            modes_fit_combination(active_modes, "NAN", combination)
+            for combination in capabilities.concurrent_combinations
+        )
+        if capabilities.concurrent_combinations and not can_run:
+            raise RadioConflictError(
+                "Active Wi-Fi interfaces do not fit a supported NAN concurrency combination"
+            )
+
+    def start_nan_discovery(
+        self,
+        service_name: str,
+        service_info: bytes = b"",
+        duration_seconds: int = 300,
+        timeout: float = 15.0,
+    ):
+        self._require_ready()
+        self._preflight_nan()
+        if self._nan is None:
+            self._nan = NanDiscoveryController(
+                phy_name=self._phy_name(),
+                interface="totemnan0",
+                iw_path=_tool("iw"),
+                runner=lambda arguments, command_timeout: self._run(
+                    arguments, command_timeout
+                ),
+                event_callback=self._emit,
+            )
+        return self._nan.start_session(
+            service_name=service_name,
+            service_info=service_info,
+            duration_seconds=duration_seconds,
+            timeout=timeout,
+        )
+
+    def stop_nan_discovery(self, session_id: str, timeout: float = 15.0):
+        self._require_ready()
+        if self._nan is not None:
+            return self._nan.stop_session(session_id, timeout)
+
+    def list_nan_discovery_sessions(self):
+        return self._nan.list_sessions() if self._nan is not None else []
+
+    def list_nan_matches(self, session_id: Optional[str] = None):
+        return self._nan.list_matches(session_id) if self._nan is not None else []
+
+    def create_nan_data_path(
+        self, match_id: str, port: int = 4873, timeout: float = 30.0
+    ):
+        support = self.get_capabilities().aware.data_path
+        raise UnsupportedFeatureError(
+            support.reason or "Wi-Fi Aware data paths are unsupported"
+        )
+
+    def list_nan_data_paths(self):
+        return []
+
+    def remove_nan_data_path(self, data_path_id: str, timeout: float = 15.0):
+        support = self.get_capabilities().aware.data_path
+        raise UnsupportedFeatureError(
+            support.reason or "Wi-Fi Aware data paths are unsupported"
         )
 
     def _driver_info(self) -> Dict[str, str]:
@@ -697,6 +812,8 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
         if getattr(self, "_closed", False):
             return
         if self.initialized:
+            if self._nan is not None:
+                self._nan.close()
             try:
                 self.stop_p2p_discovery()
             except RadioOperationError:
