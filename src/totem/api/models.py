@@ -99,6 +99,20 @@ class OperationSupportResponse(BaseModel):
     reason: Optional[str] = None
 
 
+class WiFiAwareCapabilitiesResponse(BaseModel):
+    discovery: OperationSupportResponse
+    data_path: OperationSupportResponse
+    interface_mode: Optional[str] = None
+
+
+class L2CAPCapabilitiesResponse(BaseModel):
+    le_coc_listen: OperationSupportResponse
+    le_coc_connect: OperationSupportResponse
+    fd_handoff: OperationSupportResponse
+    maximum_listeners: int = Field(ge=0)
+    maximum_connections: int = Field(ge=0)
+
+
 class RadioBlockResponse(BaseModel):
     soft_blocked: bool
     hard_blocked: bool
@@ -131,6 +145,7 @@ class WiFiCapabilitiesResponse(BaseModel):
     interface_modes: List[str]
     concurrent_combinations: List[ConcurrentInterfaceCombinationResponse]
     operations: Dict[str, OperationSupportResponse]
+    aware: WiFiAwareCapabilitiesResponse
 
 
 class BluetoothCapabilitiesResponse(BaseModel):
@@ -148,6 +163,7 @@ class BluetoothCapabilitiesResponse(BaseModel):
     maximum_advertisement_length: Optional[int] = None
     maximum_scan_response_length: Optional[int] = None
     operations: Dict[str, OperationSupportResponse]
+    l2cap: L2CAPCapabilitiesResponse
 
 
 class NetworkCapabilitiesResponse(BaseModel):

@@ -4,6 +4,7 @@ import base64
 from datetime import datetime, timezone
 import hashlib
 import re
+import socket
 import threading
 import time
 from typing import Any, Callable, Dict, Optional
@@ -35,6 +36,7 @@ from totem.devices.network.models import (
     BluetoothRadioState,
     GATTCharacteristic,
     GATTService,
+    L2CAPCapabilities,
     OperationSupport,
     RadioBlockState,
 )
@@ -50,6 +52,25 @@ ADVERTISING_MANAGER = "org.bluez.LEAdvertisingManager1"
 ADVERTISEMENT = "org.bluez.LEAdvertisement1"
 GATT_SERVICE = "org.bluez.GattService1"
 GATT_CHARACTERISTIC = "org.bluez.GattCharacteristic1"
+MAX_L2CAP_LISTENERS = 4
+MAX_L2CAP_CONNECTIONS = 16
+
+
+def _linux_l2cap_socket_support():
+    required = ("AF_BLUETOOTH", "SOCK_SEQPACKET", "BTPROTO_L2CAP")
+    missing = [name for name in required if not hasattr(socket, name)]
+    if missing:
+        return OperationSupport(
+            False,
+            "Linux LE L2CAP socket API unavailable ({})".format(", ".join(missing)),
+        )
+    return OperationSupport(True)
+
+
+def _fd_handoff_support():
+    if not hasattr(socket, "SCM_RIGHTS") or not hasattr(socket, "AF_UNIX"):
+        return OperationSupport(False, "Unix SCM_RIGHTS descriptor passing unavailable")
+    return OperationSupport(True)
 
 
 def _utc_now() -> str:
@@ -317,6 +338,16 @@ class Driver(BluetoothDeviceInterface):
             advertising_reason = "no advertisement instances available"
         else:
             advertising_reason = None
+        socket_support = _linux_l2cap_socket_support()
+        listen_supported = socket_support.supported and has_peripheral
+        connect_supported = socket_support.supported and has_central
+        listen_reason = socket_support.reason or (
+            None if has_peripheral else "peripheral role absent"
+        )
+        connect_reason = socket_support.reason or (
+            None if has_central else "central role absent"
+        )
+        handoff_support = _fd_handoff_support()
         return BluetoothCapabilities(
             adapter=self._adapter_path.rsplit("/", 1)[-1],
             address=str(adapter.get("Address", "")),
@@ -354,7 +385,19 @@ class Driver(BluetoothDeviceInterface):
                 "gatt_client": OperationSupport(
                     has_central, None if has_central else "central role absent"
                 ),
+                "l2cap_coc_listen": OperationSupport(listen_supported, listen_reason),
+                "l2cap_coc_connect": OperationSupport(
+                    connect_supported, connect_reason
+                ),
+                "l2cap_coc_fd_handoff": handoff_support,
             },
+            l2cap=L2CAPCapabilities(
+                le_coc_listen=OperationSupport(listen_supported, listen_reason),
+                le_coc_connect=OperationSupport(connect_supported, connect_reason),
+                fd_handoff=handoff_support,
+                maximum_listeners=MAX_L2CAP_LISTENERS,
+                maximum_connections=MAX_L2CAP_CONNECTIONS,
+            ),
         )
 
     def _apply_discovery_filter(self, timeout: float) -> None:

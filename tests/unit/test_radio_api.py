@@ -25,7 +25,9 @@ def test_capability_status_radio_and_p2p_endpoints():
         capabilities = client.get("/network/capabilities")
         assert capabilities.status_code == 200
         assert "P2P-GO" in capabilities.json()["wifi"]["interface_modes"]
+        assert capabilities.json()["wifi"]["aware"]["discovery"]["supported"]
         assert capabilities.json()["bluetooth"]["roles"] == ["central", "peripheral"]
+        assert capabilities.json()["bluetooth"]["l2cap"]["le_coc_listen"]["supported"]
 
         assert (
             client.put("/network/wifi/radio", json={"enabled": False}).json()["enabled"]

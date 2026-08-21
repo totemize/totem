@@ -110,11 +110,55 @@ def test_mock_radios_report_real_shape_and_transition_idempotently():
 
     capabilities = manager.get_capabilities()
     assert capabilities.wifi.operations["p2p_group"].supported
+    assert capabilities.wifi.aware.discovery.supported
+    assert capabilities.wifi.aware.data_path.supported
+    assert capabilities.wifi.aware.interface_mode == "NAN"
     assert capabilities.bluetooth.operations["gatt_client"].supported
+    assert capabilities.bluetooth.l2cap.le_coc_listen.supported
+    assert capabilities.bluetooth.l2cap.le_coc_connect.supported
+    assert capabilities.bluetooth.l2cap.fd_handoff.supported
     assert capabilities.bluetooth.version == 9
     assert capabilities.bluetooth.manufacturer == 15
     manager.close()
     manager.close()
+
+
+def test_network_manager_reports_nan_absence_as_typed_unsupported(monkeypatch):
+    from totem.devices.network.drivers.network_manager_wifi import (
+        NetworkManagerWiFiDriver,
+    )
+
+    driver = NetworkManagerWiFiDriver("wlan0", runtime=object())
+    driver.initialized = True
+    monkeypatch.setattr(driver, "_run", lambda command, timeout=20.0: IW_PHY)
+    monkeypatch.setattr(driver, "_driver_info", lambda: {})
+
+    capabilities = driver.get_capabilities()
+
+    assert not capabilities.aware.discovery.supported
+    assert not capabilities.aware.data_path.supported
+    assert capabilities.aware.interface_mode is None
+    assert capabilities.operations["nan_discovery"].reason == (
+        "nl80211 NAN interface mode absent"
+    )
+
+
+def test_network_manager_detects_nan_interface_mode(monkeypatch):
+    from totem.devices.network.drivers.network_manager_wifi import (
+        NetworkManagerWiFiDriver,
+    )
+
+    driver = NetworkManagerWiFiDriver("wlan0", runtime=object())
+    driver.initialized = True
+    nan_phy = IW_PHY.replace("\t\t * AP\n", "\t\t * AP\n\t\t * NAN\n")
+    monkeypatch.setattr(driver, "_run", lambda command, timeout=20.0: nan_phy)
+    monkeypatch.setattr(driver, "_driver_info", lambda: {})
+
+    capabilities = driver.get_capabilities()
+
+    assert capabilities.aware.discovery.supported
+    assert capabilities.aware.data_path.supported
+    assert capabilities.aware.interface_mode == "NAN"
 
 
 def test_p2p_discovery_group_and_teardown_lifecycle():

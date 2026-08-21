@@ -17,6 +17,7 @@ class WiFiMode(str, Enum):
     P2P_DEVICE = "P2P-device"
     IBSS = "IBSS"
     MONITOR = "monitor"
+    NAN = "NAN"
 
 
 class P2PGroupState(str, Enum):
@@ -30,6 +31,22 @@ class P2PGroupState(str, Enum):
 class OperationSupport:
     supported: bool
     reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class WiFiAwareCapabilities:
+    discovery: OperationSupport
+    data_path: OperationSupport
+    interface_mode: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class L2CAPCapabilities:
+    le_coc_listen: OperationSupport
+    le_coc_connect: OperationSupport
+    fd_handoff: OperationSupport
+    maximum_listeners: int
+    maximum_connections: int
 
 
 @dataclass(frozen=True)
@@ -69,6 +86,7 @@ class WiFiCapabilities:
     interface_modes: List[str]
     concurrent_combinations: List[ConcurrentInterfaceCombination]
     operations: Dict[str, OperationSupport]
+    aware: WiFiAwareCapabilities
 
 
 @dataclass(frozen=True)
@@ -141,6 +159,7 @@ class BluetoothCapabilities:
     maximum_advertisement_length: Optional[int]
     maximum_scan_response_length: Optional[int]
     operations: Dict[str, OperationSupport]
+    l2cap: L2CAPCapabilities
 
 
 @dataclass(frozen=True)

@@ -16,6 +16,7 @@ from totem.devices.network.models import (
     PhysicalRadio,
     RadioBlockState,
     WiFiCapabilities,
+    WiFiAwareCapabilities,
     WiFiInterfaceState,
     WiFiNetwork,
     WiFiRadioState,
@@ -112,7 +113,14 @@ class Driver(WiFiDeviceInterface):
         return WiFiCapabilities(
             radios=[PhysicalRadio("phy-mock", "wifi", ["wlan-mock"], "mock")],
             bands={"band1": list(range(1, 14))},
-            interface_modes=["managed", "AP", "P2P-client", "P2P-GO", "P2P-device"],
+            interface_modes=[
+                "managed",
+                "AP",
+                "P2P-client",
+                "P2P-GO",
+                "P2P-device",
+                "NAN",
+            ],
             concurrent_combinations=[
                 ConcurrentInterfaceCombination(
                     limits=[
@@ -131,7 +139,14 @@ class Driver(WiFiDeviceInterface):
                 "hotspot": supported,
                 "p2p_discovery": supported,
                 "p2p_group": supported,
+                "nan_discovery": supported,
+                "nan_data_path": supported,
             },
+            aware=WiFiAwareCapabilities(
+                discovery=supported,
+                data_path=supported,
+                interface_mode="NAN",
+            ),
         )
 
     def list_interfaces(self):

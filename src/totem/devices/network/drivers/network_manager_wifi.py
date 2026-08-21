@@ -33,6 +33,7 @@ from totem.devices.network.models import (
     PhysicalRadio,
     RadioBlockState,
     WiFiCapabilities,
+    WiFiAwareCapabilities,
     WiFiInterfaceState,
     WiFiNetwork,
     WiFiRadioState,
@@ -320,6 +321,9 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
         modes, bands, combinations = parse_iw_phy(iw_output)
         driver_info = self._driver_info()
         p2p_supported = self._p2p_path is not None and "P2P-device" in modes
+        nan_mode = next((mode for mode in modes if mode.upper() == "NAN"), None)
+        nan_supported = nan_mode is not None
+        nan_reason = None if nan_supported else "nl80211 NAN interface mode absent"
         operations = {
             "radio_toggle": OperationSupport(True),
             "infrastructure_scan": OperationSupport(True),
@@ -338,6 +342,8 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
                 p2p_supported,
                 None if p2p_supported else "NetworkManager P2P device absent",
             ),
+            "nan_discovery": OperationSupport(nan_supported, nan_reason),
+            "nan_data_path": OperationSupport(nan_supported, nan_reason),
         }
         return WiFiCapabilities(
             radios=[
@@ -355,6 +361,11 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
             interface_modes=modes,
             concurrent_combinations=combinations,
             operations=operations,
+            aware=WiFiAwareCapabilities(
+                discovery=operations["nan_discovery"],
+                data_path=operations["nan_data_path"],
+                interface_mode=nan_mode,
+            ),
         )
 
     def _driver_info(self) -> Dict[str, str]:

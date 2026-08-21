@@ -14,6 +14,7 @@ from totem.devices.network.models import (
     BluetoothRadioState,
     GATTCharacteristic,
     GATTService,
+    L2CAPCapabilities,
     OperationSupport,
     RadioBlockState,
 )
@@ -92,7 +93,17 @@ class Driver(BluetoothDeviceInterface):
                 "advertising": supported,
                 "connect": supported,
                 "gatt_client": supported,
+                "l2cap_coc_listen": supported,
+                "l2cap_coc_connect": supported,
+                "l2cap_coc_fd_handoff": supported,
             },
+            l2cap=L2CAPCapabilities(
+                le_coc_listen=supported,
+                le_coc_connect=supported,
+                fd_handoff=supported,
+                maximum_listeners=4,
+                maximum_connections=16,
+            ),
         )
 
     def start_discovery(
