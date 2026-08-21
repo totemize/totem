@@ -26,6 +26,8 @@ operational truth and the spec remains the intended direction.
                                       │
 ┌──────────────────────── Totem Linux device ─────────────────────────┐
 │                                                                    │
+│  wlan0 ◄── NetworkManager station/!Totem AP fallback               │
+│    │                                                               │
 │  physical links ──► FIPS ──► fips0 (fd00::/8 IPv6 overlay)         │
 │                    │  │                                            │
 │                    │  └─ [::1]:5354 DNS for <npub>.fips            │
@@ -56,13 +58,15 @@ is LAN, access point, or FIPS.
 
 | Unit | Process identity | Purpose | Durable state |
 |---|---|---|---|
+| `totem-wifi-fallback.service` | root, oneshot | Keeps an active infrastructure connection, joins a visible `!Totem`, or activates the local AP | NetworkManager profiles under `/etc/NetworkManager/system-connections/` |
+| `totem-wifi-ap-idle.timer` / `.service` | root, timer + oneshot | Preserves an AP with associated stations; retries selection after ten empty minutes | Ephemeral idle start in `/run/totem-wifi-ap-idle` |
 | `fips.service` | root | Mesh transport, authentication, routing, TUN, local DNS, control socket | `/etc/fips/fips.yaml`, `/etc/fips/fips.key` |
 | `strfry.service` | `strfry` | Nostr relay, NIP-11, NIP-77/negentropy | `/etc/strfry.conf`, `/var/lib/strfry/` |
 | `totemd.service` | `totem`, supplementary groups `fips`, `strfry` | FIPS watcher, NIP-11 prefilter, signed recognition, public web bind, loopback message bus, strfry runner access | `/etc/totemd/totemd.env`, `/etc/totemd/config.toml`; current encounter state is in memory |
 | `totem.service` | `totem`, supplementary groups `gpio`, `i2c`, `spi` | FastAPI hardware service and lazy manager/driver lifecycle | `/etc/totem/totem.env`, `/var/lib/totem/storage` |
 
-The systemd definitions are generated from `deploy/ansible/roles/*/templates`.
-The role order is `base → fips → strfry → totemd → device_manager → verify`.
+The systemd definitions are managed under `deploy/ansible/roles/`. The role
+order is `base → network → fips → strfry → totemd → device_manager → verify`.
 
 ## Network surfaces
 
@@ -71,6 +75,7 @@ defaults:
 
 | Surface | Default bind | Exposure | Owner |
 |---|---|---|---|
+| Fallback AP gateway | `10.21.0.1/24` on `wlan0` | open `!Totem` Wi-Fi | NetworkManager |
 | FIPS UDP transport | `0.0.0.0:2121` | physical network | FIPS |
 | FIPS TCP transport | `0.0.0.0:8443` | physical network | FIPS |
 | FIPS DNS responder | `[::1]:5354` | loopback | FIPS |
@@ -99,12 +104,26 @@ device-side resolver support from `.fips` resolution on a development host.
 - The Python API currently binds all interfaces, enables permissive CORS, and
   has no authentication layer. Treat port `8000` as a trusted-network or
   development surface until an explicit authorization boundary lands.
-- The `totemd` public bind serves server-rendered status, a same-origin NIP-07
-  owner client/API, and the rate-limited responder at `/totem/challenge`.
-  Owner mutations require nonce-bound NIP-98; the first valid signer claims an
-  unclaimed device.
+- The `totemd` public bind serves an embedded static Svelte app, limited
+  public status/update projections, NIP-98 owner APIs, and the rate-limited
+  responder at `/totem/challenge`. Owner mutations and the peer/activity
+  stream require nonce-bound signatures; the first valid signer claims an
+  unclaimed device. The generic bus remains inaccessible from this listener.
 
 ## Control and data flows
+
+### Wi-Fi fallback
+
+1. NetworkManager first attempts its ordinary configured infrastructure
+   profiles.
+2. At boot or after a `wlan0` disconnect, the fallback oneshot allows a short
+   reconnect grace period.
+3. If `!Totem` is visible, it activates the open `totem-peer` station profile.
+4. Otherwise it waits a randomized interval, rescans to avoid simultaneous
+   AP creation, and activates `totem-ap` at `10.21.0.1`.
+5. A one-minute timer checks the kernel's associated-station table. Any station
+   keeps the AP active; ten uninterrupted empty minutes restart this same
+   selection cycle. Inspection failure preserves the AP and resets the timer.
 
 ### Mesh observation and bus events
 
@@ -123,9 +142,11 @@ device-side resolver support from `.fips` resolution on a development host.
    strfry's readable result and optional parsed set-difference counts.
 8. Departure clears recognition, cancels a running child or interval wait, and
    emits `totem.peer.gone`.
-9. SSE clients receive those pushes from `/bus/events`. Push delivery is
-   intentionally lossy, so clients query `totem.status.get` and
-   `totem.peers.get` after connecting or reconnecting.
+9. Loopback consumers receive those pushes from `/bus/events`. The web app's
+   public `/api/updates` strips payloads and invalidates `/api/status`; its
+   owner-signed stream projects current peers/history plus future pushes. All
+   push delivery remains lossy, so reconnecting consumers start from current
+   state.
 
 ### Nostr storage and sync
 
@@ -171,6 +192,7 @@ session plaintext.
 
 | Capability | State in this revision |
 |---|---|
+| NetworkManager infrastructure/peer/AP fallback | Implemented; live host/peer validation passed in both directions on totem and motown |
 | FIPS service, persistent identity, TUN, DNS, control socket | Implemented and deployment-verified |
 | IPv6-capable strfry relay and NIP-77 advertisement | Implemented; protocol-0 capability is enforced by Ansible |
 | `totemd` FIPS polling, peer snapshot, seen/gone pushes | Implemented |

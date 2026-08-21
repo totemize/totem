@@ -11,7 +11,7 @@ The playbook in `deploy/ansible/` provisions and converges the complete Totem
 service stack:
 
 ```text
-base → FIPS → strfry → totemd → Python device manager → verification
+base → network fallback → FIPS → strfry → totemd → Python device manager → verification
 ```
 
 It supports bare Debian/Raspbian systems and adopts the existing hand-installed
@@ -29,8 +29,11 @@ Read these rules before a deployment:
   the next.
 - Service restart handlers are enabled by default. Disable them explicitly
   during a no-restart window.
-- The Python device-manager role and its checks are enabled by default.
-  Disable them when another workstream owns Python managers or drivers.
+- Wi-Fi fallback and the Python device-manager role are enabled by default.
+  Installing fallback profiles does not replace an active connection; an AP
+  activation test is separately disruptive. The idle timer preserves an AP
+  with any associated station and retries selection after ten empty minutes.
+  Disable Python when another workstream owns its managers or drivers.
 - Existing `/etc/fips/fips.yaml`, FIPS identity files, strfry operator policy,
   `/etc/totemd/config.toml`, and `/var/lib/strfry/` are preserved. The role
   still reconciles strfry's mesh bind and NIP-11 name/public key, plus managed
@@ -234,6 +237,24 @@ obtain the appropriate maintenance authorization first.
 - creates deployment/cache/state directories;
 - records migration `0001-bootstrap.complete`.
 
+### `network`
+
+- installs NetworkManager and its shared-mode DHCP helper;
+- installs open `!Totem` station and AP profiles without activating either
+  during deployment;
+- enables a root oneshot at boot and after `wlan0` disconnects;
+- preserves any active infrastructure connection, joins a visible `!Totem`,
+  or hosts `10.21.0.1/24` after grace, jitter, and a final rescan.
+
+A targeted install is safe for an online device:
+
+```bash
+deploy/ansible/scripts/deploy.sh --limit motown --tags network
+```
+
+Actually disconnecting the target remains a separate acceptance test and
+should use a rollback plan.
+
 ### `fips`
 
 - requires all three local FIPS binaries and copies changed content;
@@ -303,20 +324,21 @@ The final role checks the enabled scope:
 1. IPv6 ports `7777` and `8080`, plus loopback bus port `8081`, accept
    connections;
 2. port `8000` accepts connections when Python is enabled;
-3. core units, plus optional `totem.service`, are enabled and running;
-4. `fipsctl show status` reports running state, active TUN, and the exact
+3. Wi-Fi fallback and its idle timer are enabled and active, and both NetworkManager profile contracts load;
+4. core units, plus optional `totem.service`, are enabled and running;
+5. `fipsctl show status` reports running state, active TUN, and the exact
    persistent inventory npub;
-5. NIP-11 reports negentropy, supported NIP `77`, a name matching the derived
+6. NIP-11 reports negentropy, supported NIP `77`, a name matching the derived
    `!Totem` value file, and the inventory public key;
-6. the root-owned runner opens the relay LMDB successfully as unprivileged
+7. the root-owned runner opens the relay LMDB successfully as unprivileged
    user `totem`, whose access remains group-scoped;
-7. `/totem/challenge` returns a no-store kind-27235 event signed by that same
+8. `/totem/challenge` returns a no-store kind-27235 event signed by that same
    FIPS identity, proving the systemd credential and IPv6 web bind;
-8. `totemctl status` reports `ok`, a connected FIPS watcher, and valid
+9. `totemctl status` reports `ok`, a connected FIPS watcher, and valid
    operator policy;
-9. `totemctl history` returns the typed, process-local event-history result;
-10. Python `/health` returns HTTP `200` when enabled;
-11. the expected migration checkpoint count exists.
+10. `totemctl history` returns the typed, process-local event-history result;
+11. Python `/health` returns HTTP `200` when enabled;
+12. the expected migration checkpoint count exists.
 
 These are live contract checks. A passing port check alone is not treated as
 service health.
@@ -368,7 +390,7 @@ The first full deployment to physical metot from `totemd` at `54bc749` recorded
 
 ## Tags and partial runs
 
-Roles expose these tags: `base`, `fips`, `strfry`, `totemd`,
+Roles expose these tags: `base`, `network`, `fips`, `strfry`, `totemd`,
 `device_manager`, and `verify`.
 
 Tags are for controlled recovery, not a replacement for dependency reasoning.

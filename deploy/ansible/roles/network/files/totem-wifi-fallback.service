@@ -1,0 +1,18 @@
+[Unit]
+Description=Totem Wi-Fi station/AP fallback
+Wants=NetworkManager.service
+After=NetworkManager.service
+Before=fips.service strfry.service totemd.service
+ConditionPathExists=/sys/class/net/wlan0
+StartLimitIntervalSec=120
+StartLimitBurst=4
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/totem-wifi-fallback
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

@@ -37,8 +37,8 @@ another totem's AP like any station (`03-network.md`).
   totem by any means, you know where its services live
   (`07-conventions.md`).
 - **Standardized address on the AP network:** the totem is always reachable
-  at its AP's gateway address (and/or an fd00 ULA), and/or a captive portal
-  landing on the web app. Guests never need to guess where the totem is
+  at `10.21.0.1`, including the web app on port `8080` and relay on port
+  `7777`. Guests never need to guess where the totem is
   (`07-conventions.md`).
 - **Flatness is a design rule.** Totems connecting to each other use the
   relay exactly the same way human users do — same ports, same protocol, no
@@ -85,12 +85,14 @@ the browser.
 
 ## Guest experience
 
-The landing page's status, profile, and relay URL remain server-rendered and
-usable without JavaScript. A small same-origin client enables claim and owner
-forms through a NIP-07 browser signer. During early development it also offers
-an explicit nsec escape hatch that signs only in page memory, never transmits
-or persists the secret, and clears its key bytes on logout/navigation. Guests
-still receive only the public read surface. Whether AP join opens it as a
+The web root is a static Svelte application embedded in `totemd`. It loads a
+small same-origin public status projection, while claim and owner forms use a
+NIP-07 browser signer. During early development it also offers an explicit
+nsec escape hatch that signs only in page memory, never transmits or persists
+the secret, and clears its key bytes on logout/navigation. Owner-only current
+peers and daemon activity require a signed long-lived connection; guests
+receive only aggregate status, profile, policy, and relay access. JavaScript
+is therefore required for the web interface. Whether AP join opens it as a
 captive portal remains an open question (`09-open-questions.md`).
 
 ## The ambassador property

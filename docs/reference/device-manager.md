@@ -165,7 +165,12 @@ Create a hotspot through the selected driver:
 ```
 
 The HTTP API currently exposes neither scan/status nor stop-hotspot methods;
-those are available on `NetworkManager` for in-process callers.
+those are available on `NetworkManager` for in-process callers. This imperative
+hardware endpoint is not the boot fallback controller. The deployed network
+role uses root-managed NetworkManager profiles plus
+`totem-wifi-fallback.service` to prefer infrastructure, join an existing open
+`!Totem`, or host the standardized AP. Its timer keeps an AP with any associated
+station and retries selection after ten uninterrupted empty minutes.
 
 ### UPS status
 

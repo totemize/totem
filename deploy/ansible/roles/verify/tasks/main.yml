@@ -19,6 +19,48 @@
 - name: Read systemd service facts
   ansible.builtin.service_facts:
 
+- name: Require Wi-Fi fallback units to be enabled
+  ansible.builtin.command:
+    argv: [systemctl, is-enabled, "{{ item }}"]
+  loop:
+    - totem-wifi-fallback.service
+    - totem-wifi-ap-idle.timer
+  register: verify_totem_wifi_fallback_enabled_command
+  changed_when: false
+  failed_when: verify_totem_wifi_fallback_enabled_command.stdout != 'enabled'
+
+- name: Require Wi-Fi idle retry to be active
+  ansible.builtin.command:
+    argv: [systemctl, is-active, totem-wifi-ap-idle.timer]
+  register: verify_totem_wifi_idle_timer_active_command
+  changed_when: false
+  failed_when: verify_totem_wifi_idle_timer_active_command.stdout != 'active'
+
+- name: Require Wi-Fi station inspection support
+  ansible.builtin.command:
+    argv: [/usr/sbin/iw, dev, wlan0, info]
+  changed_when: false
+
+- name: Read Totem NetworkManager profile contracts
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - --get-values
+      - connection.id,802-11-wireless.mode,802-11-wireless.ssid,ipv4.method
+      - connection
+      - show
+      - "{{ item }}"
+  loop:
+    - totem-ap
+    - totem-peer
+  register: verify_totem_wifi_profile_contract
+  changed_when: false
+  failed_when: verify_totem_wifi_profile_contract.stdout_lines != expected[item]
+  vars:
+    expected:
+      totem-ap: [totem-ap, ap, '!Totem', shared]
+      totem-peer: [totem-peer, infrastructure, '!Totem', auto]
+
 - name: Require enabled core services to be running
   ansible.builtin.assert:
     that:

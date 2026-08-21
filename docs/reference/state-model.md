@@ -11,7 +11,7 @@ another. The display should therefore consume a **snapshot of orthogonal state
 axes** and project that snapshot into a scene. A single flat `TotemState` enum
 would lose information and create impossible transition rules.
 
-This catalog is maintained against the current `totemd` branch, especially:
+This catalog is based on the `totemd` branch at `a1a5979`, especially:
 
 - `src/totem/screen/` for the current boot presentation;
 - `src/totem/devices/` and `src/totem/api/` for hardware lifecycle and power;
@@ -541,9 +541,12 @@ The implemented `totemd` pushes are:
 | `totem.peer.seen` | Authenticated FIPS peer appeared |
 | `totem.peer.gone` | Peer disappeared |
 | `totem.peer.candidate` | NIP-11 marker and identity claim matched |
-| `totem.recognized` | Signed challenge passed and encounter history persisted; includes `known_before` |
+| `totem.recognized` | Signed challenge passed for the current encounter |
 | `totem.sync.started` | Policy-permitted job was reserved |
 | `totem.sync.done` | Job succeeded, failed, timed out, or was cancelled |
+| `totem.owner.claimed` | The first valid signer became the durable owner |
+| `totem.metadata.changed` | A device-signed kind-0 profile was imported |
+| `totem.config.changed` | Owner policy overrides were persisted and applied |
 
 The spec additionally reserves `totem.befriended`. The Python device-event
 channel reserves generic hardware events but currently publishes none.
