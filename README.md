@@ -46,6 +46,7 @@ Useful environment variables:
 - `TOTEM_SCREEN_ROTATION=0|180`: orient presentation frames for the physical panel mount.
 - `TOTEM_SCREEN_LOW_BATTERY_PERCENT=20` and `TOTEM_SCREEN_CRITICAL_BATTERY_PERCENT=8`: select power-scene thresholds.
 - `TOTEM_SCREEN_SNAPSHOT_POLL_SECONDS=15`, `TOTEM_SCREEN_RECONNECT_SECONDS=2`, and `TOTEM_SCREEN_COALESCE_SECONDS=2.1`: tune continuous snapshot reconciliation and scene quiet time.
+- `TOTEM_SCREEN_CAPTION_WORD_SECONDS=1.2`: set the interval for stable word-by-word scene-caption reveals.
 - `TOTEM_SCREEN_SEQUENCE_RATES=scene=seconds,...`, `TOTEM_SCREEN_SCENE_DWELLS=scene=seconds,...`, and `TOTEM_SCREEN_SCENE_PRIORITIES=scene=integer,...`: override per-scene animation and arbitration policy.
 - `TOTEM_SCREEN_MAX_PENDING_SCENES=8`: bound coalesced one-shot presentation work.
 - `EINK_DISPLAY_TYPE=2in13_v1|2in13_v2|2in13_v3|2in13_v4|3in7`: guide display auto-detection.
@@ -58,7 +59,9 @@ SSE is only a wake-up notification. Replay the boot state machine with
 `totem-screen replay-boot`, or every exact runtime frame with
 `totem-screen replay-states --replay-frame-seconds 2`. Add
 `--atlas-output /tmp/totem-states.png` to save the same rendered frames as a
-contact sheet.
+contact sheet. Export the exhaustive 130-caption, representative-prefix, and
+face-sequence proof without a long hardware run with
+`totem-screen proof-captions --atlas-output /tmp/totem-captions.png`.
 
 ## Test
 

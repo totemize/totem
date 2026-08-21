@@ -39,6 +39,7 @@ from totem.screen.model import (
     CHARGING_FULL_REACTION,
     CHARGING_REACTIONS,
     DEFAULT_SCENE_SPECS,
+    SCENE_CAPTIONS,
     SCENE_SEQUENCES,
     AnimationReaction,
     PeerSnapshot,
@@ -67,6 +68,7 @@ class RuntimePolicy:
     coalesce_seconds: float = 2.1
     snapshot_poll_seconds: float = 15.0
     reconnect_seconds: float = 2.0
+    caption_word_seconds: float = 1.2
     maximum_pending_scenes: int = 8
     maximum_consumed_tokens: int = 256
     scene_specs: Mapping[RuntimeScene, SceneSpec] = field(
@@ -84,6 +86,8 @@ class RuntimePolicy:
             raise ValueError(
                 "Polling must be positive and reconnect delay non-negative"
             )
+        if self.caption_word_seconds <= 0:
+            raise ValueError("Caption word timing must be positive")
         if self.maximum_pending_scenes < 1:
             raise ValueError("At least one pending scene must be retained")
         if self.maximum_consumed_tokens < self.maximum_pending_scenes:
@@ -838,6 +842,88 @@ class SceneAnimator:
         return self.policy.scene_specs[self.scene].loop or not self.held
 
 
+class CaptionAnimator:
+    """Choose one scene-admission caption and reveal stable word prefixes."""
+
+    def __init__(
+        self,
+        word_seconds: float = 1.2,
+        chooser: Optional[Callable[[Sequence[str]], str]] = None,
+    ):
+        if word_seconds <= 0:
+            raise ValueError("Caption word timing must be positive")
+        self.word_seconds = word_seconds
+        self.chooser = chooser or random.choice
+        self.scene: Optional[RuntimeScene] = None
+        self.caption = ""
+        self.visible_words = 0
+        self._last_by_scene: Dict[RuntimeScene, str] = {}
+        self._pending_display = False
+        self._next_word_at: Optional[float] = None
+
+    def activate(self, scene: RuntimeScene) -> None:
+        options = SCENE_CAPTIONS[scene]
+        previous = self._last_by_scene.get(scene)
+        candidates = tuple(option for option in options if option != previous)
+        selected = self.chooser(candidates)
+        if selected not in candidates:
+            raise ValueError("Caption chooser returned an unavailable option")
+        self.scene = scene
+        self.caption = selected
+        self.visible_words = 1
+        self._last_by_scene[scene] = selected
+        self._pending_display = True
+        self._next_word_at = None
+
+    @property
+    def pending_display(self) -> bool:
+        return self._pending_display
+
+    @property
+    def next_word_at(self) -> Optional[float]:
+        return self._next_word_at
+
+    @property
+    def word_count(self) -> int:
+        return len(self.caption.split())
+
+    @property
+    def visible_text(self) -> str:
+        return " ".join(self.caption.split()[: self.visible_words])
+
+    def advance_if_due(self, now: float) -> bool:
+        if (
+            self._pending_display
+            or self._next_word_at is None
+            or now < self._next_word_at
+        ):
+            return False
+        if self.visible_words >= self.word_count:
+            self._next_word_at = None
+            return False
+        self.visible_words += 1
+        self._pending_display = True
+        self._next_word_at = None
+        return True
+
+    def mark_presented(self, now: float, *, transfer_seconds: float = 0.0) -> None:
+        if not self._pending_display:
+            return
+        if transfer_seconds < 0:
+            raise ValueError("Caption transfer timing cannot be negative")
+        self._pending_display = False
+        if self.visible_words >= self.word_count:
+            self._next_word_at = None
+            return
+        # Target the interval between completed e-ink frames, while leaving
+        # every prefix calmly readable after the previous transfer.  This is
+        # especially important when the first runtime frame takes the slower
+        # full-refresh path.
+        minimum_hold = min(self.word_seconds, 0.6)
+        delay = max(minimum_hold, self.word_seconds - transfer_seconds)
+        self._next_word_at = now + delay
+
+
 class RuntimeController:
     """Animate the selected scene while coalescing authoritative updates."""
 
@@ -847,6 +933,7 @@ class RuntimeController:
         renderer: FrameRenderer,
         policy: Optional[RuntimePolicy] = None,
         reaction_random: Optional[Callable[[], float]] = None,
+        caption_choice: Optional[Callable[[Sequence[str]], str]] = None,
     ):
         self.display = display
         self.renderer = renderer
@@ -854,6 +941,9 @@ class RuntimeController:
         self.projector = ProjectionEngine(self.policy)
         self.arbitrator = SceneArbitrator(self.projector, self.policy)
         self.animator = SceneAnimator(self.policy, reaction_random)
+        self.caption_animator = CaptionAnimator(
+            self.policy.caption_word_seconds, caption_choice
+        )
 
     @staticmethod
     def _presentation_signature(snapshot: RuntimeSnapshot) -> Tuple[Any, ...]:
@@ -907,8 +997,11 @@ class RuntimeController:
         loop = asyncio.get_running_loop()
         active_key = None
         active_signature = None
-        next_frame_at: Optional[float] = None
-        last_frame_at: Optional[float] = None
+        next_face_at: Optional[float] = None
+        pending_face: Optional[AnimationStep] = None
+        visible_face: Optional[AnimationStep] = None
+        chrome_due_at: Optional[float] = None
+        retry_at: Optional[float] = None
         first_runtime_frame = True
         try:
             while not stop.is_set():
@@ -921,44 +1014,64 @@ class RuntimeController:
                         active_key = key
                         active_signature = self._presentation_signature(choice.snapshot)
                         self.animator.activate(choice.scene, choice.snapshot)
-                        next_frame_at = now
+                        self.caption_animator.activate(choice.scene)
+                        pending_face = self.animator.current_step()
+                        visible_face = None
+                        next_face_at = None
+                        chrome_due_at = None
+                        retry_at = None
                     else:
                         signature = self._presentation_signature(choice.snapshot)
                         if signature != active_signature:
                             active_signature = signature
-                            if next_frame_at is None:
-                                earliest = now
-                                if last_frame_at is not None:
-                                    earliest = max(
-                                        earliest,
-                                        last_frame_at
-                                        + self.policy.scene_specs[
-                                            choice.scene
-                                        ].frame_seconds,
-                                    )
-                                next_frame_at = earliest
+                            chrome_due_at = now
                         if full_charge_due and choice.scene == RuntimeScene.CHARGING:
-                            next_frame_at = now
+                            pending_face = self.animator.current_step()
+                            next_face_at = None
 
-                    if next_frame_at is not None and now >= next_frame_at:
-                        step = self.animator.current_step()
-                        catalog_size = len(replay_sequence(choice.scene))
+                    self.caption_animator.advance_if_due(now)
+                    if (
+                        pending_face is None
+                        and next_face_at is not None
+                        and now >= next_face_at
+                    ):
+                        pending_face = self.animator.current_step()
+                        next_face_at = None
+
+                    chrome_due = chrome_due_at is not None and now >= chrome_due_at
+                    render_pending = bool(
+                        pending_face is not None
+                        or self.caption_animator.pending_display
+                        or chrome_due
+                    )
+                    retry_ready = retry_at is None or now >= retry_at
+                    if render_pending and retry_ready:
+                        step = pending_face or visible_face
+                        if step is None:
+                            raise RuntimeError("Caption frame has no visible face")
+                        face_was_pending = pending_face is not None
+                        caption_was_pending = self.caption_animator.pending_display
                         frame = RuntimeFrame(
                             choice.scene,
                             step.expression,
                             step.sequence_index,
                             choice.snapshot,
+                            self.caption_animator.caption,
+                            self.caption_animator.visible_words,
                         )
                         logger.info(
-                            "Screen runtime frame: %s %d/%d %s%s",
+                            "Screen runtime frame: %s %d/%d %s%s caption %d/%d",
                             choice.scene.value,
                             step.sequence_index + 1,
-                            catalog_size,
+                            len(replay_sequence(choice.scene)),
                             step.expression,
                             " [{}]".format(step.kind) if step.kind != "base" else "",
+                            self.caption_animator.visible_words,
+                            self.caption_animator.word_count,
                         )
                         try:
                             image = self.renderer.render_runtime(frame)
+                            submitted_at = loop.time()
                             await self.display.show(
                                 image,
                                 refresh_mode=(
@@ -973,20 +1086,48 @@ class RuntimeController:
                             logger.warning(
                                 "Screen runtime frame failed; retrying: %s", exc
                             )
-                            next_frame_at = loop.time() + max(
+                            retry_at = loop.time() + max(
                                 0.05, self.policy.reconnect_seconds
                             )
                         else:
+                            presented_at = loop.time()
+                            retry_at = None
                             self.arbitrator.mark_presented(choice)
-                            self.animator.mark_presented(step)
+                            if face_was_pending:
+                                visible_face = step
+                                self.animator.mark_presented(step)
+                                pending_face = None
+                                next_face_at = (
+                                    presented_at + step.dwell_seconds
+                                    if self.animator.has_next_frame
+                                    else None
+                                )
+                            if caption_was_pending:
+                                self.caption_animator.mark_presented(
+                                    presented_at,
+                                    transfer_seconds=presented_at - submitted_at,
+                                )
+                            if chrome_due:
+                                chrome_due_at = None
                             first_runtime_frame = False
-                            last_frame_at = loop.time()
-                            if self.animator.has_next_frame:
-                                next_frame_at = loop.time() + step.dwell_seconds
-                            else:
-                                next_frame_at = None
 
-                deadlines = [deadline for deadline in (next_frame_at,) if deadline]
+                render_pending = bool(
+                    pending_face is not None
+                    or self.caption_animator.pending_display
+                    or (chrome_due_at is not None and chrome_due_at <= loop.time())
+                )
+                if render_pending and retry_at is not None:
+                    deadlines = [retry_at]
+                else:
+                    deadlines = [
+                        deadline
+                        for deadline in (
+                            next_face_at,
+                            self.caption_animator.next_word_at,
+                            chrome_due_at,
+                        )
+                        if deadline is not None
+                    ]
                 resolution = self.arbitrator.resolution_deadline()
                 if resolution is not None:
                     deadlines.append(resolution)
@@ -1037,6 +1178,7 @@ class RuntimeController:
         first_runtime_frame = True
         for scene in RuntimeScene:
             sequence = replay_sequence(scene)
+            caption = SCENE_CAPTIONS[scene][0]
             for index, expression in enumerate(sequence):
                 ordinal += 1
                 logger.info(
@@ -1049,7 +1191,14 @@ class RuntimeController:
                     expression,
                 )
                 image = self.renderer.render_runtime(
-                    RuntimeFrame(scene, expression, index, snapshot)
+                    RuntimeFrame(
+                        scene,
+                        expression,
+                        index,
+                        snapshot,
+                        caption,
+                        len(caption.split()),
+                    )
                 )
                 rendered.append(image)
                 await self.display.show(
@@ -1079,6 +1228,85 @@ class RuntimeController:
             output.parent.mkdir(parents=True, exist_ok=True)
             atlas.save(str(output), format="PNG")
             logger.info("Screen replay atlas: %s", output)
+
+    def caption_proof_frames(
+        self, snapshot: RuntimeSnapshot
+    ) -> Tuple[RuntimeFrame, ...]:
+        """Build exhaustive deterministic face, caption, and reveal proof frames."""
+
+        frames: List[RuntimeFrame] = []
+        for scene in RuntimeScene:
+            captions = SCENE_CAPTIONS[scene]
+            face_caption = captions[0]
+            for index, expression in enumerate(replay_sequence(scene)):
+                frames.append(
+                    RuntimeFrame(
+                        scene,
+                        expression,
+                        index,
+                        snapshot,
+                        face_caption,
+                        len(face_caption.split()),
+                    )
+                )
+
+            expression = SCENE_SEQUENCES[scene][0]
+            for caption in captions:
+                frames.append(
+                    RuntimeFrame(
+                        scene,
+                        expression,
+                        0,
+                        snapshot,
+                        caption,
+                        len(caption.split()),
+                    )
+                )
+
+            representative = max(
+                captions, key=lambda caption: (len(caption.split()), len(caption))
+            )
+            for visible_words in range(1, len(representative.split())):
+                frames.append(
+                    RuntimeFrame(
+                        scene,
+                        expression,
+                        0,
+                        snapshot,
+                        representative,
+                        visible_words,
+                    )
+                )
+        return tuple(frames)
+
+    def render_caption_proof(
+        self, snapshot: RuntimeSnapshot, *, atlas_output: str
+    ) -> None:
+        """Write the exhaustive caption proof without a 200-frame hardware run."""
+
+        if not atlas_output:
+            raise ValueError("Caption proof requires --atlas-output")
+        frames = self.caption_proof_frames(snapshot)
+        rendered = [self.renderer.render_runtime(frame) for frame in frames]
+        columns = 4
+        rows = (len(rendered) + columns - 1) // columns
+        atlas = Image.new(
+            "1",
+            (self.renderer.width * columns, self.renderer.height * rows),
+            255,
+        )
+        for index, image in enumerate(rendered):
+            atlas.paste(
+                image,
+                (
+                    (index % columns) * self.renderer.width,
+                    (index // columns) * self.renderer.height,
+                ),
+            )
+        output = Path(atlas_output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        atlas.save(str(output), format="PNG")
+        logger.info("Screen caption proof: %s (%d frames)", output, len(frames))
 
 
 def synthetic_snapshot(device_name: str = "TOTEM") -> RuntimeSnapshot:

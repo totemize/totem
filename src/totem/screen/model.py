@@ -112,6 +112,170 @@ SCENE_SEQUENCES = {
 }
 
 
+# Captions are presentation copy, not state.  The runtime chooses one only when
+# an authoritative scene admission begins and holds it until that admission
+# ends.  Keeping the closed catalogue beside the face catalogue makes drift
+# visible in tests and deterministic proof output.
+SCENE_CAPTIONS = {
+    RuntimeScene.ALONE_IDLE: (
+        "nothing moved. i checked.",
+        "nobody here. suspicious.",
+        "supervising the empty.",
+        "practicing peripheral vision.",
+        "silence: fully operational.",
+        "counting invisible guests.",
+        "all quiet. too organized.",
+        "alone, statistically.",
+        "the room remains undefeated.",
+        "just me and the air.",
+    ),
+    RuntimeScene.PEER_SEEN: (
+        "the silence has an address.",
+        "a signal cleared its throat.",
+        "something joined the weather.",
+        "the air brought company.",
+        "nearby just got specific.",
+        "someone pinged the void.",
+        "the room gained a pulse.",
+        "company, via atmosphere.",
+        "a stranger in the static.",
+        "the air blinked first.",
+    ),
+    RuntimeScene.CANDIDATE: (
+        "oh. nice bandwidth.",
+        "your latency suits you.",
+        "well. aren't you well-routed.",
+        "cute keys. keep talking.",
+        "you make mesh look good.",
+        "your packets have dimples.",
+        "strong signal. nice face.",
+        "that's a charming npub.",
+        "you seem worth a retry.",
+        "care to lose a packet?",
+    ),
+    RuntimeScene.NEWLY_RECOGNIZED: (
+        "officially interesting.",
+        "filed under: keep.",
+        "you may enter the lore.",
+        "friendship checksum passed.",
+        "weirdness accepted.",
+        "you've joined the plot.",
+        "the handshake has a sequel.",
+        "known, in the good way.",
+        "one of us, approximately.",
+        "recognition suits you.",
+    ),
+    RuntimeScene.RETURNING_RECOGNIZED: (
+        "my favorite recurring signal.",
+        "ah. a known variable.",
+        "same weird. excellent.",
+        "familiar static. good.",
+        "the plot remembers you.",
+        "still you. reassuring.",
+        "recognized at first packet.",
+        "back in local orbit.",
+        "your chair is still imaginary.",
+        "you again. statistically delightful.",
+    ),
+    RuntimeScene.SYNC_RUNNING: (
+        "comparing secret handwriting…",
+        "trading pocket universes…",
+        "aligning our footnotes…",
+        "passing notes through the air…",
+        "finding what each missed…",
+        "our margins are talking…",
+        "quietly swapping context…",
+        "notes in diplomatic transit…",
+        "reconciling tiny histories…",
+        "shuffling mutual evidence…",
+    ),
+    RuntimeScene.SYNC_SUCCEEDED: (
+        "our margins agree.",
+        "same gossip. fewer gaps.",
+        "the footnotes shook hands.",
+        "both sides remember.",
+        "differences politely resolved.",
+        "the missing bits arrived.",
+        "mutual context achieved.",
+        "our archives are speaking.",
+        "nothing left in transit.",
+        "we know what we know.",
+    ),
+    RuntimeScene.SYNC_INTERRUPTED: (
+        "the air dropped a sentence.",
+        "we were saying?",
+        "conversation misplaced.",
+        "weather ate the ending.",
+        "the middle went missing.",
+        "the signal changed its mind.",
+        "unfinished, not forgotten.",
+        "the air kept a souvenir.",
+        "physics declined to comment.",
+        "resume when weather permits.",
+    ),
+    RuntimeScene.NON_TOTEM_PEER: (
+        "those glasses prove nothing.",
+        "wrong handshake. nice disguise.",
+        "nice try, mysterious appliance.",
+        "not a totem. stylish, though.",
+        "credentials: mostly sunglasses.",
+        "the vibe lacks a signature.",
+        "incognito is not identity.",
+        "suspicion level: accessorized.",
+        "all glasses, no proof.",
+        "that handshake wore gloves.",
+    ),
+    RuntimeScene.CHARGING: (
+        "electrons, à la carte.",
+        "drinking organized lightning.",
+        "domestic lightning. lovely.",
+        "plugged into civilization.",
+        "conducting a tiny feast.",
+        "currently voltage-curious.",
+        "eating from the wall.",
+        "refilling the mischief.",
+        "complimentary electrons!",
+        "power, with table service.",
+    ),
+    RuntimeScene.LOW_BATTERY: (
+        "thinking in lowercase.",
+        "budgeting my eyebrows.",
+        "small thoughts only.",
+        "operating on implication.",
+        "choosing my blinks carefully.",
+        "running on punctuation.",
+        "keeping ideas pocket-sized.",
+        "conserving vowels.",
+        "short sentences, please.",
+        "essential mischief only.",
+    ),
+    RuntimeScene.CRITICAL_BATTERY: (
+        "no long words, please.",
+        "one blink. no promises.",
+        "vowels now optional.",
+        "please abbreviate everything.",
+        "emergency punctuation only.",
+        "barely enough for this face.",
+        "power is now theoretical.",
+        "using reserve eyebrows.",
+        "one percent. full dignity.",
+        "tell my notes i—",
+    ),
+    RuntimeScene.MESH_DEGRADED: (
+        "the neighborhood is mumbling.",
+        "everyone sounds far away.",
+        "static has opinions.",
+        "the air forgot some names.",
+        "neighbors speaking in ellipses.",
+        "the mesh misplaced a street.",
+        "signals wearing fog.",
+        "routes are feeling interpretive.",
+        "the air needs a map.",
+        "connectivity, now impressionist.",
+    ),
+}
+
+
 @dataclass(frozen=True)
 class AnimationReaction:
     """A bounded optional frame inserted into a deterministic base loop."""
@@ -190,6 +354,8 @@ class RuntimeFrame:
     expression: str
     sequence_index: int
     snapshot: RuntimeSnapshot
+    caption: str = ""
+    caption_word_count: int = 0
 
 
 @dataclass(frozen=True)

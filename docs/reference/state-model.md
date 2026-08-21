@@ -155,6 +155,24 @@ the main content changes. Header and footer text use a standard bold face, with
 modest synthetic emboldening only when no bold font is available, so the persistent
 chrome stays legible on the physical e-ink panel.
 
+Each authoritative scene admission also selects one of exactly ten approved
+captions from the closed `SCENE_CAPTIONS` catalogue. Selection is random but
+injectable for tests, excludes the caption used by that scene's previous
+admission, and remains fixed across face frames, charging reactions, snapshot
+polls, SSE wake-ups, and display retries. A later genuine admission may choose
+new copy; captions never select or prolong semantic state.
+
+The caption occupies a fixed one-line band below the character and at least
+three pixels above the footer rule. Its complete 8–9 px bold layout is centered
+once, then stable left-anchored prefixes reveal one word every 1.2 seconds, so
+existing words and the character never move. Caption and face deadlines are
+independent and share a display submission only when due together. The first
+runtime submission remains full; face, caption, and chrome changes afterward
+request partial refresh. `totem-screen proof-captions --atlas-output PATH`
+writes a deterministic 229-frame atlas containing all 130 complete captions,
+representative progressive prefixes, and every existing face-sequence frame
+without turning that exhaustive proof into a physical replay.
+
 The runtime selects a scene only from fresh authoritative snapshots. Animation
 advances within that selected scene and is interruptible as soon as arbitration
 admits a different scene; it does not cycle through semantic states. Charging
@@ -619,6 +637,7 @@ The deployed defaults and their environment overrides are:
 | `TOTEM_SCREEN_SNAPSHOT_POLL_SECONDS` | `15` | Reconcile a complete snapshot even when SSE is quiet. |
 | `TOTEM_SCREEN_RECONNECT_SECONDS` | `2` | Delay before reopening a failed event stream. |
 | `TOTEM_SCREEN_COALESCE_SECONDS` | `2.1` | Quiet window that collapses the normal two-second encounter ladder. |
+| `TOTEM_SCREEN_CAPTION_WORD_SECONDS` | `1.2` | Positive interval between stable progressive caption prefixes. |
 | `TOTEM_SCREEN_LOW_BATTERY_PERCENT` | `20` | Inclusive upper threshold for the low-battery scene. |
 | `TOTEM_SCREEN_CRITICAL_BATTERY_PERCENT` | `8` | Inclusive threshold for immediate critical-battery preemption. |
 | `TOTEM_SCREEN_SEQUENCE_RATES` | empty | Comma-separated `scene=seconds` per-frame overrides. |

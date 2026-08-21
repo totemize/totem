@@ -1,6 +1,8 @@
 """BDD-style contracts for the continuous Totem screen projection."""
 
 import asyncio
+import hashlib
+import json
 from pathlib import Path
 import re
 import tempfile
@@ -14,6 +16,7 @@ from totem.screen.display import DeviceManagerDisplay
 from totem.screen.model import (
     CHARGING_FULL_REACTION,
     CHARGING_REACTIONS,
+    SCENE_CAPTIONS,
     SCENE_SEQUENCES,
     PeerSnapshot,
     PowerSnapshot,
@@ -23,6 +26,9 @@ from totem.screen.model import (
     replay_sequence,
 )
 from totem.screen.render import (
+    CAPTION_FONT_SIZE,
+    CAPTION_FOOTER_GAP,
+    CAPTION_MIN_FONT_SIZE,
     FALLBACK_PERSISTENT_TEXT_STROKE,
     FONT_BOLD_CANDIDATES,
     PERSISTENT_ICON_STROKE,
@@ -31,6 +37,7 @@ from totem.screen.render import (
 )
 from totem.screen.readiness import SERVICE_SPECS, SyntheticReadinessMonitor
 from totem.screen.runtime import (
+    CaptionAnimator,
     ProjectionEngine,
     RuntimeController,
     RuntimePolicy,
@@ -107,6 +114,10 @@ EXPECTED_CHARGING_REACTIONS = (
     "(★‿★)⚡",
 )
 
+EXPECTED_CAPTION_CATALOG_SHA256 = (
+    "c00c9133bef5fc0d7b017eb7a510d45703771eedb10b8fc0e612ee18a282d5c8"
+)
+
 
 def _snapshot(
     *peers,
@@ -161,6 +172,22 @@ def test_given_the_product_catalog_when_loaded_then_only_exact_sequences_exist()
     assert SCENE_SEQUENCES == EXPECTED_SEQUENCES
     assert replay_sequence(RuntimeScene.CHARGING) == (
         EXPECTED_SEQUENCES[RuntimeScene.CHARGING] + EXPECTED_CHARGING_REACTIONS
+    )
+
+
+def test_given_caption_catalog_when_loaded_then_every_exact_option_is_present():
+    """Given approved copy, when loaded, then no scene or phrase can drift."""
+
+    assert set(SCENE_CAPTIONS) == set(RuntimeScene)
+    assert all(len(SCENE_CAPTIONS[scene]) == 10 for scene in RuntimeScene)
+    assert sum(len(options) for options in SCENE_CAPTIONS.values()) == 130
+    payload = json.dumps(
+        [[scene.value, list(SCENE_CAPTIONS[scene])] for scene in RuntimeScene],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == (
+        EXPECTED_CAPTION_CATALOG_SHA256
     )
     assert all(
         replay_sequence(scene) == sequence
@@ -297,6 +324,85 @@ def test_given_note_count_is_unknown_then_footer_does_not_invent_zero():
 
     assert renderer.footer_counts(snapshot)[-1] is None
     assert renderer.footer_text(snapshot).endswith(" / ?")
+
+
+def test_given_all_captions_and_prefixes_when_rendered_then_the_band_is_safe():
+    """Given approved copy, when revealed, then it stays fixed and separated."""
+
+    renderer = FrameRenderer()
+    snapshot = synthetic_snapshot("metot")
+    footer_top = renderer.height - 20
+    caption_bounds = renderer._caption_bounds(footer_top)
+    assert caption_bounds[3] == footer_top - CAPTION_FOOTER_GAP
+
+    for scene in RuntimeScene:
+        expression = SCENE_SEQUENCES[scene][0]
+        for caption in SCENE_CAPTIONS[scene]:
+            origin = None
+            for visible_words in range(1, len(caption.split()) + 1):
+                frame = RuntimeFrame(
+                    scene,
+                    expression,
+                    0,
+                    snapshot,
+                    caption,
+                    visible_words,
+                )
+                image = renderer.render_runtime(frame)
+                assert image.mode == "1"
+                assert image.size == (250, 122)
+                caption_ink = _ink_bounds(image.crop(caption_bounds))
+                assert caption_ink is not None
+                assert caption_ink[1] >= 0
+                assert caption_ink[3] <= caption_bounds[3] - caption_bounds[1]
+                if origin is None:
+                    origin = caption_ink[0]
+                assert caption_ink[0] == origin
+
+                current_face = image.crop((0, 21, image.width, caption_bounds[1]))
+                current_footer = image.crop((0, footer_top, image.width, image.height))
+                if visible_words > 1:
+                    previous = renderer.render_runtime(
+                        RuntimeFrame(
+                            scene,
+                            expression,
+                            0,
+                            snapshot,
+                            caption,
+                            visible_words - 1,
+                        )
+                    )
+                    assert (
+                        current_face.tobytes()
+                        == previous.crop(
+                            (0, 21, image.width, caption_bounds[1])
+                        ).tobytes()
+                    )
+                    assert (
+                        current_footer.tobytes()
+                        == previous.crop(
+                            (0, footer_top, image.width, image.height)
+                        ).tobytes()
+                    )
+
+            draw = ImageDraw.Draw(Image.new("1", (250, 122), 255))
+            font, _, _, ink = renderer._caption_layout(draw, caption, caption_bounds)
+            assert CAPTION_MIN_FONT_SIZE <= font.size <= CAPTION_FONT_SIZE
+            assert caption_bounds[0] <= ink[0] < ink[2] <= caption_bounds[2]
+            assert caption_bounds[1] <= ink[1] < ink[3] <= caption_bounds[3]
+
+    # The reserved clearance above the footer rule contains no caption ink.
+    sample = renderer.render_runtime(
+        RuntimeFrame(
+            RuntimeScene.ALONE_IDLE,
+            SCENE_SEQUENCES[RuntimeScene.ALONE_IDLE][0],
+            0,
+            snapshot,
+            SCENE_CAPTIONS[RuntimeScene.ALONE_IDLE][0],
+            4,
+        )
+    )
+    assert _ink_bounds(sample.crop((0, caption_bounds[3], 250, footer_top))) is None
 
 
 def test_given_persistent_chrome_when_rendered_then_normal_bold_is_balanced():
@@ -1021,6 +1127,82 @@ def test_given_interactive_scenes_then_exact_dwell_and_loop_policy_is_explicit()
         CHARGING_FULL_REACTION.expression,
         CHARGING_FULL_REACTION.dwell_seconds,
     ) == ("(★‿★)⚡", 10.0)
+    assert RuntimePolicy().caption_word_seconds == 1.2
+
+
+def test_given_caption_admissions_then_selection_is_stable_and_non_repeating():
+    """Given scene entries, when copy is chosen, then one admission holds it."""
+
+    calls = []
+
+    def first(options):
+        calls.append(tuple(options))
+        return options[0]
+
+    animator = CaptionAnimator(word_seconds=1.2, chooser=first)
+    animator.activate(RuntimeScene.ALONE_IDLE)
+    first_caption = animator.caption
+
+    assert animator.visible_words == 1
+    assert animator.visible_text == first_caption.split()[0]
+    assert animator.pending_display is True
+    # Reads, face frames, and snapshot reconciliation do not choose again.
+    assert animator.caption == first_caption
+    assert len(calls) == 1
+
+    animator.activate(RuntimeScene.PEER_SEEN)
+    animator.activate(RuntimeScene.ALONE_IDLE)
+    assert len(calls) == 3
+    assert first_caption not in calls[-1]
+    assert animator.caption != first_caption
+
+
+def test_given_caption_words_then_timing_advances_only_after_display_success():
+    """Given a prefix, when display fails or time is early, then it cannot skip."""
+
+    animator = CaptionAnimator(
+        word_seconds=1.2,
+        chooser=lambda options: "nothing moved. i checked.",
+    )
+    animator.activate(RuntimeScene.ALONE_IDLE)
+
+    # The first word remains retryable until a successful display commit.
+    assert animator.advance_if_due(100.0) is False
+    assert animator.visible_text == "nothing"
+    animator.mark_presented(10.0)
+    assert animator.next_word_at == pytest.approx(11.2)
+    assert animator.advance_if_due(11.199) is False
+    assert animator.advance_if_due(11.2) is True
+    assert animator.visible_text == "nothing moved."
+    assert animator.advance_if_due(99.0) is False
+
+    animator.mark_presented(11.2)
+    assert animator.next_word_at == pytest.approx(12.4)
+
+    seeded = CaptionAnimator(
+        word_seconds=1.2,
+        chooser=lambda options: "nothing moved. i checked.",
+    )
+    seeded.activate(RuntimeScene.ALONE_IDLE)
+    seeded.mark_presented(20.0, transfer_seconds=2.3)
+    # A slow full seed still leaves the first word visibly settled before the
+    # next partial update, rather than immediately chasing the overdue timer.
+    assert seeded.next_word_at == pytest.approx(20.6)
+
+
+def test_given_invalid_caption_configuration_then_it_fails_explicitly():
+    with pytest.raises(ValueError, match="Caption word timing"):
+        RuntimePolicy(caption_word_seconds=0)
+    with pytest.raises(ValueError, match="Caption word timing"):
+        CaptionAnimator(word_seconds=0)
+
+    animator = CaptionAnimator(chooser=lambda options: "not approved")
+    with pytest.raises(ValueError, match="unavailable option"):
+        animator.activate(RuntimeScene.ALONE_IDLE)
+    valid = CaptionAnimator(chooser=lambda options: options[0])
+    valid.activate(RuntimeScene.ALONE_IDLE)
+    with pytest.raises(ValueError, match="transfer timing"):
+        valid.mark_presented(0, transfer_seconds=-1)
 
 
 def test_given_candidate_encounter_then_wink_plays_once_and_final_blush_holds():
@@ -1166,6 +1348,117 @@ def test_given_runtime_run_when_boot_hands_off_then_full_seeds_partial_animation
     assert display.refresh_modes == ["full", "partial"]
 
 
+def test_given_caption_deadlines_then_words_reveal_without_advancing_the_face():
+    """Given a slow face, when words arrive, then only caption ink changes."""
+
+    async def scenario():
+        stop = asyncio.Event()
+
+        class SingleSnapshotSource:
+            async def updates(self):
+                yield SourceUpdate(_snapshot())
+                await asyncio.Event().wait()
+
+        display = FakeDeviceManager()
+        original_show = display.show
+
+        async def show(image, refresh_mode="full"):
+            await original_show(image, refresh_mode)
+            if len(display.images) == 3:
+                stop.set()
+
+        display.show = show
+        choices = []
+
+        def choose(options):
+            choices.append(tuple(options))
+            return options[0]
+
+        policy = RuntimePolicy(
+            coalesce_seconds=0,
+            caption_word_seconds=0.005,
+        ).with_frame_rates(("alone_idle=30",))
+        controller = RuntimeController(
+            display,
+            FrameRenderer(),
+            policy,
+            caption_choice=choose,
+        )
+        await asyncio.wait_for(controller.run(SingleSnapshotSource(), stop), timeout=1)
+        return display, choices
+
+    display, choices = asyncio.run(scenario())
+    renderer = FrameRenderer()
+    caption_bounds = renderer._caption_bounds(renderer.height - 20)
+    faces = [
+        image.crop((0, 21, image.width, caption_bounds[1])).tobytes()
+        for image in display.images
+    ]
+    captions = [image.crop(caption_bounds).tobytes() for image in display.images]
+
+    assert len(set(faces)) == 1
+    assert len(set(captions)) == 3
+    assert display.refresh_modes == ["full", "partial", "partial"]
+    assert len(choices) == 1
+
+
+def test_given_face_and_snapshot_updates_then_the_caption_clock_does_not_reset():
+    """Given repeated authority, when faces move, then the first prefix holds."""
+
+    async def scenario():
+        stop = asyncio.Event()
+        first_draw = asyncio.Event()
+
+        class RepeatedSnapshotSource:
+            async def updates(self):
+                snapshot = _snapshot()
+                yield SourceUpdate(snapshot)
+                await first_draw.wait()
+                yield SourceUpdate(snapshot, notification={"type": "wake"})
+                await asyncio.Event().wait()
+
+        display = FakeDeviceManager()
+        original_show = display.show
+
+        async def show(image, refresh_mode="full"):
+            await original_show(image, refresh_mode)
+            if len(display.images) == 1:
+                first_draw.set()
+            elif len(display.images) == 3:
+                stop.set()
+
+        display.show = show
+        choices = []
+
+        def choose(options):
+            choices.append(tuple(options))
+            return options[0]
+
+        policy = RuntimePolicy(
+            coalesce_seconds=0,
+            caption_word_seconds=30,
+        ).with_frame_rates(("alone_idle=0.005",))
+        controller = RuntimeController(
+            display,
+            FrameRenderer(),
+            policy,
+            caption_choice=choose,
+        )
+        await asyncio.wait_for(
+            controller.run(RepeatedSnapshotSource(), stop), timeout=1
+        )
+        return display, choices
+
+    display, choices = asyncio.run(scenario())
+    renderer = FrameRenderer()
+    caption_bounds = renderer._caption_bounds(renderer.height - 20)
+    captions = [image.crop(caption_bounds).tobytes() for image in display.images]
+
+    assert len(set(captions)) == 1
+    assert len(choices) == 1
+    assert display.refresh_modes == ["full", "partial", "partial"]
+
+
 def test_given_higher_priority_state_then_current_animation_is_interrupted_now():
     """Given candidate motion, when sync starts, then no candidate timer blocks it."""
 
@@ -1201,6 +1494,7 @@ def test_given_higher_priority_state_then_current_animation_is_interrupted_now()
             FrameRenderer(),
             policy,
             reaction_random=lambda: 0.99,
+            caption_choice=lambda options: options[0],
         )
         await asyncio.wait_for(controller.run(StateSource(), stop), timeout=1)
         return display
@@ -1213,6 +1507,8 @@ def test_given_higher_priority_state_then_current_animation_is_interrupted_now()
             EXPECTED_SEQUENCES[RuntimeScene.CANDIDATE][0],
             0,
             _snapshot(PeerSnapshot("peer", 1, probe_verdict="candidate")),
+            SCENE_CAPTIONS[RuntimeScene.CANDIDATE][0],
+            1,
         )
     )
     syncing = renderer.render_runtime(
@@ -1221,6 +1517,8 @@ def test_given_higher_priority_state_then_current_animation_is_interrupted_now()
             EXPECTED_SEQUENCES[RuntimeScene.SYNC_RUNNING][0],
             0,
             _snapshot(PeerSnapshot("peer", 1, sync_state="running")),
+            SCENE_CAPTIONS[RuntimeScene.SYNC_RUNNING][0],
+            1,
         )
     )
 
@@ -1380,11 +1678,72 @@ def test_given_replay_command_when_run_then_refreshes_are_seeded_and_exported(
         assert image.size == (renderer.width * 4, renderer.height * expected_rows)
 
 
+def test_given_caption_proof_when_rendered_then_every_phrase_and_prefix_exists(
+    tmp_path,
+):
+    """Given deterministic proof, when exported, then all copy is inspectable."""
+
+    display = FakeDeviceManager()
+    renderer = FrameRenderer()
+    controller = RuntimeController(display, renderer)
+    snapshot = synthetic_snapshot("metot")
+    frames = controller.caption_proof_frames(snapshot)
+    assert len(frames) == 229
+
+    complete = {
+        (frame.scene, frame.caption)
+        for frame in frames
+        if frame.caption_word_count == len(frame.caption.split())
+    }
+    assert complete.issuperset(
+        {
+            (scene, caption)
+            for scene in RuntimeScene
+            for caption in SCENE_CAPTIONS[scene]
+        }
+    )
+    for scene in RuntimeScene:
+        representative = max(
+            SCENE_CAPTIONS[scene],
+            key=lambda caption: (len(caption.split()), len(caption)),
+        )
+        assert {
+            frame.caption_word_count
+            for frame in frames
+            if frame.scene == scene and frame.caption == representative
+        }.issuperset(range(1, len(representative.split()) + 1))
+        for index, expression in enumerate(replay_sequence(scene)):
+            assert any(
+                frame.scene == scene
+                and frame.expression == expression
+                and frame.sequence_index == index
+                for frame in frames
+            )
+
+    atlas = tmp_path / "caption-proof.png"
+    controller.render_caption_proof(snapshot, atlas_output=str(atlas))
+    assert display.images == []
+    assert atlas.is_file()
+    with Image.open(str(atlas)) as image:
+        assert image.mode == "1"
+        expected_rows = (len(frames) + 3) // 4
+        assert image.size == (renderer.width * 4, renderer.height * expected_rows)
+
+
+def test_given_caption_proof_without_output_then_failure_is_explicit():
+    controller = RuntimeController(FakeDeviceManager(), FrameRenderer())
+    with pytest.raises(ValueError, match="requires --atlas-output"):
+        controller.render_caption_proof(synthetic_snapshot(), atlas_output="")
+
+
 def test_given_cli_when_parsed_then_both_replay_spellings_are_available():
     """Given operators, when invoking replay, then the proof command exists."""
 
     assert _parser().parse_args(["replay-states"]).command == "replay-states"
     assert _parser().parse_args(["replay-all-states"]).command == ("replay-all-states")
+    proof = _parser().parse_args(["proof-captions"])
+    assert proof.command == "proof-captions"
+    assert proof.caption_word_seconds == 1.2
 
 
 FEATURE_PATH = Path(__file__).parents[1] / "features" / "totem_screen.feature"
@@ -1442,6 +1801,20 @@ def _bind_replay():
     test_given_cli_when_parsed_then_both_replay_spellings_are_available()
 
 
+def _bind_captions():
+    test_given_caption_catalog_when_loaded_then_every_exact_option_is_present()
+    test_given_caption_admissions_then_selection_is_stable_and_non_repeating()
+    test_given_caption_words_then_timing_advances_only_after_display_success()
+    test_given_all_captions_and_prefixes_when_rendered_then_the_band_is_safe()
+
+
+def _bind_caption_proof():
+    with tempfile.TemporaryDirectory(prefix="totem-caption-bdd-", dir="/tmp") as root:
+        test_given_caption_proof_when_rendered_then_every_phrase_and_prefix_exists(
+            Path(root)
+        )
+
+
 # Lightweight scenario bindings keep the checked-in feature executable without
 # adding a second test framework.  Each binding invokes the same deterministic
 # contract exercised as a first-class pytest test above.
@@ -1469,6 +1842,10 @@ FEATURE_BINDINGS = {
     ),
     "Header and footer communicate persistent facts": _bind_header_footer,
     "Every state can be proofed on hardware": _bind_replay,
+    "Captions belong to authoritative scene admissions": _bind_captions,
+    "Every caption can be proofed without a long hardware replay": (
+        _bind_caption_proof
+    ),
     "Boot retains its lifecycle without avoidable full resets": (
         test_given_legacy_boot_when_rendered_then_only_its_first_frame_is_full
     ),

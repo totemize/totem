@@ -30,6 +30,11 @@ FONT_BOLD_CANDIDATES = (
 
 FALLBACK_PERSISTENT_TEXT_STROKE = 1
 PERSISTENT_ICON_STROKE = 1
+CAPTION_FONT_SIZE = 9
+CAPTION_MIN_FONT_SIZE = 8
+CAPTION_SIDE_MARGIN = 8
+CAPTION_FOOTER_GAP = 3
+CAPTION_BAND_HEIGHT = 12
 
 
 class VectorKaomoji:
@@ -593,7 +598,13 @@ class FrameRenderer:
             width=PERSISTENT_ICON_STROKE,
         )
         self._render_header(draw, frame.snapshot, header_bottom)
-        content_bounds = (8, header_bottom + 3, self.width - 8, footer_top - 3)
+        caption_bounds = self._caption_bounds(footer_top)
+        content_bounds = (
+            8,
+            header_bottom + 3,
+            self.width - 8,
+            caption_bounds[1] - 2,
+        )
         if frame.scene == RuntimeScene.NON_TOTEM_PEER:
             # The glasses are props, not a camera move.  Hold the face at one
             # left-side origin and one scale while the props extend rightward.
@@ -606,8 +617,79 @@ class FrameRenderer:
             )
         else:
             VectorKaomoji.draw(draw, frame.expression, content_bounds)
+        self._render_caption(draw, frame, caption_bounds)
         self._render_footer(draw, frame.snapshot, footer_top)
         return image.rotate(self.rotation)
+
+    def _caption_bounds(self, footer_top: int) -> Tuple[int, int, int, int]:
+        bottom = footer_top - CAPTION_FOOTER_GAP
+        return (
+            CAPTION_SIDE_MARGIN,
+            bottom - CAPTION_BAND_HEIGHT,
+            self.width - CAPTION_SIDE_MARGIN,
+            bottom,
+        )
+
+    @staticmethod
+    def _font_glyph(font, character: str):
+        try:
+            mask = font.getmask(character)
+        except (UnicodeEncodeError, ValueError) as exc:
+            raise ValueError(
+                "Caption font cannot encode {!r}".format(character)
+            ) from exc
+        return mask.size, bytes(mask)
+
+    @classmethod
+    def _require_caption_glyphs(cls, font, caption: str) -> None:
+        """Reject a font's missing-glyph box before it reaches e-ink."""
+
+        missing = cls._font_glyph(font, "\U0010ffff")
+        unsupported = sorted(
+            {
+                character
+                for character in caption
+                if not character.isspace()
+                and cls._font_glyph(font, character) == missing
+            }
+        )
+        if unsupported:
+            raise ValueError("Unsupported caption glyphs: {!r}".format(unsupported))
+
+    def _caption_layout(self, draw: ImageDraw.ImageDraw, caption: str, bounds):
+        """Return one fixed baseline derived from the complete caption."""
+
+        left, top, right, bottom = bounds
+        for size in range(CAPTION_FONT_SIZE, CAPTION_MIN_FONT_SIZE - 1, -1):
+            font = self._font(size, bold=True)
+            self._require_caption_glyphs(font, caption)
+            text_left, text_top, text_right, text_bottom = self._persistent_text_bbox(
+                draw, caption, font
+            )
+            width = text_right - text_left
+            height = text_bottom - text_top
+            if width <= right - left and height <= bottom - top:
+                x = left + (right - left - width) // 2 - text_left
+                y = top + (bottom - top - height) // 2 - text_top
+                return (
+                    font,
+                    x,
+                    y,
+                    (x + text_left, y + text_top, x + text_right, y + text_bottom),
+                )
+        raise ValueError("Caption does not fit the reserved band: {!r}".format(caption))
+
+    def _render_caption(self, draw, frame: RuntimeFrame, bounds) -> None:
+        if not frame.caption:
+            if frame.caption_word_count:
+                raise ValueError("Caption word count requires caption text")
+            return
+        words = frame.caption.split()
+        if not 1 <= frame.caption_word_count <= len(words):
+            raise ValueError("Caption word count is outside the selected caption")
+        visible = " ".join(words[: frame.caption_word_count])
+        font, x, y, _ = self._caption_layout(draw, frame.caption, bounds)
+        self._draw_persistent_text(draw, (x, y), visible, font)
 
     def _render_header(
         self,

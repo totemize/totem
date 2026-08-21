@@ -35,8 +35,9 @@ Metot's host variables set it to true, seed
 service renders through the local device-manager API, presents the boot splash
 before releasing the remaining services, then continuously projects
 authoritative control-plane/device/UPS snapshots. The deployed defaults use a
-2.1-second coalescing window, 15-second safety poll, 20% low and 8% critical
-battery thresholds. Metot pins scheduled full-refresh promotion to zero after
+2.1-second coalescing window, 15-second safety poll, 1.2-second progressive
+caption words, and 20% low and 8% critical battery thresholds. Metot pins
+scheduled full-refresh promotion to zero after
 the initial safe full frame, preserving the Pwnagotchi-compatible V4 partial
 path without periodic full-panel flashes.
 Inventory can also pin comma-separated sequence-rate, minimum-dwell, and
@@ -47,7 +48,12 @@ Replay boot or every exact runtime frame without rebooting:
 ```bash
 ssh metot 'totem-screen replay-boot'
 ssh metot 'totem-screen replay-states --replay-frame-seconds 2'
+ssh metot 'totem-screen proof-captions --atlas-output /tmp/totem-captions.png'
 ```
+
+The caption proof writes its exhaustive atlas without submitting hundreds of
+frames to the physical panel. Normal runtime and the 49-frame face replay still
+use the safe first-full, later-partial display path.
 
 The device-manager package set includes `python3-smbus` for read-only PiSugar2
 telemetry. Inventory also declares the hardware interfaces each host requires.

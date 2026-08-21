@@ -85,6 +85,20 @@ Feature: Continuous Totem e-ink presentation
     And its first frame seeds a full refresh before later partial refreshes
     And an optional PNG atlas can be exported
 
+  Scenario: Captions belong to authoritative scene admissions
+    Given every runtime scene has ten approved captions
+    When a scene admission chooses one caption
+    Then repeated snapshots and face frames retain that caption
+    And words appear as stable prefixes on their independent clock
+    And a later admission avoids immediately repeating the same caption
+
+  Scenario: Every caption can be proofed without a long hardware replay
+    Given the proof-captions command
+    When an operator exports its deterministic atlas
+    Then all 130 complete captions are rendered
+    And representative word prefixes and every face sequence are included
+    And captions remain inside the fixed band above the unchanged footer
+
   Scenario: Boot retains its lifecycle without avoidable full resets
     Given the legacy splash and readiness checklist
     When each boot transition is rendered

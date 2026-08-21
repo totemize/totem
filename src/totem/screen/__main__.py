@@ -33,7 +33,13 @@ def _parser() -> argparse.ArgumentParser:
         "command",
         nargs="?",
         default="run",
-        choices=("run", "replay-boot", "replay-states", "replay-all-states"),
+        choices=(
+            "run",
+            "replay-boot",
+            "replay-states",
+            "replay-all-states",
+            "proof-captions",
+        ),
     )
     parser.add_argument(
         "--device-api-url",
@@ -54,6 +60,12 @@ def _parser() -> argparse.ArgumentParser:
         "--runtime-reconnect-seconds",
         type=float,
         default=float(os.environ.get("TOTEM_SCREEN_RECONNECT_SECONDS", "2")),
+    )
+    parser.add_argument(
+        "--caption-word-seconds",
+        type=float,
+        default=float(os.environ.get("TOTEM_SCREEN_CAPTION_WORD_SECONDS", "1.2")),
+        help="seconds between progressive caption words",
     )
     parser.add_argument(
         "--coalesce-seconds",
@@ -115,7 +127,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--atlas-output",
-        help="optional PNG contact sheet written after replay-states",
+        help="PNG contact sheet written by replay or caption proof commands",
     )
     parser.add_argument(
         "--width",
@@ -155,6 +167,7 @@ async def _run(args) -> None:
         coalesce_seconds=args.coalesce_seconds,
         snapshot_poll_seconds=args.runtime_poll_seconds,
         reconnect_seconds=args.runtime_reconnect_seconds,
+        caption_word_seconds=args.caption_word_seconds,
         maximum_pending_scenes=args.maximum_pending_scenes,
     )
     policy = (
@@ -166,18 +179,21 @@ async def _run(args) -> None:
     snapshots = TotemSnapshotClient(bus, display)
     runtime = RuntimeController(display, renderer, policy)
 
-    if args.command in ("replay-states", "replay-all-states"):
+    if args.command in ("replay-states", "replay-all-states", "proof-captions"):
         try:
             snapshot = await snapshots.fetch()
         except SnapshotUnavailable:
             snapshot = synthetic_snapshot(
                 os.environ.get("TOTEM_SCREEN_DEVICE_NAME", "TOTEM")
             )
-        await runtime.replay_all_states(
-            snapshot,
-            frame_seconds=args.replay_frame_seconds,
-            atlas_output=args.atlas_output,
-        )
+        if args.command == "proof-captions":
+            runtime.render_caption_proof(snapshot, atlas_output=args.atlas_output)
+        else:
+            await runtime.replay_all_states(
+                snapshot,
+                frame_seconds=args.replay_frame_seconds,
+                atlas_output=args.atlas_output,
+            )
         return
 
     if args.command == "replay-boot":
