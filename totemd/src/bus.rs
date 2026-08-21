@@ -27,6 +27,7 @@ pub fn handle(msg: Value, st: &AppState) -> Value {
                 "fips": st.fips_json(),
                 "peers": st.peer_count(),
                 "recognized": st.recognized_count(),
+                "notes": st.note_count(),
                 "claimed": st.owner.owner().is_some(),
                 "events": st.counters(),
             });
@@ -68,6 +69,11 @@ mod tests {
         assert_eq!(r["status"]["version"], env!("CARGO_PKG_VERSION"));
         assert_eq!(r["status"]["config"]["befriend"], "ask");
         assert_eq!(r["status"]["claimed"], false);
+        assert!(r["status"]["notes"].is_null());
+
+        st.set_note_count(Some(42));
+        let r = handle(json!({"type": "totem.status.get"}), &st);
+        assert_eq!(r["status"]["notes"], 42);
     }
 
     #[test]

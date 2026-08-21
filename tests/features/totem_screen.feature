@@ -76,7 +76,7 @@ Feature: Continuous Totem e-ink presentation
     When a runtime frame is drawn
     Then the device name is at the left of the header
     And the FIPS icon is left of the rightmost battery icon
-    And the footer orders mesh size / direct peers / recognized Totems
+    And the footer orders mesh size / direct peers / recognized friends, with notes rightmost
 
   Scenario: Every state can be proofed on hardware
     Given the replay-states command

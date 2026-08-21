@@ -29,6 +29,7 @@ working environment.
 
 | Date | Summary |
 |------|---------|
+| [2026-08-21 — authoritative footer note count](journal/2026-08-21.md#authoritative-footer-note-count) | Replaced the friend star with `[•]`, added the cached kind-1 note count at bottom right, and physically verified live `404` rendering on metot. |
 | [2026-08-21 — interactive face animations](journal/2026-08-21.md#authoritative-interactive-face-animations) | Added state-bound idle, charging, sync, suspicious-peer, and flirty-candidate motion; deterministic 49-frame replay and [camera proof](proofs/2026-08-21/interactive-animations/README.md) passed on metot with a fixed left-side glasses sequence. |
 | [2026-08-21 — V4 e-ink quality](journal/2026-08-21.md#waveshare-v4-contrast-and-flash-correction) | Hardware A/B on metot identified the old-plane rewrite as the contrast regression; the Pwnagotchi-compatible partial waveform stayed crisp through 201 updates with no scheduled full flash. |
 | [2026-08-20 — runtime face renderer](journal/2026-08-20.md#totem-runtime-face-renderer-and-v4-partial-refresh) | Added the authoritative 28-frame runtime projection, durable recognition history, cancellation tombstones, efficient V4 partial refresh with cadence 20, metot-only convergent deployment, and [physical camera proof](proofs/2026-08-20/totem-renderer/README.md). |

@@ -175,6 +175,7 @@ class RuntimeSnapshot:
     mesh_size: int = 0
     peer_count: int = 0
     recognized_count: int = 0
+    note_count: Optional[int] = None
     power: PowerSnapshot = field(default_factory=PowerSnapshot)
     peers: Tuple[PeerSnapshot, ...] = ()
     device_managers: int = 0

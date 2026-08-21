@@ -299,6 +299,7 @@ class TotemSnapshotClient:
             # cannot mix a tombstone scene with older status counters.
             peer_count=len(live_peers),
             recognized_count=sum(1 for peer in live_peers if peer.recognized),
+            note_count=self._optional_count(status.get("notes")),
             power=self._power(ups),
             peers=peers,
             device_managers=len(managers) if isinstance(managers, list) else 0,
@@ -867,6 +868,7 @@ class RuntimeController:
             snapshot.mesh_size,
             snapshot.peer_count,
             snapshot.recognized_count,
+            snapshot.note_count,
         )
 
     @staticmethod
@@ -1088,5 +1090,6 @@ def synthetic_snapshot(device_name: str = "TOTEM") -> RuntimeSnapshot:
         mesh_size=12,
         peer_count=3,
         recognized_count=2,
+        note_count=404,
         power=PowerSnapshot(True, 75.0, False),
     )

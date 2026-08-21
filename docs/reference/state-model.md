@@ -148,10 +148,12 @@ one closed `RuntimeScene`; neither enum becomes device-state authority.
 
 Every runtime frame also has a persistent header (device name, FIPS health,
 and rightmost battery) and a footer ordered as mesh size, direct peers, and
-recognized peers, separated by literal slashes. Those counts remain badges
-while the main content changes. Header and footer text use a standard bold face,
-with modest synthetic emboldening only when no bold font is available, so the
-persistent chrome stays legible on the physical e-ink panel.
+recognized friends (`[•]`) on the left, separated by literal slashes. A paper-note
+glyph and the cached kind-1 note count are aligned to the far right; an unavailable
+count is shown as `?`, never as a fabricated zero. Those counts remain badges while
+the main content changes. Header and footer text use a standard bold face, with
+modest synthetic emboldening only when no bold font is available, so the persistent
+chrome stays legible on the physical e-ink panel.
 
 The runtime selects a scene only from fresh authoritative snapshots. Animation
 advances within that selected scene and is interruptible as soon as arbitration
@@ -473,7 +475,8 @@ Current authority is sparse:
 |---|---|
 | Relay unavailable/listening | Boot TCP probe only |
 | Encounter sync active/result | Per-peer sync state and pushes |
-| Relay event count | Specified in `totem.status.get`, not implemented |
+| Kind-1 note count | `totemd` caches a bounded `strfry scan --count` query every 15 seconds and publishes it as `totem.status.get.status.notes`; query failure is represented as `null` |
+| Total relay event count | Specified in `totem.status.get`, not implemented |
 | Relay clients connected | Gap |
 | Note received/published | Gap |
 | Events imported/exported by sync | Reserved in spec when runner exposes reliable counts; not present now |
@@ -644,8 +647,8 @@ Prioritize these additions:
 6. **Host-health normalization.** Expose board temperature/throttle flags,
    resource pressure, clock validity, and filesystem capacity with
    device-policy thresholds.
-7. **Relay/storage facts.** Add event counts, event deltas per sync, client
-   activity, and remaining storage.
+7. **Relay/storage facts.** Extend the available kind-1 note count with total
+   event counts, event deltas per sync, client activity, and remaining storage.
 8. **System intent.** Publish boot-complete, updating, shutdown, and reboot
    intent early enough for the e-ink process to render them.
 9. **Hardware event bridge.** Connect the Python device-event channel to the

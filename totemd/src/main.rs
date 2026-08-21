@@ -18,6 +18,7 @@ mod http;
 mod owner;
 mod probe;
 mod profile;
+mod relay;
 mod state;
 mod sync;
 mod web;

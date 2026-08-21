@@ -37,6 +37,9 @@ pub struct AppState {
     pub tx: broadcast::Sender<Value>,
     /// Push counters by type — surfaced via `totem.status.get`.
     counters: Mutex<HashMap<String, u64>>,
+    /// Cached kind-1 relay count; `None` means the last count query failed or
+    /// has not completed yet, never a fabricated zero.
+    note_count: Mutex<Option<u64>>,
     /// Recent pushes for `totem.events.get`; process-local and oldest first.
     event_history: Mutex<VecDeque<Value>>,
     peers: Mutex<HashMap<String, PeerInfo>>,
@@ -96,6 +99,7 @@ impl AppState {
             verdicts: ProbeVerdicts::default(),
             tx,
             counters: Mutex::new(HashMap::new()),
+            note_count: Mutex::new(None),
             event_history: Mutex::new(VecDeque::with_capacity(EVENT_HISTORY_CAPACITY)),
             peers: Mutex::new(HashMap::new()),
             recognized: Mutex::new(HashMap::new()),
@@ -141,6 +145,14 @@ impl AppState {
 
     pub fn counters(&self) -> HashMap<String, u64> {
         self.counters.lock().unwrap().clone()
+    }
+
+    pub fn note_count(&self) -> Option<u64> {
+        *self.note_count.lock().unwrap()
+    }
+
+    pub fn set_note_count(&self, count: Option<u64>) {
+        *self.note_count.lock().unwrap() = count;
     }
 
     pub fn event_history(&self) -> Vec<Value> {

@@ -554,16 +554,26 @@ class FrameRenderer:
         return image.rotate(self.rotation)
 
     @staticmethod
-    def footer_counts(snapshot: RuntimeSnapshot) -> Tuple[int, int, int]:
-        """Global mesh / direct FIPS peers / recognized Totems."""
+    def footer_counts(
+        snapshot: RuntimeSnapshot,
+    ) -> Tuple[int, int, int, Optional[int]]:
+        """Global mesh / direct peers / friends / kind-1 notes."""
 
-        return snapshot.mesh_size, snapshot.peer_count, snapshot.recognized_count
+        return (
+            snapshot.mesh_size,
+            snapshot.peer_count,
+            snapshot.recognized_count,
+            snapshot.note_count,
+        )
 
     @classmethod
     def footer_text(cls, snapshot: RuntimeSnapshot) -> str:
-        """The literal count order used beside the three distinct icons."""
+        """The literal count order used beside the four distinct icons."""
 
-        return " / ".join(str(value) for value in cls.footer_counts(snapshot))
+        return " / ".join(
+            "?" if value is None else str(value)
+            for value in cls.footer_counts(snapshot)
+        )
 
     def render_runtime(self, frame: RuntimeFrame) -> Image.Image:
         """Render the persistent header/footer around one exact scene frame."""
@@ -690,7 +700,10 @@ class FrameRenderer:
         top: int,
     ) -> None:
         font = self._font(11, bold=True)
-        values = self.footer_counts(snapshot)
+        mesh_size, peer_count, recognized_count, note_count = self.footer_counts(
+            snapshot
+        )
+        values = (mesh_size, peer_count, recognized_count)
         cursor = 6
         icon_y = top + 5
         _, text_top, _, text_bottom = self._persistent_text_bbox(draw, "0", font)
@@ -709,6 +722,12 @@ class FrameRenderer:
             if index < len(values) - 1:
                 self._draw_persistent_text(draw, (cursor, text_y), "/", font)
                 cursor += self._persistent_text_size(draw, "/", font)[0] + 5
+
+        note_label = "?" if note_count is None else str(note_count)
+        note_width = self._persistent_text_size(draw, note_label, font)[0]
+        note_x = self.width - 6 - note_width - 14
+        self._note_count_icon(draw, note_x, icon_y)
+        self._draw_persistent_text(draw, (note_x + 14, text_y), note_label, font)
 
     @staticmethod
     def _mesh_count_icon(draw: ImageDraw.ImageDraw, x: int, y: int) -> None:
@@ -750,7 +769,34 @@ class FrameRenderer:
 
     @staticmethod
     def _recognized_count_icon(draw: ImageDraw.ImageDraw, x: int, y: int) -> None:
-        VectorKaomoji._star(draw, x, y - 1, 5, 1)
+        # A compact vector [•] friend mark.  Drawing it instead of relying on
+        # a font keeps the exact symbol legible on the 1-bit display.
+        draw.line(((x + 1, y), (x + 1, y + 9)), fill=0)
+        draw.line(((x + 1, y), (x + 3, y)), fill=0)
+        draw.line(((x + 1, y + 9), (x + 3, y + 9)), fill=0)
+        draw.ellipse((x + 5, y + 3, x + 8, y + 6), fill=0)
+        draw.line(((x + 12, y), (x + 12, y + 9)), fill=0)
+        draw.line(((x + 10, y), (x + 12, y)), fill=0)
+        draw.line(((x + 10, y + 9), (x + 12, y + 9)), fill=0)
+
+    @staticmethod
+    def _note_count_icon(draw: ImageDraw.ImageDraw, x: int, y: int) -> None:
+        """Small paper-note glyph with a folded corner and two text rules."""
+
+        draw.line(
+            (
+                (x + 1, y),
+                (x + 8, y),
+                (x + 11, y + 3),
+                (x + 11, y + 10),
+                (x + 1, y + 10),
+                (x + 1, y),
+            ),
+            fill=0,
+        )
+        draw.line(((x + 8, y), (x + 8, y + 3), (x + 11, y + 3)), fill=0)
+        draw.line(((x + 3, y + 5), (x + 8, y + 5)), fill=0)
+        draw.line(((x + 3, y + 7), (x + 8, y + 7)), fill=0)
 
     def _render_services(self, draw: ImageDraw.ImageDraw, frame: ScreenFrame) -> None:
         title_font = self._font(16, bold=True)

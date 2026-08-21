@@ -114,6 +114,7 @@ def _snapshot(
     battery=None,
     plugged=None,
     name="motown",
+    notes=404,
 ):
     power = (
         PowerSnapshot(True, float(battery), plugged)
@@ -126,6 +127,7 @@ def _snapshot(
         mesh_size=1193,
         peer_count=sum(peer.present for peer in peers),
         recognized_count=sum(peer.present and peer.recognized for peer in peers),
+        note_count=notes,
         power=power,
         peers=tuple(peers),
     )
@@ -252,6 +254,7 @@ def test_given_runtime_facts_when_rendered_then_layout_contract_is_stable():
         mesh_size=1193,
         peer_count=4,
         recognized_count=2,
+        note_count=404,
         power=PowerSnapshot(True, 75.0, False),
     )
     renderer = FrameRenderer()
@@ -263,20 +266,37 @@ def test_given_runtime_facts_when_rendered_then_layout_contract_is_stable():
     assert _ink_bounds(image.crop((0, 0, 170, 20))) is not None
     assert _ink_bounds(image.crop((190, 0, 218, 20))) is not None
     assert _ink_bounds(image.crop((219, 0, 250, 20))) is not None
-    assert renderer.footer_counts(snapshot) == (1193, 4, 2)
-    assert renderer.footer_text(snapshot) == "1193 / 4 / 2"
+    assert renderer.footer_counts(snapshot) == (1193, 4, 2, 404)
+    assert renderer.footer_text(snapshot) == "1193 / 4 / 2 / 404"
     assert _ink_bounds(image.crop((0, 104, 170, 122))) is not None
+    assert _ink_bounds(image.crop((205, 104, 250, 122))) is not None
 
     icons = []
     for icon in (
         renderer._mesh_count_icon,
         renderer._peer_count_icon,
         renderer._recognized_count_icon,
+        renderer._note_count_icon,
     ):
         canvas = Image.new("1", (16, 16), 255)
         icon(ImageDraw.Draw(canvas), 2, 2)
         icons.append(canvas.tobytes())
-    assert len(set(icons)) == 3
+    assert len(set(icons)) == 4
+
+    friend_icon = Image.new("1", (16, 16), 255)
+    renderer._recognized_count_icon(ImageDraw.Draw(friend_icon), 2, 2)
+    # Exact [•] construction: square-bracket stems around a filled dot.
+    assert friend_icon.getpixel((3, 4)) == 0
+    assert friend_icon.getpixel((9, 7)) == 0
+    assert friend_icon.getpixel((14, 4)) == 0
+
+
+def test_given_note_count_is_unknown_then_footer_does_not_invent_zero():
+    snapshot = RuntimeSnapshot(note_count=None)
+    renderer = FrameRenderer()
+
+    assert renderer.footer_counts(snapshot)[-1] is None
+    assert renderer.footer_text(snapshot).endswith(" / ?")
 
 
 def test_given_persistent_chrome_when_rendered_then_normal_bold_is_balanced():
@@ -686,6 +706,7 @@ def test_given_both_authorities_when_fetched_then_snapshot_axes_are_normalized()
             "fips": {"connected": True, "mesh_size": 1193},
             "peers": 4,
             "recognized": 2,
+            "notes": 404,
             "events": {"totem.peer.seen": 4, "totem.sync.done": 2},
         },
         [
@@ -722,6 +743,7 @@ def test_given_both_authorities_when_fetched_then_snapshot_axes_are_normalized()
         1,
     )
     assert snapshot.power == PowerSnapshot(True, 97.6, True)
+    assert snapshot.note_count == 404
     assert snapshot.device_managers == 2
     assert snapshot.event_counts == (
         ("totem.peer.seen", 4),

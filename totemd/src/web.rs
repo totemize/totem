@@ -24,7 +24,7 @@ use tokio_stream::{wrappers::BroadcastStream, StreamExt};
 use crate::{
     auth, bus, challenge,
     config::{self, Befriend},
-    fips, owner, profile,
+    fips, owner, profile, relay,
     state::AppState,
     sync,
 };
@@ -116,6 +116,7 @@ pub async fn serve() {
 
     // Bind the responder before existing FIPS peers trigger challenges.
     let fips_task = tokio::spawn(fips::watch(st.clone()));
+    let relay_task = tokio::spawn(relay::watch(st.clone()));
 
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
@@ -127,9 +128,11 @@ pub async fn serve() {
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let shutdown_st = st.clone();
     let fips_abort = fips_task.abort_handle();
+    let relay_abort = relay_task.abort_handle();
     tokio::spawn(async move {
         shutdown_signal().await;
         fips_abort.abort();
+        relay_abort.abort();
         sync::cancel_all(&shutdown_st);
         let _ = shutdown_tx.send(true);
     });
@@ -143,6 +146,7 @@ pub async fn serve() {
     });
     let result = tokio::try_join!(web, bus);
     fips_task.abort();
+    relay_task.abort();
     sync::shutdown(&st).await;
     result.expect("server failed");
     tracing::info!("totemd shut down");
