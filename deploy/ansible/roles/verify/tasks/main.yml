@@ -175,6 +175,58 @@
     use_proxy: false
   when: totem_device_manager_enabled | bool
 
+- name: Read device-manager radio capabilities
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8000/network/capabilities
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: radio_capabilities
+  when: totem_device_manager_enabled | bool
+
+- name: Validate onboard radio capability contracts
+  ansible.builtin.assert:
+    that:
+      - radio_capabilities.json.wifi.operations.p2p_discovery.supported
+      - radio_capabilities.json.wifi.operations.p2p_group.supported
+      - "'P2P-client' in radio_capabilities.json.wifi.interface_modes"
+      - "'P2P-GO' in radio_capabilities.json.wifi.interface_modes"
+      - "'P2P-device' in radio_capabilities.json.wifi.interface_modes"
+      - radio_capabilities.json.bluetooth.operations.discovery.supported
+      - radio_capabilities.json.bluetooth.operations.advertising.supported
+  when: totem_device_manager_enabled | bool
+
+- name: Read unprivileged NetworkManager permissions
+  ansible.builtin.command:
+    argv:
+      - nmcli
+      - -t
+      - -f
+      - PERMISSION,VALUE
+      - general
+      - permissions
+  become_user: totem
+  register: network_manager_permissions
+  changed_when: false
+  when: totem_device_manager_enabled | bool
+
+- name: Validate device-manager NetworkManager authorization
+  ansible.builtin.assert:
+    that:
+      - >-
+        'org.freedesktop.NetworkManager.enable-disable-wifi:yes'
+        in network_manager_permissions.stdout_lines
+      - >-
+        'org.freedesktop.NetworkManager.network-control:yes'
+        in network_manager_permissions.stdout_lines
+      - >-
+        'org.freedesktop.NetworkManager.settings.modify.system:yes'
+        in network_manager_permissions.stdout_lines
+      - >-
+        'org.freedesktop.NetworkManager.wifi.scan:yes'
+        in network_manager_permissions.stdout_lines
+  when: totem_device_manager_enabled | bool
+
 - name: Find completed migration checkpoints
   ansible.builtin.find:
     paths: "{{ totem_migration_root }}"

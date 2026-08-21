@@ -11,10 +11,12 @@ dependencies = [
     "fastapi>=0.110,<1.0",
     "uvicorn>=0.30,<1.0",
     "pydantic>=2.6,<3.0",
+    "dbus-next>=0.2.3,<1.0; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
-# Wi-Fi drivers also require the nmcli executable.
+# The system deployment installs these through apt so the venv can reuse the
+# distro's architecture-matched packages.
 raspberry-pi = [
     "RPi.GPIO>=0.7,<1.0; sys_platform == 'linux'",
     "spidev>=3.6,<4.0; sys_platform == 'linux'",

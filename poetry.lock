@@ -222,6 +222,19 @@ tomli = {version = "*", optional = true, markers = "python_full_version <= \"3.1
 toml = ["tomli ; python_full_version <= \"3.11.0a6\""]
 
 [[package]]
+name = "dbus-next"
+version = "0.2.3"
+description = "A zero-dependency DBus library for Python with asyncio support"
+optional = false
+python-versions = ">=3.6.0"
+groups = ["main"]
+markers = "sys_platform == \"linux\""
+files = [
+    {file = "dbus_next-0.2.3-py3-none-any.whl", hash = "sha256:58948f9aff9db08316734c0be2a120f6dc502124d9642f55e90ac82ffb16a18b"},
+    {file = "dbus_next-0.2.3.tar.gz", hash = "sha256:f4eae26909332ada528c0a3549dda8d4f088f9b365153952a408e28023a626a5"},
+]
+
+[[package]]
 name = "exceptiongroup"
 version = "1.2.2"
 description = "Backport of PEP 654 (exception groups)"
@@ -1132,4 +1145,4 @@ raspberry-pi = ["RPi.GPIO", "gpiod", "gpiozero", "smbus2", "spidev"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<4.0"
-content-hash = "971f954dbd7e6036af27643f92b334f1c68d415bfa40c7d87cb0d57aad12367e"
+content-hash = "e6460f514d15748963d12f92fc27c7107c19b1dd2379429e3d8e3f4638afb034"

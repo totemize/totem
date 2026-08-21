@@ -285,6 +285,13 @@ See [`totemd` CLI and message bus](/reference/totemd).
   package without rebuilding platform dependencies;
 - updates `/opt/totem/current`, manages `/etc/totem/totem.env`, and
   installs/enables `totem.service`;
+- installs NetworkManager, BlueZ, `iw`, `rfkill`, `ethtool`, `iproute2`,
+  Polkit, and `python3-dbus-next` with the enabled device-manager package set;
+- grants user `totem` only the NetworkManager actions used by station/AP/P2P
+  primitives, adds `netdev`/`bluetooth` supplementary groups, and gives the
+  Bluetooth group read/write access to `/dev/rfkill` through a udev rule;
+- orders `totem.service` after NetworkManager and Bluetooth while retaining
+  `NoNewPrivileges=true`;
 - writes the per-host `TOTEM_EINK_DRIVER` when configured; metot is pinned to
   `waveshare_2in13_v4`;
 - records migration `0040-device-manager-layout.complete`.
@@ -316,7 +323,11 @@ The final role checks the enabled scope:
    operator policy;
 9. `totemctl history` returns the typed, process-local event-history result;
 10. Python `/health` returns HTTP `200` when enabled;
-11. the expected migration checkpoint count exists.
+11. `/network/capabilities` reports P2P client/GO/device modes plus supported
+    P2P discovery/group and BLE discovery/advertising operations;
+12. unprivileged NetworkManager permissions include radio toggle, network
+    control, system connection modification, and Wi-Fi scan;
+13. the expected migration checkpoint count exists.
 
 These are live contract checks. A passing port check alone is not treated as
 service health.

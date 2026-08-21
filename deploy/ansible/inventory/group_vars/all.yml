@@ -21,6 +21,13 @@ totem_base_packages:
   - python3
 
 totem_device_manager_packages:
+  - network-manager
+  - bluez
+  - iw
+  - rfkill
+  - ethtool
+  - iproute2
+  - polkitd
   - python3-venv
   - python3-pip
   - python3-poetry-core
@@ -30,6 +37,7 @@ totem_device_manager_packages:
   - python3-fastapi
   - python3-uvicorn
   - python3-pydantic
+  - python3-dbus-next
   - python3-rpi.gpio
   - python3-spidev
   - python3-gpiozero
@@ -41,3 +49,5 @@ totem_device_groups:
   - gpio
   - i2c
   - spi
+  - netdev
+  - bluetooth

@@ -8,9 +8,9 @@ description: FastAPI endpoints, manager lifecycle, driver selection, and library
 # Python device manager
 
 The Python service exposes synchronous hardware managers through FastAPI. It
-supports E-Ink display, NFC, confined storage, Wi-Fi, and UPS telemetry. The API
-creates managers lazily, runs their blocking work in Starlette's thread pool,
-and serializes operations independently per manager.
+supports E-Ink display, NFC, confined storage, Wi-Fi, Bluetooth/BLE, and UPS
+telemetry. The API creates managers lazily, runs their blocking work in
+Starlette's thread pool, and serializes operations independently per manager.
 
 This service is separate from the Rust [`totemd` bus](/reference/totemd).
 `totemd` is intended to become a client of the hardware API, but that bridge is
@@ -55,7 +55,7 @@ defaults. Use `totem` when command-line bind or logging options are needed.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TOTEM_ALLOW_MOCK_DRIVERS` | false | Accepts `1`, `true`, `yes`, or `on` (case-insensitive) to permit explicit mock display, NFC, and Wi-Fi transports. |
+| `TOTEM_ALLOW_MOCK_DRIVERS` | false | Accepts `1`, `true`, `yes`, or `on` (case-insensitive) to permit explicit mock display, NFC, and network transports. |
 | `TOTEM_STORAGE_ROOT` | driver default | Confines storage reads and writes below one directory. The Ansible deployment sets `/var/lib/totem/storage`. |
 | `TOTEM_EINK_DRIVER` | empty | Exact display driver selected when `DisplayManager` receives no explicit name. An explicit constructor argument still wins. |
 | `TOTEM_UPS_DRIVER` | PiSugar2 fallback | Exact UPS driver selected when `UPSManager` receives no explicit name. Metot is pinned to `pisugar2`; set `waveshare_ups_hat_c` for a Waveshare UPS HAT (C). |
@@ -84,6 +84,8 @@ The application exposes OpenAPI and Swagger UI using FastAPI's standard paths
 | `POST` | `/storage/read` | `path` | `StorageReadResponse` with `data_base64`. |
 | `POST` | `/storage/write` | `path`, `data_base64` | `Status` |
 | `POST` | `/network/configure` | `ssid`, `password`, optional `is_hotspot` | `Status` |
+| `GET` | `/network/capabilities` | — | Wi-Fi PHY/concurrency and Bluetooth controller capability matrix. |
+| `GET` | `/network/status` | — | Radio blocks, active interfaces, P2P groups, BLE sessions, and advertisements. |
 | `GET` | `/ups/status` | — | Model, battery percent, voltage, signed current, and external-power state. |
 | WebSocket | `/ws` | client frames are ignored | Typed `DeviceEvent` frames when events are published. |
 
@@ -145,22 +147,146 @@ API storage writes use the manager defaults: replace the file atomically,
 without forced `fsync`, and without changing permissions. The lower-level
 Python manager accepts `append`, `atomic`, `sync`, and `permissions` options.
 
-### Network configuration
+### Network and radio primitives
 
-Connect to a station network:
+The network manager exposes hardware mechanisms, observed state, and
+capabilities. It does not decide when peers should be discovered, which peer
+to join, whether a connection should replace another connection, or what
+application protocol should use a formed link. Those choices belong to a
+higher-level controller such as `totemd`.
 
-```json
-{"ssid":"example","password":"secret","is_hotspot":false}
+Capability and status responses include:
+
+- physical Wi-Fi PHYs, driver/firmware versions, bands/channels, supported
+  interface modes, and the kernel's valid concurrent-interface combinations;
+- an operation-by-operation `supported` flag and optional reason;
+- Bluetooth controller address/type/name, HCI version/manufacturer/modalias,
+  central/peripheral roles, advertisement instance/length limits, and
+  supported includes;
+- explicit LE L2CAP CoC listen/connect/descriptor-handoff capability and
+  bounded resource limits;
+- explicit NAN discovery, UTF-8 follow-up, and data-path capability, including
+  the control and data interface modes independently;
+- Wi-Fi and Bluetooth soft/hard block state, every active Wi-Fi interface with
+  mode/channel/addresses, P2P discovery/groups, NAN sessions/data paths, and
+  active BLE work.
+
+The complete HTTP surface is:
+
+| Area | Method and path | Primitive |
+|---|---|---|
+| Inventory | `GET /network/capabilities` | Report hardware and operation support without changing state. |
+| State | `GET /network/status` | Report current radios, interfaces, groups, discovery sessions, and advertisements. |
+| Wi-Fi radio | `PUT /network/wifi/radio` | Set `enabled` with a bounded `timeout_seconds`. |
+| Bluetooth radio | `PUT /network/bluetooth/radio` | Power/unpower and soft-unblock/block the controller. |
+| Station scan | `GET /network/wifi/networks` | Return SSID, signal, security, frequency, and channel. |
+| Station link | `POST`, `DELETE /network/wifi/connections` | Connect with SSID/password or disconnect the managed station link. |
+| Hotspot | `POST`, `DELETE /network/wifi/hotspots` | Create or stop the manager-owned AP connection. |
+| P2P discovery | `POST`, `DELETE /network/wifi/p2p/discovery` | Start a bounded NetworkManager find or stop it idempotently. |
+| P2P peers | `GET /network/wifi/p2p/peers` | Return peer ID/path/address, signal, last-seen clock, flags, and optional identity fields. |
+| P2P groups | `POST`, `GET /network/wifi/p2p/groups`; `DELETE /network/wifi/p2p/groups/{id}` | Create-or-join with a peer, list live state/interface/addresses, or remove it. |
+| NAN discovery | `POST`, `GET /network/wifi/aware/discovery`; `DELETE /network/wifi/aware/discovery/{id}` | Own bounded publish/subscribe functions for a caller-supplied service name and opaque base64 information. |
+| NAN matches | `GET /network/wifi/aware/matches` | Return match/session IDs, peer MAC, local/peer instance IDs, opaque information, and last-seen time. |
+| NAN follow-ups | `POST`, `GET /network/wifi/aware/followups` | Send a bounded UTF-8 service message to a match or list bounded sent/received messages. Payloads remain strict base64 at HTTP. |
+| NAN data paths | `POST`, `GET /network/wifi/aware/data-paths`; `DELETE /network/wifi/aware/data-paths/{id}` | Return or remove a NAN data interface plus scoped local/peer IPv6 and FIPS UDP port when the platform backend supports negotiation. |
+| BLE discovery | `POST`, `DELETE /network/bluetooth/discovery` | Start/stop one independently identified, bounded scan session. |
+| BLE observations | `GET /network/bluetooth/devices` | Return address/type/name, UUIDs, base64 data, RSSI/Tx power, timestamps, and connection state. |
+| BLE advertising | `POST /network/bluetooth/advertisements`; `DELETE /network/bluetooth/advertisements/{id}` | Register/unregister a caller-defined BlueZ advertisement. |
+| LE CoC listeners | `POST`, `GET /network/bluetooth/l2cap/listeners`; `DELETE /network/bluetooth/l2cap/listeners/{id}` | Bind a bounded LE CoC listener and atomically advertise its assigned PSM under the FIPS UUID. |
+| LE CoC connections | `POST`, `GET /network/bluetooth/l2cap/connections`; `DELETE /network/bluetooth/l2cap/connections/{id}` | Connect/list/close payload-blind LE CoC channels. |
+| FIPS CoC handoff | `POST /network/bluetooth/l2cap/connections/{id}/fips-handoff` | Transfer the connected descriptor to the fixed local FIPS receiver with `SCM_RIGHTS`; no payload crosses HTTP. |
+| BLE connection | `POST /network/bluetooth/devices/{id}/connect` or `/disconnect` | Connect/disconnect a discovered generic device. |
+| GATT inventory | `GET /network/bluetooth/devices/{id}/gatt` | Return services and characteristics with UUIDs, flags, values, and notification state. |
+| GATT value | `GET`, `PUT /network/bluetooth/devices/{id}/gatt/characteristics/{characteristic_id}` | Read or write strict-base64 characteristic bytes. |
+| GATT notification | `POST .../{characteristic_id}/subscriptions`; `DELETE /network/bluetooth/gatt/subscriptions/{id}` | Start or stop a manager-owned notification subscription. |
+
+`POST /network/configure` remains as the compatibility station/hotspot call.
+New callers should use the explicit resources above so teardown and timeout
+semantics are visible.
+
+Start a bounded Wi-Fi Direct search and inspect peers:
+
+```bash
+curl --silent --request POST http://127.0.0.1:8000/network/wifi/p2p/discovery \
+  --header 'content-type: application/json' \
+  --data '{"duration_seconds":60,"timeout_seconds":15}'
+curl --silent http://127.0.0.1:8000/network/wifi/p2p/peers
 ```
 
-Create a hotspot through the selected driver:
+Create-or-join is a mutual opt-in operation. On the tested NetworkManager/PBC
+stack, each peer must activate a `wifi-p2p` connection to the reciprocal peer
+ID; one-sided activation is allowed to time out without silently disrupting
+the infrastructure connection. Poll `GET /network/wifi/p2p/groups` until the
+returned state is `active`, then bind application sockets to the reported
+interface or address. Remove each side's group ID when finished.
+
+BLE discovery sessions are multiplexed. Stopping one session does not stop
+the underlying BlueZ scan while another session remains:
 
 ```json
-{"ssid":"example","password":"secret","is_hotspot":true}
+{
+  "duration_seconds": 30,
+  "service_uuids": ["12345678-1234-5678-1234-56789abcdef0"],
+  "duplicate_data": true,
+  "session_id": "encounter-probe",
+  "timeout_seconds": 15
+}
 ```
 
-The HTTP API currently exposes neither scan/status nor stop-hotspot methods;
-those are available on `NetworkManager` for in-process callers.
+Advertisement service/manufacturer data and GATT values use strict base64 at
+the HTTP boundary. Passwords, PSKs, PINs, and credentials are recursively
+redacted from driver errors and are never included in event data.
+
+LE CoC uses the FIPS UUID `9c90b790-2cc5-42c0-9f87-c9cc40648f4c`. Listener
+PSMs are advertised as two-byte little-endian service data beneath that UUID.
+Listener creation rolls back the socket if BlueZ rejects the advertisement.
+After connect or accept, the manager does not read or write channel payloads;
+the fixed `/run/fips/l2cap-handoff.sock` receiver gets the descriptor and
+bounded transport metadata. FIPS remains the sole owner of framing, Noise,
+identity, routing, and link payload. The handoff operation requires a matching
+receiver in the running FIPS build; an absent receiver returns a stable radio
+operation error and leaves the manager-owned connection available for retry or
+explicit close.
+
+The Linux NAN discovery backend creates a manager-owned `totemnan0` interface,
+starts nl80211 NAN through `iw`, installs paired publish/subscribe functions,
+parses match and follow-up events, and removes only its own functions and
+interface. Discovery service information is base64url-encoded on the `iw`
+carrier and remains strict base64 at HTTP. Follow-ups use match-derived local
+and peer instance IDs plus the peer MAC; their service information is sent as
+UTF-8 because `iw` accepts a text argument rather than arbitrary binary. NUL,
+line breaks, non-UTF-8 data, and payloads over the NAN 255-byte limit fail with
+a typed validation error. Retained sent/received follow-up history is bounded
+and removed with its session. Discovery and follow-ups are supported only when
+the PHY advertises `NAN` and the
+calling process already has `CAP_NET_ADMIN`; the deployment does not grant
+that capability to the unprivileged API service or weaken its systemd
+boundary. Without a future narrow broker, the service therefore reports a
+typed unsupported reason. NAN data paths are a separate capability: the
+production backend currently reports
+`supported: false` even if a new kernel advertises `NAN-data`, because this
+tree does not yet contain a Linux NDP negotiation backend. The deterministic
+mock exercises the eventual `aware_dataN` result shape, including scoped
+link-local IPv6 suitable for interface-bound FIPS UDP.
+
+Every mutating primitive has an explicit operation timeout. Teardown is
+idempotent, and `close()` removes P2P groups, NAN functions/interfaces, LE CoC
+listeners/connections, BLE advertisements/connections, scan sessions, and
+subscriptions created by that manager instance. Station
+and AP links have explicit disconnect/stop primitives rather than implicit
+shutdown policy. Cleanup does not disable Wi-Fi, stop FIPS, alter routes, or
+tear down unrelated NetworkManager/BlueZ state.
+
+#### Raspberry Pi BlueZ 5.82/kernel 6.18 limitation
+
+On both bench Pis running Raspberry Pi kernel `6.18.34+rpt` and BlueZ 5.82,
+BlueZ D-Bus rejects even a minimal `LEAdvertisement1` with controller status
+`Invalid Parameters (0x0d)`. Stock `bluetoothctl advertise on` fails the same
+way, while a kernel-management test beacon transmits and is discovered by the
+device-manager scanner. This matches the Raspberry Pi regression tracked in
+[BlueZ issue #2268](https://github.com/bluez/bluez/issues/2268). The driver
+does not bypass BlueZ with a privileged management fallback; callers receive
+the stable `radio_operation_failed` error until the platform stack is fixed.
 
 ### UPS status
 
@@ -187,9 +313,18 @@ Drivers without a direct external-power signal return `null` for
 
 | Status | Cause |
 |---|---|
-| `422` | Pydantic validation failure or invalid strict base64. |
+| `422` | Pydantic validation failure, invalid strict base64, or invalid radio request. |
+| `404` | A selected peer, device, characteristic, group, or subscription disappeared. |
+| `409` | The live Wi-Fi interface set cannot fit any kernel concurrency combination. |
+| `501` | The operation is explicitly unsupported by the detected hardware/backend. |
 | `503` | The requested manager could not initialize. The service stays up and other managers remain usable. |
-| `502` | A manager initialized, but the requested hardware operation failed. |
+| `504` | A bounded radio/D-Bus operation timed out. |
+| `502` | A manager initialized, but the requested hardware or D-Bus operation failed. |
+
+Radio errors use `{"detail":{"code":"…","message":"…"}}`. Stable codes
+are `unsupported_feature`, `radio_concurrency_conflict`,
+`radio_operation_timeout`, `radio_resource_not_found`,
+`invalid_radio_request`, and `radio_operation_failed`.
 
 `/health` reports service lifecycle only. A healthy response does not prove
 that unopened hardware exists; use `initialized_managers` and an explicit
@@ -214,8 +349,9 @@ persist a manager registry across restarts.
 ## Driver selection
 
 Driver names are normalized to lowercase and hyphens become underscores.
-Display, NFC, and Wi-Fi registries accept only allow-listed names and validate
-that the imported `Driver` class implements the expected interface.
+Display, NFC, Wi-Fi, and Bluetooth registries accept only allow-listed names
+and validate that the imported `Driver` class implements the expected
+interface.
 
 Mocks are never an implicit success path. A mock registry entry requires
 `allow_mock=True`; the API obtains that setting only from
@@ -258,8 +394,17 @@ Automatic NFC probing is Linux-only.
 | `usb_wifi_adapter` | Interface `wlan1`. |
 | `mock_wifi` | Explicit development/CI transport; requires mock opt-in. |
 
-The real drivers use the `nmcli` executable. Detection is Linux-only and uses
-the interface names under `/sys/class/net`.
+The real drivers use NetworkManager: `nmcli` for station/AP state and the
+persistent system D-Bus client for P2P discovery and group lifecycle. `iw`
+provides PHY modes/channels/concurrency, `ethtool` supplies driver/firmware
+inventory, `rfkill` reports block state, and the bounded NAN discovery
+controller uses the upstream `iw ... nan` control surface without changing
+NetworkManager connections. Detection is Linux-only and uses the interface
+names under `/sys/class/net`.
+
+Bluetooth is composed with the selected Wi-Fi driver. Real hardware uses the
+allow-listed `bluez` driver and persistent BlueZ/system-D-Bus ownership;
+`mock_wifi` composes the deterministic mock Bluetooth driver for CI parity.
 
 ### Storage
 
@@ -338,9 +483,16 @@ Write options default to:
 NetworkManager(driver_name: str | None = None, *, allow_mock: bool = False)
 ```
 
-Methods: `scan_networks()`, `connect_to_network(ssid, password)`,
-`create_hotspot(ssid, password)`, `stop_hotspot()`, `get_wifi_status()`, and
-`close()`.
+The compatibility methods remain `scan_networks()`,
+`connect_to_network(ssid, password)`, `create_hotspot(ssid, password)`,
+`stop_hotspot()`, and `get_wifi_status()`.
+
+The full contract also provides `get_capabilities()`, `get_status()`, both
+radio setters/getters, Wi-Fi interface/network inventory, station/AP teardown,
+P2P discovery/peer/group lifecycle, NAN discovery/match/data-path lifecycle,
+BLE discovery/device/advertisement and connection lifecycle, LE CoC lifecycle
+and FIPS descriptor handoff, GATT inventory/read/write/subscription lifecycle,
+`set_event_callback()`, and idempotent `close()`.
 
 ### `UPSManager`
 
@@ -369,13 +521,15 @@ connection alive. Published events have this shape:
 }
 ```
 
-Device types are `display`, `nfc`, `storage`, `network`, and `ups`. Event types are
-`state_change`, `command_completed`, `error`, `data_available`, and
-`hardware_event`.
+Device types are `display`, `nfc`, `storage`, `network`, and `ups`. In addition
+to the generic event types, radio events include Wi-Fi/Bluetooth radio state,
+P2P peer found/lost and group formed/removed, NAN match/data-path changes, BLE
+device found/expired, LE CoC open/close/handoff, advertisement received,
+connection changes, and GATT value changes.
 
-The `EventManager` supports in-process callback subscriptions and WebSocket
-broadcasting, but no built-in route or manager publishes events in this
-revision. Do not treat `/ws` as equivalent to `totemd`'s active peer-event SSE
+The radio drivers publish from D-Bus threads through a thread-safe bridge into
+the existing `EventManager` and WebSocket fan-out. These are hardware facts,
+not encounter or sync policy, and are distinct from `totemd`'s peer-event SSE
 stream.
 
 ## Deployment layout
@@ -391,6 +545,13 @@ at `/opt/totem/.venv`. The service starts:
 The role can be excluded with `totem_device_manager_enabled=false`; see the
 [Ansible runbook](/operations/ansible). That switch also omits Python-specific
 packages and health checks.
+
+Production installs add NetworkManager, BlueZ, `iw`, `rfkill`, `ethtool`,
+`iproute2`, Polkit, and `python3-dbus-next`. The service account receives only
+the NetworkManager actions required for radio/network primitives and group
+access to `/dev/rfkill`; the systemd unit keeps `NoNewPrivileges=true` and
+starts after NetworkManager and Bluetooth. No FIPS identity, routing, or
+general root privilege is granted.
 
 ## Security status
 

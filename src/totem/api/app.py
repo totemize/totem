@@ -7,7 +7,14 @@ from contextlib import asynccontextmanager
 import os
 from typing import Any, Callable, Dict, Optional
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 import uvicorn
@@ -15,16 +22,56 @@ import uvicorn
 from totem import __version__
 from totem.api.event_manager import EventManager
 from totem.api.models import (
+    BLEAdvertisementRequest,
+    BLEAdvertisementResponse,
+    BLEDeviceOperationRequest,
+    BLEDeviceResponse,
+    BLEDiscoveryRequest,
+    BLEDiscoveryResponse,
+    BluetoothRadioResponse,
+    DeviceEvent,
+    DeviceId,
+    DeviceType,
     DisplayImageRequest,
     DisplayTextRequest,
+    EventType,
+    GATTServiceResponse,
+    GATTSubscriptionRequest,
+    GATTSubscriptionResponse,
+    GATTValueResponse,
+    GATTWriteRequest,
+    L2CAPConnectionRequest,
+    L2CAPConnectionResponse,
+    L2CAPHandoffRequest,
+    L2CAPListenerRequest,
+    L2CAPListenerResponse,
     NFCWriteRequest,
+    NanDataPathRequest,
+    NanDataPathResponse,
+    NanDiscoveryRequest,
+    NanDiscoverySessionResponse,
+    NanFollowupRequest,
+    NanFollowupResponse,
+    NanMatchResponse,
+    NetworkCapabilitiesResponse,
     NetworkConfigurationRequest,
+    NetworkStatusResponse,
+    P2PDiscoveryRequest,
+    P2PGroupRequest,
+    P2PGroupResponse,
+    P2PPeerResponse,
+    RadioRequest,
     Status,
     StorageReadRequest,
     StorageReadResponse,
     StorageWriteRequest,
     UPSStatusResponse,
+    WiFiConnectionRequest,
+    WiFiNetworkResponse,
+    WiFiRadioResponse,
 )
+from totem.devices.network.errors import RadioOperationError
+from totem.devices.network.models import serialize
 from totem.logging import get_logger
 
 
@@ -100,6 +147,10 @@ async def _get_manager(request: Request, name: str):
                     detail="{} hardware is unavailable".format(name.capitalize()),
                 ) from exc
             request.app.state.managers[name] = manager
+            if name == "network":
+                setter = getattr(manager, "set_event_callback", None)
+                if setter is not None:
+                    setter(request.app.state.radio_event_callback)
         return manager
 
 
@@ -112,13 +163,22 @@ async def _call_hardware(
             return await run_in_threadpool(operation, *args, **kwargs)
         except HTTPException:
             raise
+        except RadioOperationError as exc:
+            logger.warning("%s radio operation rejected: %s", manager_name, exc.code)
+            raise HTTPException(
+                status_code=exc.http_status,
+                detail={"code": exc.code, "message": exc.detail},
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "invalid_radio_request", "message": str(exc)},
+            ) from exc
         except Exception as exc:
             logger.error("%s hardware operation failed: %s", manager_name, exc)
             raise HTTPException(
                 status_code=502,
-                detail="{} hardware operation failed".format(
-                    manager_name.capitalize()
-                ),
+                detail="{} hardware operation failed".format(manager_name.capitalize()),
             ) from exc
 
 
@@ -133,14 +193,28 @@ def create_app(
     async def lifespan(application: FastAPI):
         application.state.managers = {}
         application.state.manager_factories = factories
-        application.state.manager_locks = {
-            name: asyncio.Lock() for name in factories
-        }
-        application.state.operation_locks = {
-            name: asyncio.Lock() for name in factories
-        }
+        application.state.manager_locks = {name: asyncio.Lock() for name in factories}
+        application.state.operation_locks = {name: asyncio.Lock() for name in factories}
         application.state.event_manager = EventManager()
         await application.state.event_manager.start()
+        application.state.loop = asyncio.get_running_loop()
+
+        def radio_event_callback(event_name: str, data: Dict[str, Any]) -> None:
+            try:
+                event_type = EventType(event_name)
+            except ValueError:
+                event_type = EventType.HARDWARE_EVENT
+            event = DeviceEvent(
+                device=DeviceId(device_type=DeviceType.NETWORK),
+                event_type=event_type,
+                data=data,
+            )
+            asyncio.run_coroutine_threadsafe(
+                application.state.event_manager.publish_event(event),
+                application.state.loop,
+            )
+
+        application.state.radio_event_callback = radio_event_callback
         try:
             yield
         finally:
@@ -227,9 +301,7 @@ def create_app(
     @application.post("/storage/read", response_model=StorageReadResponse)
     async def read_storage(request: Request, command: StorageReadRequest):
         manager = await _get_manager(request, "storage")
-        data = await _call_hardware(
-            request, "storage", manager.read_data, command.path
-        )
+        data = await _call_hardware(request, "storage", manager.read_data, command.path)
         return StorageReadResponse(
             success=True,
             message="Data read successfully",
@@ -240,25 +312,631 @@ def create_app(
     async def write_storage(request: Request, command: StorageWriteRequest):
         manager = await _get_manager(request, "storage")
         data = _decode_base64(command.data_base64, "data_base64")
-        await _call_hardware(
-            request, "storage", manager.write_data, command.path, data
-        )
+        await _call_hardware(request, "storage", manager.write_data, command.path, data)
         return Status(success=True, message="Data written successfully")
 
     @application.post("/network/configure", response_model=Status)
-    async def configure_network(
-        request: Request, command: NetworkConfigurationRequest
-    ):
+    async def configure_network(request: Request, command: NetworkConfigurationRequest):
         manager = await _get_manager(request, "network")
         operation = (
-            manager.create_hotspot
-            if command.is_hotspot
-            else manager.connect_to_network
+            manager.create_hotspot if command.is_hotspot else manager.connect_to_network
         )
         await _call_hardware(
             request, "network", operation, command.ssid, command.password
         )
         return Status(success=True, message="Network configured successfully")
+
+    @application.get(
+        "/network/capabilities", response_model=NetworkCapabilitiesResponse
+    )
+    async def network_capabilities(request: Request):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(request, "network", manager.get_capabilities)
+        return serialize(value)
+
+    @application.get("/network/status", response_model=NetworkStatusResponse)
+    async def network_status(request: Request):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(request, "network", manager.get_status)
+        return serialize(value)
+
+    @application.put("/network/wifi/radio", response_model=WiFiRadioResponse)
+    async def wifi_radio(request: Request, command: RadioRequest):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.set_wifi_radio_enabled,
+            command.enabled,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.put("/network/bluetooth/radio", response_model=BluetoothRadioResponse)
+    async def bluetooth_radio(request: Request, command: RadioRequest):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.set_bluetooth_radio_enabled,
+            command.enabled,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get("/network/wifi/networks", response_model=list[WiFiNetworkResponse])
+    async def wifi_networks(
+        request: Request,
+        timeout_seconds: float = Query(default=20.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(
+            request, "network", manager.scan_wifi_networks, timeout_seconds
+        )
+        return serialize(values)
+
+    @application.post("/network/wifi/connections", response_model=Status)
+    async def wifi_connect(request: Request, command: WiFiConnectionRequest):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.connect_to_network,
+            command.ssid,
+            command.password,
+            command.timeout_seconds,
+        )
+        return Status(success=True, message="Wi-Fi station connection activated")
+
+    @application.delete("/network/wifi/connections", response_model=Status)
+    async def wifi_disconnect(
+        request: Request,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request, "network", manager.disconnect_from_network, timeout_seconds
+        )
+        return Status(success=True, message="Wi-Fi station connection deactivated")
+
+    @application.post("/network/wifi/hotspots", response_model=Status)
+    async def wifi_hotspot(request: Request, command: WiFiConnectionRequest):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.create_hotspot,
+            command.ssid,
+            command.password,
+            command.timeout_seconds,
+        )
+        return Status(success=True, message="Wi-Fi hotspot activated")
+
+    @application.delete("/network/wifi/hotspots", response_model=Status)
+    async def wifi_hotspot_stop(
+        request: Request,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(request, "network", manager.stop_hotspot, timeout_seconds)
+        return Status(success=True, message="Wi-Fi hotspot deactivated")
+
+    @application.post("/network/wifi/p2p/discovery", response_model=Status)
+    async def p2p_discovery_start(request: Request, command: P2PDiscoveryRequest):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.start_p2p_discovery,
+            command.duration_seconds,
+            command.timeout_seconds,
+        )
+        return Status(success=True, message="Wi-Fi Direct discovery started")
+
+    @application.delete("/network/wifi/p2p/discovery", response_model=Status)
+    async def p2p_discovery_stop(
+        request: Request,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request, "network", manager.stop_p2p_discovery, timeout_seconds
+        )
+        return Status(success=True, message="Wi-Fi Direct discovery stopped")
+
+    @application.get("/network/wifi/p2p/peers", response_model=list[P2PPeerResponse])
+    async def p2p_peers(request: Request):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(request, "network", manager.list_p2p_peers)
+        return serialize(values)
+
+    @application.post("/network/wifi/p2p/groups", response_model=P2PGroupResponse)
+    async def p2p_group_create(request: Request, command: P2PGroupRequest):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.create_p2p_group,
+            command.peer_id,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get("/network/wifi/p2p/groups", response_model=list[P2PGroupResponse])
+    async def p2p_groups(request: Request):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(request, "network", manager.list_p2p_groups)
+        return serialize(values)
+
+    @application.delete("/network/wifi/p2p/groups/{group_id}", response_model=Status)
+    async def p2p_group_remove(
+        request: Request,
+        group_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.remove_p2p_group,
+            group_id,
+            timeout_seconds,
+        )
+        return Status(success=True, message="Wi-Fi Direct group removed")
+
+    @application.post(
+        "/network/wifi/aware/discovery",
+        response_model=NanDiscoverySessionResponse,
+    )
+    async def nan_discovery_start(request: Request, command: NanDiscoveryRequest):
+        manager = await _get_manager(request, "network")
+        service_info = _decode_base64(
+            command.service_info_base64, "service_info_base64"
+        )
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.start_nan_discovery,
+            command.service_name,
+            service_info,
+            command.duration_seconds,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get(
+        "/network/wifi/aware/discovery",
+        response_model=list[NanDiscoverySessionResponse],
+    )
+    async def nan_discovery_sessions(request: Request):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(
+            request, "network", manager.list_nan_discovery_sessions
+        )
+        return serialize(values)
+
+    @application.delete(
+        "/network/wifi/aware/discovery/{session_id}", response_model=Status
+    )
+    async def nan_discovery_stop(
+        request: Request,
+        session_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.stop_nan_discovery,
+            session_id,
+            timeout_seconds,
+        )
+        return Status(success=True, message="Wi-Fi Aware discovery stopped")
+
+    @application.get(
+        "/network/wifi/aware/matches", response_model=list[NanMatchResponse]
+    )
+    async def nan_matches(request: Request, session_id: Optional[str] = None):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(
+            request, "network", manager.list_nan_matches, session_id
+        )
+        return serialize(values)
+
+    @application.post(
+        "/network/wifi/aware/followups", response_model=NanFollowupResponse
+    )
+    async def nan_followup_send(request: Request, command: NanFollowupRequest):
+        manager = await _get_manager(request, "network")
+        payload = _decode_base64(command.payload_base64, "payload_base64")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.send_nan_followup,
+            command.match_id,
+            payload,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get(
+        "/network/wifi/aware/followups", response_model=list[NanFollowupResponse]
+    )
+    async def nan_followups(request: Request, session_id: Optional[str] = None):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(
+            request, "network", manager.list_nan_followups, session_id
+        )
+        return serialize(values)
+
+    @application.post(
+        "/network/wifi/aware/data-paths", response_model=NanDataPathResponse
+    )
+    async def nan_data_path_create(request: Request, command: NanDataPathRequest):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.create_nan_data_path,
+            command.match_id,
+            command.port,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get(
+        "/network/wifi/aware/data-paths", response_model=list[NanDataPathResponse]
+    )
+    async def nan_data_paths(request: Request):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(request, "network", manager.list_nan_data_paths)
+        return serialize(values)
+
+    @application.delete(
+        "/network/wifi/aware/data-paths/{data_path_id}", response_model=Status
+    )
+    async def nan_data_path_remove(
+        request: Request,
+        data_path_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.remove_nan_data_path,
+            data_path_id,
+            timeout_seconds,
+        )
+        return Status(success=True, message="Wi-Fi Aware data path removed")
+
+    @application.post(
+        "/network/bluetooth/discovery", response_model=BLEDiscoveryResponse
+    )
+    async def bluetooth_discovery_start(request: Request, command: BLEDiscoveryRequest):
+        manager = await _get_manager(request, "network")
+        session_id = await _call_hardware(
+            request,
+            "network",
+            manager.start_bluetooth_discovery,
+            duration_seconds=command.duration_seconds,
+            service_uuids=command.service_uuids,
+            duplicate_data=command.duplicate_data,
+            session_id=command.session_id,
+            timeout=command.timeout_seconds,
+        )
+        return BLEDiscoveryResponse(session_id=session_id)
+
+    @application.delete("/network/bluetooth/discovery", response_model=Status)
+    async def bluetooth_discovery_stop(
+        request: Request,
+        session_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.stop_bluetooth_discovery,
+            session_id,
+            timeout_seconds,
+        )
+        return Status(success=True, message="BLE discovery session stopped")
+
+    @application.get(
+        "/network/bluetooth/devices", response_model=list[BLEDeviceResponse]
+    )
+    async def bluetooth_devices(request: Request):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(
+            request, "network", manager.list_bluetooth_devices
+        )
+        return serialize(values)
+
+    @application.post(
+        "/network/bluetooth/advertisements",
+        response_model=BLEAdvertisementResponse,
+    )
+    async def bluetooth_advertisement_register(
+        request: Request, command: BLEAdvertisementRequest
+    ):
+        manager = await _get_manager(request, "network")
+        specification = {
+            "id": command.id,
+            "type": command.type,
+            "service_uuids": command.service_uuids,
+            "service_data": {
+                key: _decode_base64(value, "service_data_base64")
+                for key, value in command.service_data_base64.items()
+            },
+            "manufacturer_data": {
+                key: _decode_base64(value, "manufacturer_data_base64")
+                for key, value in command.manufacturer_data_base64.items()
+            },
+            "local_name": command.local_name,
+            "includes": command.includes,
+        }
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.register_bluetooth_advertisement,
+            specification,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.delete(
+        "/network/bluetooth/advertisements/{advertisement_id}",
+        response_model=Status,
+    )
+    async def bluetooth_advertisement_unregister(
+        request: Request,
+        advertisement_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.unregister_bluetooth_advertisement,
+            advertisement_id,
+            timeout_seconds,
+        )
+        return Status(success=True, message="BLE advertisement unregistered")
+
+    @application.post(
+        "/network/bluetooth/l2cap/listeners",
+        response_model=L2CAPListenerResponse,
+    )
+    async def l2cap_listener_create(request: Request, command: L2CAPListenerRequest):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.create_l2cap_listener,
+            command.service_uuid,
+            command.psm,
+            command.mtu,
+            command.address_type,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get(
+        "/network/bluetooth/l2cap/listeners",
+        response_model=list[L2CAPListenerResponse],
+    )
+    async def l2cap_listeners(request: Request):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(request, "network", manager.list_l2cap_listeners)
+        return serialize(values)
+
+    @application.delete(
+        "/network/bluetooth/l2cap/listeners/{listener_id}", response_model=Status
+    )
+    async def l2cap_listener_close(
+        request: Request,
+        listener_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.close_l2cap_listener,
+            listener_id,
+            timeout_seconds,
+        )
+        return Status(success=True, message="LE L2CAP listener closed")
+
+    @application.post(
+        "/network/bluetooth/l2cap/connections",
+        response_model=L2CAPConnectionResponse,
+    )
+    async def l2cap_connection_create(
+        request: Request, command: L2CAPConnectionRequest
+    ):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.connect_l2cap,
+            command.peer_address,
+            command.psm,
+            command.mtu,
+            command.address_type,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get(
+        "/network/bluetooth/l2cap/connections",
+        response_model=list[L2CAPConnectionResponse],
+    )
+    async def l2cap_connections(request: Request):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(
+            request, "network", manager.list_l2cap_connections
+        )
+        return serialize(values)
+
+    @application.delete(
+        "/network/bluetooth/l2cap/connections/{connection_id}",
+        response_model=Status,
+    )
+    async def l2cap_connection_close(request: Request, connection_id: str):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request, "network", manager.close_l2cap_connection, connection_id
+        )
+        return Status(success=True, message="LE L2CAP connection closed")
+
+    @application.post(
+        "/network/bluetooth/l2cap/connections/{connection_id}/fips-handoff",
+        response_model=Status,
+    )
+    async def l2cap_connection_handoff(
+        request: Request, connection_id: str, command: L2CAPHandoffRequest
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.handoff_l2cap_to_fips,
+            connection_id,
+            command.timeout_seconds,
+        )
+        return Status(success=True, message="LE L2CAP connection handed to FIPS")
+
+    @application.post(
+        "/network/bluetooth/devices/{device_id}/connect",
+        response_model=BLEDeviceResponse,
+    )
+    async def bluetooth_device_connect(
+        request: Request, device_id: str, command: BLEDeviceOperationRequest
+    ):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.connect_bluetooth_device,
+            device_id,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.post(
+        "/network/bluetooth/devices/{device_id}/disconnect",
+        response_model=BLEDeviceResponse,
+    )
+    async def bluetooth_device_disconnect(
+        request: Request, device_id: str, command: BLEDeviceOperationRequest
+    ):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.disconnect_bluetooth_device,
+            device_id,
+            command.timeout_seconds,
+        )
+        return serialize(value)
+
+    @application.get(
+        "/network/bluetooth/devices/{device_id}/gatt",
+        response_model=list[GATTServiceResponse],
+    )
+    async def bluetooth_gatt(request: Request, device_id: str):
+        manager = await _get_manager(request, "network")
+        values = await _call_hardware(request, "network", manager.list_gatt, device_id)
+        return serialize(values)
+
+    @application.get(
+        "/network/bluetooth/devices/{device_id}/gatt/characteristics/{characteristic_id}",
+        response_model=GATTValueResponse,
+    )
+    async def bluetooth_gatt_read(
+        request: Request,
+        device_id: str,
+        characteristic_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        value = await _call_hardware(
+            request,
+            "network",
+            manager.read_gatt_characteristic,
+            device_id,
+            characteristic_id,
+            timeout_seconds,
+        )
+        return GATTValueResponse(value_base64=base64.b64encode(value).decode("ascii"))
+
+    @application.put(
+        "/network/bluetooth/devices/{device_id}/gatt/characteristics/{characteristic_id}",
+        response_model=Status,
+    )
+    async def bluetooth_gatt_write(
+        request: Request,
+        device_id: str,
+        characteristic_id: str,
+        command: GATTWriteRequest,
+    ):
+        manager = await _get_manager(request, "network")
+        value = _decode_base64(command.value_base64, "value_base64")
+        await _call_hardware(
+            request,
+            "network",
+            manager.write_gatt_characteristic,
+            device_id,
+            characteristic_id,
+            value,
+            command.with_response,
+            command.timeout_seconds,
+        )
+        return Status(success=True, message="GATT characteristic written")
+
+    @application.post(
+        "/network/bluetooth/devices/{device_id}/gatt/characteristics/"
+        "{characteristic_id}/subscriptions",
+        response_model=GATTSubscriptionResponse,
+    )
+    async def bluetooth_gatt_subscribe(
+        request: Request,
+        device_id: str,
+        characteristic_id: str,
+        command: GATTSubscriptionRequest,
+    ):
+        manager = await _get_manager(request, "network")
+        subscription_id = await _call_hardware(
+            request,
+            "network",
+            manager.subscribe_gatt_characteristic,
+            device_id,
+            characteristic_id,
+            command.subscription_id,
+            command.timeout_seconds,
+        )
+        return GATTSubscriptionResponse(subscription_id=subscription_id)
+
+    @application.delete(
+        "/network/bluetooth/gatt/subscriptions/{subscription_id}",
+        response_model=Status,
+    )
+    async def bluetooth_gatt_unsubscribe(
+        request: Request,
+        subscription_id: str,
+        timeout_seconds: float = Query(default=15.0, gt=0, le=120),
+    ):
+        manager = await _get_manager(request, "network")
+        await _call_hardware(
+            request,
+            "network",
+            manager.unsubscribe_gatt_characteristic,
+            subscription_id,
+            timeout_seconds,
+        )
+        return Status(success=True, message="GATT subscription removed")
 
     @application.get("/ups/status", response_model=UPSStatusResponse)
     async def ups_status(request: Request):
