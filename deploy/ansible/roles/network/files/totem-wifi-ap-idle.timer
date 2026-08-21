@@ -1,0 +1,11 @@
+[Unit]
+Description=Retry Wi-Fi selection after an unused Totem AP
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=1min
+AccuracySec=10s
+Unit=totem-wifi-ap-idle.service
+
+[Install]
+WantedBy=timers.target

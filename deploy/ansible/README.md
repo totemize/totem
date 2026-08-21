@@ -1,8 +1,8 @@
 # Reproducible Totem deploys
 
-This playbook manages FIPS, strfry, `totemd`, and the Python device manager.
-It supports both bare Raspbian/Debian devices and the legacy hand-installed
-layout already on the bench.
+This playbook manages NetworkManager Wi-Fi fallback, FIPS, strfry, `totemd`,
+and the Python device manager. It supports both bare Raspbian/Debian devices
+and the legacy hand-installed layout already on the bench.
 
 ## State model
 
@@ -25,6 +25,13 @@ Inventory pins each bench unit's FIPS npub and hex public key. That public
 identity is written into the bare strfry NIP-11 seed and verified against both
 the relay document and totemd's signed challenge. Private identity material is
 never stored in inventory or artifacts.
+
+The network role installs two inactive-on-deploy NetworkManager profiles and an
+event-triggered oneshot. Existing infrastructure wins; otherwise a Totem joins
+a visible open `!Totem` or hosts one at `10.21.0.1` after grace and jitter. A
+one-minute timer uses `iw` to preserve an AP with any associated station; after
+600 uninterrupted empty seconds it reruns the same selection cycle. Enabling
+the units does not switch the deployment's active Wi-Fi connection.
 
 The common device-manager role installs the same screen package, systemd unit,
 and replay command on every Totem. Inventory decides whether that unit is
@@ -82,6 +89,17 @@ changing the deployment path or inventory policy:
 ```bash
 deploy/ansible/scripts/deploy.sh --limit metot
 ```
+
+The Wi-Fi slice can be installed without building or restarting the rest of
+the stack. Keep the explicit host limit:
+
+```bash
+deploy/ansible/scripts/deploy.sh --limit motown --tags network
+```
+
+That command installs and enables fallback but leaves an active infrastructure
+connection untouched. Starting the oneshot while disconnected is the separate,
+deliberately disruptive AP acceptance test.
 
 Run the selected deployment a second time. A converged deployment must report
 `changed=0`, and the verification role checks the core services plus any

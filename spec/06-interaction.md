@@ -37,8 +37,8 @@ another totem's AP like any station (`03-network.md`).
   totem by any means, you know where its services live
   (`07-conventions.md`).
 - **Standardized address on the AP network:** the totem is always reachable
-  at its AP's gateway address (and/or an fd00 ULA), and/or a captive portal
-  landing on the web app. Guests never need to guess where the totem is
+  at `10.21.0.1`, including the web app on port `8080` and relay on port
+  `7777`. Guests never need to guess where the totem is
   (`07-conventions.md`).
 - **Flatness is a design rule.** Totems connecting to each other use the
   relay exactly the same way human users do — same ports, same protocol, no

@@ -1,0 +1,5 @@
+#!/bin/sh
+
+if [ "$1" = "wlan0" ] && [ "$2" = "down" ]; then
+    systemctl --no-block start totem-wifi-fallback.service
+fi

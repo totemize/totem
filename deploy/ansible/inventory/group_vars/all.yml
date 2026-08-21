@@ -20,6 +20,11 @@ totem_base_packages:
   - rsync
   - python3
 
+totem_network_packages:
+  - network-manager
+  - dnsmasq-base
+  - iw
+
 totem_device_manager_packages:
   - python3-venv
   - python3-pip
