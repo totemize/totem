@@ -1,0 +1,27 @@
+{
+  "protocol_version": 1,
+  "logical_value_model": "strict-json",
+  "vectors": [
+    {
+      "name": "request-with-correlation",
+      "message": {"type": "display.render", "id": "request-1", "frame": {"mode": "mono"}}
+    },
+    {
+      "name": "successful-result",
+      "message": {"type": "display.render.result", "id": "request-1", "ok": true}
+    },
+    {
+      "name": "structured-error",
+      "message": {
+        "type": "display.render.result",
+        "id": "request-1",
+        "ok": false,
+        "error": {"code": "unknown_type", "message": "unknown type: display.render"}
+      }
+    },
+    {
+      "name": "unsolicited-event",
+      "message": {"type": "binding.health", "binding_id": "display-primary", "state": "ready"}
+    }
+  ]
+}

@@ -1,9 +1,9 @@
 ---
 phase: 1
 slug: capability-oriented-hardware-runtime
-status: draft
+status: active
 nyquist_compliant: false
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-08-22
 ---
 
@@ -25,11 +25,33 @@ All Python and pytest claims use the controlled `.venv/bin/python` created by **
 
 Sampling: run the task-specific command after each task; run the hardware-runtime quick gate after each wave; run the full local gate in 01-33 Task 2. Target quick feedback is under 60 seconds; actual durations supersede the target once measured.
 
+## Wave-0 evidence (2026-08-22)
+
+- **Controlled interpreter:** `.venv/bin/python` — Python 3.9.6 on the local
+  controller. Totem and the pinned local test dependencies were installed with
+  `.venv/bin/python -m pip install -e . 'pytest>=7.3,<9.0'
+  'pytest-cov>=4.1,<7.0' 'httpx>=0.27,<0.28'`.
+- **Focused guard / fixture smoke:**
+  `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_import_boundaries.py -x`
+  — 7 passed in 0.01 s (under 1 s elapsed).
+- **Quick Wave-0 gate:** `.venv/bin/python -m pytest tests/unit/hardware_runtime -x`
+  — 7 passed in 0.01 s (under 1 s elapsed).
+- **Current full unit baseline:** `.venv/bin/python -m pytest tests/unit -x`
+  — stopped after 1.86 s with 23 passed and 1 pre-existing controller-platform
+  failure: `ModuleNotFoundError: dbus_next` while importing the Linux-only
+  NetworkManager Wi-Fi driver in `tests/unit/test_driver_contracts.py`.
+  `dbus-next` remains intentionally conditional on Linux in `pyproject.toml`;
+  this Wave-0 task did not change that platform contract.
+- **No-contact evidence:** the local benchmark shell emitted
+  `{"evidence_scope":"local-synthetic-only","hardware_contacted":false,
+  "pi_acceptance":false}`. No hardware marker, SSH, deployment, or device
+  allocation was used.
+
 ## Exact plan/task validation map
 
 | Wave | Plan/task | Requirements implemented | Automated command | Status |
 |---:|---|---|---|---|
-| 1 | 01-01 T1 — controlled environment, fakes, vectors, import guard, harness shell | TST-04 infrastructure | `test -x .venv/bin/python && .venv/bin/python -c 'import sys; assert sys.version_info >= (3, 9)' && .venv/bin/python -m pytest tests/unit/hardware_runtime/test_import_boundaries.py -x` | pending |
+| 1 | 01-01 T1 — controlled environment, fakes, vectors, import guard, harness shell | TST-04 infrastructure | `test -x .venv/bin/python && .venv/bin/python -c 'import sys; assert sys.version_info >= (3, 9)' && .venv/bin/python -m pytest tests/unit/hardware_runtime/test_import_boundaries.py -x` | passed 2026-08-22 |
 | 2 | 01-02 T1 — public API and independent fixture wheel | HWR-02, SPI-02 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_public_api_fixture.py -x` | pending |
 | 3 | 01-03 T1 — installed-fixture catalog→resolve→claim tracer | HWR-03, SPI-01 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_catalog_claim_tracer.py -x` | pending |
 | 4 | 01-04 T1 — claimed binding→child host→handle→bus tracer | HWR-02, SPI-06 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_runtime_tracer.py -x` | pending |
@@ -119,10 +141,10 @@ All 33 requirement IDs are present above. ISO-02 has one and only one implementa
 
 ## Wave-0 completion checklist
 
-- [ ] 01-01 T1 creates `.venv` with Python >=3.9, installs project tests, and records actual quick/full timing.
-- [ ] Fake clock/process/socket/broker/transcript fixtures and protocol vectors exist independently of spike code.
-- [ ] AST import guard enforces `totem.hardware` canonical ownership.
-- [ ] Benchmark harness shell is collection-safe and cannot contact hardware without explicit opt-in/allocation.
+- [x] 01-01 T1 creates `.venv` with Python >=3.9, installs project tests, and records actual quick/full timing.
+- [x] Fake clock/process/socket/broker/transcript fixtures and protocol vectors exist independently of spike code.
+- [x] AST import guard enforces `totem.hardware` canonical ownership.
+- [x] Benchmark harness shell is collection-safe and cannot contact hardware without explicit opt-in/allocation.
 - [ ] 01-02 T1 builds/installs the independent public API and fixture wheels; 01-03 and 01-04 consume them and prove provider import occurs only in the selected child after resolution and claims.
 
 ## Manual deferred gates
