@@ -1,0 +1,41 @@
+{
+  "schema": "totem.process-topology-benchmark@1",
+  "topology": "per-provider",
+  "platform": "macOS-15.6-arm64-arm-64bit",
+  "python": "3.9.6",
+  "binding_count": 8,
+  "host_process_count": 1,
+  "requests": 1600,
+  "startup_to_all_ready_ms": 22.971,
+  "memory": {
+    "metric": "rss_kib",
+    "total_kib": 12848,
+    "per_host_kib": [
+      12848
+    ],
+    "note": "RSS is a portable fallback and may double-count shared pages."
+  },
+  "round_trip_latency_ms": {
+    "median": 0.015417,
+    "p95": 0.040671,
+    "maximum": 0.193333
+  },
+  "forced_failure": {
+    "terminated_host_bindings": [
+      "binding-00",
+      "binding-01",
+      "binding-02",
+      "binding-03",
+      "binding-04",
+      "binding-05",
+      "binding-06",
+      "binding-07"
+    ],
+    "lost_binding_count": 8,
+    "unaffected_binding_count": 0,
+    "survivor_checks_passed": 0,
+    "replacement_ready_ms": 21.982,
+    "recovered_bindings_verified": 8
+  },
+  "scope": "empty CPython executable host using line-delimited JSON over pipes"
+}
