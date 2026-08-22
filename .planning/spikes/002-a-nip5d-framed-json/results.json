@@ -1,6 +1,7 @@
 {
   "schema": "totem.nip5d-framed-ipc-spike@1",
   "codec": "canonical-json",
+  "codec_library_version": "Python standard library",
   "codec_wire_id": 1,
   "protocol_version": 1,
   "platform": "macOS-15.6-arm64-arm-64bit",
@@ -11,7 +12,7 @@
     "attachments_per_frame": 16
   },
   "conformance": {
-    "passed": 22,
+    "passed": 25,
     "checks": [
       "control_round_trip",
       "one_byte_fragmentation",
@@ -20,6 +21,9 @@
       "canonical_attachment_order",
       "missing_type_rejected",
       "invalid_id_rejected",
+      "binary_value_outside_attachment_channel_rejected",
+      "non_finite_number_rejected",
+      "integer_outside_signed_64_bit_rejected",
       "reserved_attachment_field_rejected",
       "truncated_frame_rejected",
       "oversized_header_rejected_before_read",
@@ -40,12 +44,12 @@
   "benchmark": {
     "iterations": 2000,
     "decode_microseconds_per_frame": {
-      "control": 3.090396,
-      "display_with_raw_attachment": 6.8475
+      "control": 3.524604,
+      "display_with_raw_attachment": 8.150084
     },
     "encode_and_decode_microseconds_per_frame": {
-      "control": 5.695792,
-      "display_with_raw_attachment": 12.946834
+      "control": 7.087271,
+      "display_with_raw_attachment": 17.777082
     },
     "wire_sizes_bytes": {
       "control": 62,

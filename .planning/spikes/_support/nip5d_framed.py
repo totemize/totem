@@ -12,6 +12,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import platform
 import re
 import socket
@@ -41,16 +42,55 @@ class ProtocolError(Exception):
         self.message = message
 
 
+def validate_json_value(value: Any, depth: int = 0) -> None:
+    """Reject MessagePack-only values so every codec has JSON object semantics."""
+
+    if depth > 64:
+        raise ProtocolError("invalid_envelope", "message nesting exceeds 64 levels")
+    if value is None or isinstance(value, (bool, str)):
+        return
+    if isinstance(value, int):
+        if -(2**63) <= value <= 2**63 - 1:
+            return
+        raise ProtocolError("invalid_envelope", "integer is outside the signed 64-bit range")
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return
+        raise ProtocolError("invalid_envelope", "non-finite numbers are not permitted")
+    if isinstance(value, list):
+        for item in value:
+            validate_json_value(item, depth + 1)
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ProtocolError("invalid_envelope", "object keys must be strings")
+            validate_json_value(item, depth + 1)
+        return
+    raise ProtocolError(
+        "invalid_envelope", f"{type(value).__name__} is not a JSON-compatible value"
+    )
+
+
+def canonicalize_json(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: canonicalize_json(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        return [canonicalize_json(item) for item in value]
+    return value
+
+
 class JsonCodec:
     name = "canonical-json"
     wire_id = 1
     invalid_example = b"{"
+    library_version = "Python standard library"
 
     @staticmethod
     def encode(value: Mapping[str, Any]) -> bytes:
         try:
             return json.dumps(
-                value,
+                canonicalize_json(value),
                 ensure_ascii=False,
                 separators=(",", ":"),
                 sort_keys=True,
@@ -64,6 +104,69 @@ class JsonCodec:
             value = json.loads(data.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ProtocolError("invalid_header", f"JSON decoding failed: {exc}") from exc
+        if not isinstance(value, dict):
+            raise ProtocolError("invalid_envelope", "message header must decode to an object")
+        return value
+
+
+class MessagePackCodec:
+    name = "messagepack-json-subset"
+    wire_id = 2
+    invalid_example = b"\xc1"  # Reserved byte in the MessagePack format.
+
+    def __init__(self, pure_python: bool = False) -> None:
+        try:
+            import msgpack
+        except ImportError as exc:
+            raise RuntimeError(
+                "MessagePack spike requires msgpack; install 002-b requirements first"
+            ) from exc
+        self._msgpack = msgpack
+        self._pure_python = pure_python
+        if pure_python:
+            from msgpack import fallback
+
+            self._fallback = fallback
+            self._unpackb = fallback.unpackb
+            self.name = "messagepack-json-subset-pure-python"
+            self.library_version = f"{msgpack.__version__} fallback"
+        else:
+            self._unpackb = msgpack.unpackb
+            self.name = "messagepack-json-subset-native"
+            self.library_version = f"{msgpack.__version__} {msgpack.Packer.__module__}"
+
+    def encode(self, value: Mapping[str, Any]) -> bytes:
+        try:
+            canonical = canonicalize_json(value)
+            if self._pure_python:
+                return self._fallback.Packer(
+                    use_bin_type=True, strict_types=True
+                ).pack(canonical)
+            return self._msgpack.packb(canonical, use_bin_type=True, strict_types=True)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ProtocolError(
+                "invalid_header", f"MessagePack encoding failed: {exc}"
+            ) from exc
+
+    def decode(self, data: bytes) -> Dict[str, Any]:
+        try:
+            value = self._unpackb(
+                data,
+                raw=False,
+                strict_map_key=True,
+                use_list=True,
+                max_str_len=MAX_HEADER_BYTES,
+                max_bin_len=MAX_HEADER_BYTES,
+                max_array_len=MAX_HEADER_BYTES,
+                max_map_len=MAX_HEADER_BYTES,
+                max_ext_len=MAX_HEADER_BYTES,
+            )
+        except Exception as exc:
+            # The library documents several ValueError/FormatError/StackError
+            # paths. The try block is intentionally only the decode operation.
+            raise ProtocolError(
+                "invalid_header", f"MessagePack decoding failed: {exc}"
+            ) from exc
         if not isinstance(value, dict):
             raise ProtocolError("invalid_envelope", "message header must decode to an object")
         return value
@@ -100,6 +203,7 @@ class BytesReader:
 
 
 def validate_message(message: Mapping[str, Any]) -> None:
+    validate_json_value(message)
     message_type = message.get("type")
     if not isinstance(message_type, str) or not TYPE_PATTERN.fullmatch(message_type):
         raise ProtocolError(
@@ -503,6 +607,33 @@ def run_conformance(codec: Any) -> List[str]:
         ),
     )
     check(
+        "binary_value_outside_attachment_channel_rejected",
+        lambda: expect_error(
+            "invalid_envelope",
+            lambda: encode_frame(
+                codec, {"type": "totem.test", "id": "bytes", "value": b"not-json"}
+            ),
+        ),
+    )
+    check(
+        "non_finite_number_rejected",
+        lambda: expect_error(
+            "invalid_envelope",
+            lambda: encode_frame(
+                codec, {"type": "totem.test", "id": "nan", "value": float("nan")}
+            ),
+        ),
+    )
+    check(
+        "integer_outside_signed_64_bit_rejected",
+        lambda: expect_error(
+            "invalid_envelope",
+            lambda: encode_frame(
+                codec, {"type": "totem.test", "id": "huge", "value": 2**63}
+            ),
+        ),
+    )
+    check(
         "reserved_attachment_field_rejected",
         lambda: expect_error(
             "reserved_field",
@@ -746,6 +877,7 @@ def run_spike(codec: Any) -> Dict[str, Any]:
     return {
         "schema": "totem.nip5d-framed-ipc-spike@1",
         "codec": codec.name,
+        "codec_library_version": codec.library_version,
         "codec_wire_id": codec.wire_id,
         "protocol_version": PROTOCOL_VERSION,
         "platform": platform.platform(),

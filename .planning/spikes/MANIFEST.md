@@ -24,6 +24,12 @@ incremental migration from the PR #22 baseline.
   errors, and unsolicited typed events.
 - Carrier encodings are replaceable and must not use executable
   serialization such as pickle. Binary attachments are bounded and explicit.
+- Every carrier preserves a strict JSON-compatible logical value model;
+  codec-only types may not leak into capability contracts. Protocol and codec
+  versions are explicit and unsupported values fail before payload dispatch.
+- Unknown unsolicited types are ignored for NIP-5D forward compatibility;
+  unknown ID-bearing requests receive a correlated structured error, matching
+  Totem's existing control-plane behavior.
 - Isolation covers all Python hardware capabilities, including display,
   power, storage, NFC, Wi-Fi, and Bluetooth; it is not a screen-only design.
 - `screen` remains a bounded application context and consumes narrow display,
@@ -40,5 +46,5 @@ incremental migration from the PR #22 baseline.
 | 001a | Per-binding isolation | comparison | Given eight bindings, when each has its own child host, then one crash affects one binding and its resource cost is observable | PARTIAL | process, isolation, topology |
 | 001b | Per-provider isolation | comparison | Given the same bindings, when one provider host multiplexes them, then cost falls while the larger failure domain is measurable | PARTIAL | process, isolation, topology |
 | 002a | NIP-5D framed JSON | comparison | Given control envelopes and binary frames, when carried over a Unix socket as framed JSON plus bounded attachments, then requests, results, events, fragmentation, and rejection paths remain deterministic | PARTIAL | ipc, nip-5d, json, unix-socket |
-| 002b | NIP-5D MessagePack | comparison | Given the identical logical envelopes and payloads, when only control encoding changes to MessagePack, then size and latency gains can be weighed against dependency and operability cost | PENDING | ipc, nip-5d, messagepack, unix-socket |
+| 002b | NIP-5D MessagePack | comparison | Given the identical logical envelopes and payloads, when only control encoding changes to MessagePack, then size and latency gains can be weighed against dependency and operability cost | PARTIAL | ipc, nip-5d, messagepack, unix-socket |
 | 003 | Dual-host contract and failure parity | standard | Given one capability provider and conformance suite, when run in process and out of process, then functional outcomes match and containment differences are explicit | PENDING | host, conformance, lifecycle, isolation |

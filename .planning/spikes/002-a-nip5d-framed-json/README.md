@@ -109,7 +109,7 @@ control and display frames.
 
 ## Results
 
-**PARTIAL, with the carrier behavior validated locally.** All 22 checks passed,
+**PARTIAL, with the carrier behavior validated locally.** All 25 checks passed,
 including a real Unix-domain socket conversation, one-byte reads, two
 pipelined frames, multiple checksummed attachments, canonical attachment
 ordering, invalid type/ID/reserved fields, truncation, oversized declarations,
@@ -119,12 +119,15 @@ unclaimed bytes, and a capability-level missing-attachment error.
 The representative 250×122 monochrome display message occupied 4,132 bytes:
 16 prefix bytes, 303 JSON header bytes, and 3,813 raw frame bytes. Inline
 base64 occupied 5,240 bytes, so explicit raw attachment framing saved 1,108
-bytes for the complete message. On this macOS/Python 3.9 run, seven-sample
-median decode cost was 3.090396 µs for the control request and 6.8475 µs for
-the display frame; encode-plus-decode was 5.695792/12.946834 µs.
+bytes for the complete message. On this macOS/Python 3.9 standalone run,
+seven-sample median decode cost was 3.524604 µs for the control request and
+8.150084 µs for the display frame; encode-plus-decode was
+7.087271/17.777082 µs.
 
 The experiment validates the semantics, bounds, and parser behavior, not a
-production implementation or Pi budget. Its final comparison verdict waits
-for 002b and the Pi-class run. JSON retains an important maintenance advantage:
-operators can inspect the same message vocabulary already exposed by `totemd`
-without a special decoder.
+production implementation or Pi budget. The head-to-head 002b run makes JSON
+the provisional v1 winner: MessagePack saved only 47 bytes on the full display
+frame, and its pure-Python fallback was substantially slower. JSON retains an
+important maintenance advantage: operators can inspect the same message
+vocabulary already exposed by `totemd` without a special decoder. The final
+lock still requires the Pi-class acceptance run.
