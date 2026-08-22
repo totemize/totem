@@ -249,35 +249,57 @@ spawn time rather than accepted from message payloads. Capability availability
 is negotiated from the validated driver manifest before the session starts.
 
 NIP-5D defines logical JSON-object semantics over a replaceable carrier. The
-driver-host protocol follows the same separation: 002a tests a framed JSON
-representation over a Unix-domain transport, while 002b tests MessagePack as an
-alternative encoding of the *same* envelope. No capability behavior or schema
-may vary by encoding.
+driver-host protocol follows the same separation. Spike 002a validated a
+framed canonical-JSON representation over a Unix-domain transport; 002b proved
+that MessagePack can encode the *same* envelope but did not justify it as the
+v1 default. No capability behavior or schema may vary by encoding. The fixed
+prefix carries explicit protocol and codec versions, and the decoder rejects
+unsupported values before dispatch.
 
 Pickle and executable object serialization are forbidden. Binary data uses a
 bounded, explicitly described attachment rather than changing the control
-envelope; the spike compares inline/base64 and carrier-level binary attachment
-costs for display frames. The in-process adapter deliberately crosses the same
-logical serialization boundary so behavior does not fork and conformance tests
-can run unchanged against both hosts.
+envelope. The attachment table declares IDs, media types, lengths, and hashes;
+the carrier bounds header bytes, total payload bytes, and attachment count.
+The in-process adapter uses the same schema validation boundary so behavior
+does not fork and conformance tests run unchanged against both hosts. It may
+avoid an unnecessary physical byte copy only if codec-only types still cannot
+enter the logical API.
 
-There is one semantic difference to resolve explicitly. The current NIP-5D
-draft silently ignores unrecognized types for forward compatibility, whereas
-`totemd` returns a correlated `ok: false` result for an unknown request. The
-spike will test the useful combined rule: ignore unknown unsolicited pushes,
-but return a structured error for an unknown id-bearing request so the caller
-does not wait for a timeout.
+The current NIP-5D draft silently ignores unrecognized types for forward
+compatibility, whereas `totemd` returns a correlated `ok: false` result for an
+unknown request. The validated combined rule is: ignore unknown unsolicited
+pushes, but return a structured error for an unknown ID-bearing request so the
+caller does not wait for a timeout.
 
-The process supervisor owns startup and operation deadlines, cancellation,
+Functional parity is not containment parity:
+
+| Concern | Process host (default) | In-process host (opt-in) |
+|---------|------------------------|--------------------------|
+| Capability envelopes and attachments | Shared contract and conformance suite | Shared contract and conformance suite |
+| Cooperative cancellation | Supported | Required for clean recovery |
+| Uncooperative timeout | Terminate child, wait for death, release leases, restart | Mark `CONTAMINATED`, reject work, retain leases, restart daemon |
+| Native/process-fatal crash | Daemon survives and supervises restart | Daemon exits; service manager performs whole-daemon recovery |
+| Trust implication | Plugin code stays outside daemon address space | Operator accepts plugin code in daemon address space |
+
+The host-mode choice must therefore be visible in effective configuration and
+health output. Selecting in-process execution is an explicit acceptance of
+weaker containment, not merely a latency toggle.
+
+The process supervisor owns startup and operation deadlines, hard termination,
 heartbeats, crash detection, bounded restart backoff, quarantine, logging, and
-resource release. Plugin code is imported only in the child in default mode.
+resource release after confirmed process death. Plugin code is imported only
+in the child in default mode. In-process deadlines use cooperative cancellation;
+the runtime must never release a lease or start a replacement while a timed-out
+plugin thread is still alive.
 OS-level privilege separation additionally requires distinct identities,
 device-node allowlists, D-Bus policy, and other sandboxing; a subprocess alone
 is a fault boundary, not a complete security boundary.
 
-The spike must determine the wire encoding and whether the practical default
-is one process per binding or one process per plugin provider on constrained Pi
-hardware.
+Canonical JSON with raw attachments is the provisional v1 carrier. One process
+per provider distribution is the provisional scalable grouping; per-binding
+grouping remains an override for smaller crash domains. Both choices retain a
+Pi-class acceptance gate. Local desktop numbers are evidence about shape and
+failure domains, not fleet budgets.
 
 ## Lifecycle and resource ownership
 
@@ -288,13 +310,16 @@ DISCOVERED → MATCHED → BOUND → STARTING → READY
                                       ↘ DEGRADED
 READY/DEGRADED → STOPPING → CLOSED
 any state → FAILED → restarting or QUARANTINED
+in-process timeout with live code → CONTAMINATED → daemon restart
 ```
 
 The resource broker resolves claims before startup and issues leases that are
-revoked on normal close, timeout, or process death. Radio coexistence belongs
-here: Wi-Fi station, AP, P2P, Aware, Bluetooth scanning, advertising, GATT, and
-L2CAP are capabilities coordinated through shared PHY/interface/adapter
-constraints, not methods accumulated on one `NetworkManager`.
+revoked on normal close or confirmed process death. A cooperative in-process
+cancellation may close normally; an uncooperative timeout retains its leases
+until the daemon exits. Radio coexistence belongs here: Wi-Fi station, AP, P2P,
+Aware, Bluetooth scanning, advertising, GATT, and L2CAP are capabilities
+coordinated through shared PHY/interface/adapter constraints, not methods
+accumulated on one `NetworkManager`.
 
 ## API and application boundaries
 
@@ -317,8 +342,8 @@ Migration is incremental rather than a directory-only rewrite:
 1. Introduce the public contracts, manifests, catalog, and conformance harness.
 2. Wrap every existing built-in driver as a plugin without changing behavior.
 3. Add inventory, resolution, resource leases, and explicit lifecycle.
-4. Add both driver hosts and make isolated execution the default after Pi
-   performance and recovery gates pass.
+4. Add both driver hosts with isolated execution as the default; use Pi
+   performance and recovery gates to lock process grouping and budgets.
 5. Split capability services out of the current managers, beginning with the
    radio facade from PR #22.
 6. Move API and screen callers onto capability handles.
@@ -339,6 +364,9 @@ and existing HTTP routes operational.
   prerequisites, unsupported versions, and resource conflicts.
 - Kill, hang, and corrupt isolated driver sessions to verify deadlines,
   restart, quarantine, diagnostics, and lease cleanup.
+- Run the shared functional suite in both modes, then separately verify that
+  in-process hangs contaminate the binding without releasing leases and that
+  process-fatal calls cannot be advertised as contained in that mode.
 - Benchmark startup, resident memory, control-operation latency, event load, and
   display-frame transfer on armv6l/armv7l and aarch64 representatives.
 - Retain existing unit/mock/API tests and explicit hardware gates while legacy
@@ -352,14 +380,19 @@ risk away from central factory edits and implicit conventions into explicit,
 testable contracts. The result supports an open-ended hardware ecosystem while
 keeping failure, compatibility, and maintenance behavior observable.
 
-## Open questions for the spike
+## Spike findings and remaining gates
 
-1. Does a NIP-5D-shaped framed JSON representation, including bounded binary
-   attachments, provide adequate transfer performance and schema evolution, or
-   does MessagePack provide enough measured value to justify another encoding?
-2. What are cold-start, steady-memory, and request-latency costs of per-binding
-   versus per-provider child processes on the fleet's smallest architecture?
-3. Can both host modes pass the same cancellation, crash, event-ordering, and
-   binary-frame conformance suite without mode-specific capability behavior?
-4. Which resource restrictions can be enforced by the current systemd and
-   device permission model without broadening daemon privileges?
+1. Framed canonical JSON plus bounded raw attachments passed 25 local protocol
+   cases and is the v1 candidate. Native MessagePack made a full 3,813-byte
+   display frame only 47 bytes smaller; its Python fallback was slower and its
+   fleet installation matrix is worse.
+2. Per-provider isolation reduced eight empty hosts to one locally, while its
+   injected crash affected all eight bindings rather than one. It is the
+   provisional default grouping, with per-binding as an explicit override.
+3. Both host modes produced identical functional transcripts. Hard hang/crash
+   containment cannot be equal: in-process failure contaminates or terminates
+   the daemon; process failure can be terminated and restarted independently.
+4. Pi-class PSS, startup, latency, frame-transfer, native dependency, and
+   restart measurements remain required on armv6l/armv7l and aarch64.
+5. The current systemd/device-permission model still needs a separate spike for
+   least-privilege device nodes, D-Bus policy, identities, and sandbox controls.

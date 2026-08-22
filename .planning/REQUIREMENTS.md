@@ -61,10 +61,14 @@ without editing Totem core or destabilizing existing capabilities.
 - [ ] **ISO-04**: Driver IPC never uses pickle or another executable object
   serialization format; a carrier encoding may change without changing the
   logical NIP-5D-shaped envelope.
-- [ ] **ISO-05**: The supervisor enforces startup and operation deadlines,
-  cancellation, crash detection, bounded restart backoff, quarantine, and
-  deterministic resource release.
-- [ ] **ISO-06**: Isolated hosts receive only declared resources and privileges;
+- [ ] **ISO-05**: The process supervisor enforces startup and operation
+  deadlines, hard termination, crash detection, bounded restart backoff,
+  quarantine, and resource release only after child death is confirmed.
+- [ ] **ISO-06**: In-process deadlines use cooperative cancellation. If plugin
+  code remains live after its grace period, the binding becomes contaminated,
+  rejects new work, retains every resource lease, and requires controlled
+  daemon restart; native process-fatal failure is an accepted opt-in risk.
+- [ ] **ISO-07**: Isolated hosts receive only declared resources and privileges;
   runtime process isolation is documented separately from package trust.
 
 ### Lifecycle and resources
@@ -131,14 +135,14 @@ without editing Totem core or destabilizing existing capabilities.
 | HWR-01..04 | Phase 1 | Pending |
 | SPI-01..06 | Phase 1 | Pending |
 | CMP-01..04 | Phase 1 | Pending |
-| ISO-01..06 | Phase 1 | Pending |
+| ISO-01..07 | Phase 1 | Pending |
 | RUN-01..03 | Phase 1 | Pending |
 | API-01..05 | Phase 1 | Pending |
 | TST-01..04 | Phase 1 | Pending |
 
 **Coverage:**
-- v1 requirements: 32 total
-- Mapped to phases: 32
+- v1 requirements: 33 total
+- Mapped to phases: 33
 - Unmapped: 0 ✓
 
 ---

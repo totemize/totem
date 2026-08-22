@@ -22,6 +22,12 @@ incremental migration from the PR #22 baseline.
   contract used by Totem's control plane: typed JSON-object semantics,
   request/result correlation by `id`, `.result` response types, structured
   errors, and unsolicited typed events.
+- “Same host contract” means functional envelope parity, not identical fault
+  containment. Process hosts support hard termination/restart; in-process
+  cancellation is cooperative and native failures remain daemon-wide.
+- After an uncooperative in-process timeout, the binding is contaminated, new
+  work is rejected, and resource leases remain held until a controlled daemon
+  restart. The runtime must never pretend the timed-out thread was stopped.
 - Carrier encodings are replaceable and must not use executable
   serialization such as pickle. Binary attachments are bounded and explicit.
 - Every carrier preserves a strict JSON-compatible logical value model;
@@ -47,4 +53,4 @@ incremental migration from the PR #22 baseline.
 | 001b | Per-provider isolation | comparison | Given the same bindings, when one provider host multiplexes them, then cost falls while the larger failure domain is measurable | PARTIAL | process, isolation, topology |
 | 002a | NIP-5D framed JSON | comparison | Given control envelopes and binary frames, when carried over a Unix socket as framed JSON plus bounded attachments, then requests, results, events, fragmentation, and rejection paths remain deterministic | PARTIAL | ipc, nip-5d, json, unix-socket |
 | 002b | NIP-5D MessagePack | comparison | Given the identical logical envelopes and payloads, when only control encoding changes to MessagePack, then size and latency gains can be weighed against dependency and operability cost | PARTIAL | ipc, nip-5d, messagepack, unix-socket |
-| 003 | Dual-host contract and failure parity | standard | Given one capability provider and conformance suite, when run in process and out of process, then functional outcomes match and containment differences are explicit | PENDING | host, conformance, lifecycle, isolation |
+| 003 | Dual-host contract and failure parity | standard | Given one capability provider and conformance suite, when run in process and out of process, then functional outcomes match and containment differences are explicit | VALIDATED | host, conformance, lifecycle, isolation |

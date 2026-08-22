@@ -23,15 +23,16 @@ catalog, deterministic compatibility resolver, resource broker, explicit
 lifecycle, NIP-5D-shaped driver messaging, dual execution hosts, capability
 services, and compatibility facades across the complete Python hardware
 subsystem.
-**Requirements:** HWR-01..04, SPI-01..06, CMP-01..04, ISO-01..06,
+**Requirements:** HWR-01..04, SPI-01..06, CMP-01..04, ISO-01..07,
 RUN-01..03, API-01..05, TST-01..04
 **Depends on:** PR #22 commit `211f890b` and the driver-host feasibility spike
 **Success Criteria** (what must be TRUE):
   1. A separately packaged fixture driver is discovered, matched, configured,
      and bound without editing Totem core or a central registry.
-  2. The same driver and capability conformance tests pass through isolated and
-     in-process hosts; isolated driver failure cannot terminate the daemon and
-     releases its resource leases.
+  2. The same functional conformance tests pass through isolated and in-process
+     hosts; isolated driver failure cannot terminate the daemon and releases
+     leases after child death, while an uncooperative in-process timeout marks
+     the binding contaminated and retains leases until daemon restart.
   3. Exact matches, overrides, unsupported versions, missing prerequisites,
      resource conflicts, and ambiguous matches produce deterministic results
      with actionable evidence.
