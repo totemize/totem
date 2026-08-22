@@ -4,17 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
-status: planning
-stopped_at: Phase 1 defined; driver-host spike alignment pending
-last_updated: "2026-08-22T15:26:22.996Z"
+status: executing
+stopped_at: Completed HW-01-01-PLAN.md
+last_updated: "2026-08-22T15:34:16.283Z"
 last_activity: 2026-08-22
-last_activity_desc: Added Phase 1 and captured its architecture contract
+last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
 ---
 
 # Project State
@@ -29,12 +28,12 @@ without editing Totem core or destabilizing existing capabilities.
 
 ## Current Position
 
-Phase: 1 of 1 (Capability-Oriented Hardware Runtime)
-Plan: Not planned
-Status: Ready for feasibility spike and phase planning
-Last activity: 2026-08-22 — Added Phase 1 and captured its architecture contract
+Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
+Plan: 2 of 33
+Status: Ready to execute
+Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ 0%
+Progress: ░░░░░░░░░░ [░░░░░░░░░░] 3%
 
 ## Accumulated Context
 
@@ -48,6 +47,8 @@ Progress: ░░░░░░░░░░ 0%
   matching the vocabulary already used by `totemd`.
 
 - PR #22 commit `211f890b` is the implementation baseline.
+- [Phase HW-01]: Use .venv/bin/python for all later local Python and pytest claims.
+- [Phase HW-01]: Synthetic benchmark evidence is local-only and cannot claim Pi acceptance.
 
 ### Roadmap Evolution
 
@@ -64,6 +65,12 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-22
-Stopped at: Phase 1 defined; driver-host spike alignment pending
+Last session: 2026-08-22T15:34:06.449Z
+Stopped at: Completed HW-01-01-PLAN.md
 Resume file: None
+
+## Performance Metrics
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase HW-01 P01 | 4m | 1 tasks | 8 files |

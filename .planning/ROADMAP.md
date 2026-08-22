@@ -46,9 +46,43 @@ RUN-01..03, API-01..05, TST-01..04
 
   5. Pi-class measurements establish an acceptable default IPC encoding and
      process granularity, with the decision recorded in the public contract.
-**Plans:** TBD
+**Plans:** 1/33 plans executed
 
 Plans:
+
+- [x] 01-01-PLAN.md
+- [ ] 01-02-PLAN.md
+- [ ] 01-03-PLAN.md
+- [ ] 01-04-PLAN.md
+- [ ] 01-05-PLAN.md
+- [ ] 01-06-PLAN.md
+- [ ] 01-07-PLAN.md
+- [ ] 01-08-PLAN.md
+- [ ] 01-09-PLAN.md
+- [ ] 01-10-PLAN.md
+- [ ] 01-11-PLAN.md
+- [ ] 01-12-PLAN.md
+- [ ] 01-13-PLAN.md
+- [ ] 01-14-PLAN.md
+- [ ] 01-15-PLAN.md
+- [ ] 01-16-PLAN.md
+- [ ] 01-17-PLAN.md
+- [ ] 01-18-PLAN.md
+- [ ] 01-19-PLAN.md
+- [ ] 01-20-PLAN.md
+- [ ] 01-21-PLAN.md
+- [ ] 01-22-PLAN.md
+- [ ] 01-23-PLAN.md
+- [ ] 01-24-PLAN.md
+- [ ] 01-25-PLAN.md
+- [ ] 01-26-PLAN.md
+- [ ] 01-27-PLAN.md
+- [ ] 01-28-PLAN.md
+- [ ] 01-29-PLAN.md
+- [ ] 01-30-PLAN.md
+- [ ] 01-31-PLAN.md
+- [ ] 01-32-PLAN.md
+- [ ] 01-33-PLAN.md
 
 - [ ] TBD (run /gsd-plan-phase 1 to break down)
 
@@ -56,4 +90,4 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Capability-Oriented Hardware Runtime | 0/TBD | Not started | - |
+| 1. Capability-Oriented Hardware Runtime | 1/33 | In Progress|  |
