@@ -19,7 +19,8 @@ plugins, not core dependencies.
 Third-party drivers must be independently installable Python distributions.
 They run in isolated child processes by default. Operators may explicitly use
 the same plugin in process globally or per plugin. Both execution modes share
-one transport-neutral contract and the same conformance suite.
+one transport-neutral, NIP-5D-shaped logical contract and the same conformance
+suite.
 
 The `screen` package remains a separate deployable bounded context and consumes
 narrow capability ports. It is not itself a hardware driver or manager.
@@ -230,11 +231,42 @@ default_execution = "process"
 execution = "in_process"
 ```
 
-Commands, results, events, health, lifecycle transitions, and errors are
-versioned serializable envelopes. Pickle and executable object serialization
-are forbidden. The in-process adapter deliberately crosses the same logical
-serialization boundary so behavior does not fork and conformance tests can run
-unchanged against both hosts.
+Commands, results, events, health, lifecycle transitions, and errors reuse the
+NIP-5D message pattern already adopted by Totem's loopback bus
+(`spec/07-conventions.md`, `spec/10-control-plane.md`, and
+`totemd/src/bus.rs`):
+
+```json
+{ "type": "display.frame.write", "id": "req-42", "frame": { "attachment": "frame-1" } }
+{ "type": "display.frame.write.result", "id": "req-42", "ok": true }
+{ "type": "display.refresh.completed", "binding": "display-0" }
+```
+
+The first `type` segment owns a capability domain, `id` correlates requests and
+results, `.result` names a response, and unsolicited typed pushes carry events.
+Plugin and binding identity is attested by the carrier/session established at
+spawn time rather than accepted from message payloads. Capability availability
+is negotiated from the validated driver manifest before the session starts.
+
+NIP-5D defines logical JSON-object semantics over a replaceable carrier. The
+driver-host protocol follows the same separation: 002a tests a framed JSON
+representation over a Unix-domain transport, while 002b tests MessagePack as an
+alternative encoding of the *same* envelope. No capability behavior or schema
+may vary by encoding.
+
+Pickle and executable object serialization are forbidden. Binary data uses a
+bounded, explicitly described attachment rather than changing the control
+envelope; the spike compares inline/base64 and carrier-level binary attachment
+costs for display frames. The in-process adapter deliberately crosses the same
+logical serialization boundary so behavior does not fork and conformance tests
+can run unchanged against both hosts.
+
+There is one semantic difference to resolve explicitly. The current NIP-5D
+draft silently ignores unrecognized types for forward compatibility, whereas
+`totemd` returns a correlated `ok: false` result for an unknown request. The
+spike will test the useful combined rule: ignore unknown unsolicited pushes,
+but return a structured error for an unknown id-bearing request so the caller
+does not wait for a timeout.
 
 The process supervisor owns startup and operation deadlines, cancellation,
 heartbeats, crash detection, bounded restart backoff, quarantine, logging, and
@@ -322,8 +354,9 @@ keeping failure, compatibility, and maintenance behavior observable.
 
 ## Open questions for the spike
 
-1. Which non-executable framing/encoding gives adequate binary transfer,
-   debuggability, and schema evolution without an oversized runtime dependency?
+1. Does a NIP-5D-shaped framed JSON representation, including bounded binary
+   attachments, provide adequate transfer performance and schema evolution, or
+   does MessagePack provide enough measured value to justify another encoding?
 2. What are cold-start, steady-memory, and request-latency costs of per-binding
    versus per-provider child processes on the fleet's smallest architecture?
 3. Can both host modes pass the same cancellation, crash, event-ordering, and

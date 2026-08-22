@@ -36,6 +36,8 @@ Progress: ░░░░░░░░░░ 0%
 - Third-party drivers are independently installable Python distributions.
 - Process isolation is the default; in-process execution is explicit opt-in.
 - Both host modes share one transport-neutral contract.
+- That contract follows NIP-5D's typed message and correlated-result pattern,
+  matching the vocabulary already used by `totemd`.
 - PR #22 commit `211f890b` is the implementation baseline.
 
 ### Roadmap Evolution

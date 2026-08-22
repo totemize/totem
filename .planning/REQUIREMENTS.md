@@ -54,10 +54,13 @@ without editing Totem core or destabilizing existing capabilities.
   default mode does not import third-party driver code into the daemon process.
 - [ ] **ISO-02**: An operator can select in-process execution globally or for a
   specific plugin through configuration.
-- [ ] **ISO-03**: Isolated and in-process hosts expose identical versioned,
-  serializable command, result, event, lifecycle, and error envelopes.
+- [ ] **ISO-03**: Isolated and in-process hosts expose the same NIP-5D-shaped
+  logical protocol: JSON-object semantics, `type` values in capability-domain
+  action form, request/result correlation by `id`, `.result` response types,
+  structured success/errors, and unsolicited typed pushes.
 - [ ] **ISO-04**: Driver IPC never uses pickle or another executable object
-  serialization format.
+  serialization format; a carrier encoding may change without changing the
+  logical NIP-5D-shaped envelope.
 - [ ] **ISO-05**: The supervisor enforces startup and operation deadlines,
   cancellation, crash detection, bounded restart backoff, quarantine, and
   deterministic resource release.

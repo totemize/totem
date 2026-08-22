@@ -20,8 +20,9 @@ remain operational through compatibility facades.
 
 **Goal:** Deliver an independently versioned driver API, import-free plugin
 catalog, deterministic compatibility resolver, resource broker, explicit
-lifecycle, dual execution hosts, capability services, and compatibility facades
-across the complete Python hardware subsystem.
+lifecycle, NIP-5D-shaped driver messaging, dual execution hosts, capability
+services, and compatibility facades across the complete Python hardware
+subsystem.
 **Requirements:** HWR-01..04, SPI-01..06, CMP-01..04, ISO-01..06,
 RUN-01..03, API-01..05, TST-01..04
 **Depends on:** PR #22 commit `211f890b` and the driver-host feasibility spike

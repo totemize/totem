@@ -72,6 +72,7 @@ and `api` made the mixed taxonomy visible.
 | Process-isolated driver execution is the default | A failed plugin should not take down the hardware daemon | — Pending |
 | In-process execution remains an explicit option | Trusted or constrained deployments may prioritize latency and memory | — Pending |
 | Both hosts implement one transport-neutral contract | Behavior and tests must not fork by execution mode | — Pending |
+| Driver messages use a NIP-5D-shaped logical envelope | Reuses Totem's existing `type`/`id`/`.result` vocabulary while allowing the carrier to change | — Pending |
 
 ---
 *Last updated: 2026-08-22 after hardware ontology exploration*
