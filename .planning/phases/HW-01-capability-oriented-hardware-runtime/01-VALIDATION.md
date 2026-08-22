@@ -30,18 +30,19 @@ Sampling: run the task-specific command after each task; run the hardware-runtim
 - **Controlled interpreter:** `.venv/bin/python` — Python 3.9.6 on the local
   controller. Totem and the pinned local test dependencies were installed with
   `.venv/bin/python -m pip install -e . 'pytest>=7.3,<9.0'
-  'pytest-cov>=4.1,<7.0' 'httpx>=0.27,<0.28'`.
+  'pytest-cov>=4.1,<7.0' 'httpx>=0.27,<0.28'
+  'dbus-next>=0.2.3,<1.0'`. `dbus-next` is declared as a dev/test
+  dependency; the production dependency remains Linux-only.
 - **Focused guard / fixture smoke:**
   `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_import_boundaries.py -x`
   — 7 passed in 0.01 s (under 1 s elapsed).
 - **Quick Wave-0 gate:** `.venv/bin/python -m pytest tests/unit/hardware_runtime -x`
   — 7 passed in 0.01 s (under 1 s elapsed).
-- **Current full unit baseline:** `.venv/bin/python -m pytest tests/unit -x`
-  — stopped after 1.86 s with 23 passed and 1 pre-existing controller-platform
-  failure: `ModuleNotFoundError: dbus_next` while importing the Linux-only
-  NetworkManager Wi-Fi driver in `tests/unit/test_driver_contracts.py`.
-  `dbus-next` remains intentionally conditional on Linux in `pyproject.toml`;
-  this Wave-0 task did not change that platform contract.
+- **Current full unit baseline:**
+  `.venv/bin/python -m pytest tests/unit -x -q --tb=short`
+  — 143 passed in 0.86 s. The controller test environment installs
+  `dbus-next` through the declared Poetry dev dependency so driver-contract
+  imports remain portable; production installs still use the Linux-only marker.
 - **No-contact evidence:** the local benchmark shell emitted
   `{"evidence_scope":"local-synthetic-only","hardware_contacted":false,
   "pi_acceptance":false}`. No hardware marker, SSH, deployment, or device
