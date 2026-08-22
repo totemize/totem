@@ -9,115 +9,138 @@ created: 2026-08-22
 
 # Phase 1 — Validation Strategy
 
-> Per-phase validation contract for feedback sampling during execution.
+All Python and pytest claims use the controlled `.venv/bin/python` created by **01-01 Task 1**. No implementation plan may substitute an ambient `python` or `python3` command. Hardware remains opt-in and requires explicit allocation.
 
----
-
-## Test Infrastructure
+## Test infrastructure
 
 | Property | Value |
-|----------|-------|
-| **Framework** | `pytest >=7.3,<9.0` |
-| **Config file** | `pyproject.toml` |
-| **Quick run command** | `python -m pytest tests/unit -m 'unit and mock_transport' -x` |
-| **Full suite command** | `python -m pytest tests/unit -x` |
-| **Estimated runtime** | Establish during Wave 0; target feedback latency is under 60 seconds |
+|---|---|
+| Framework | `pytest >=7.3,<9.0` under Python >=3.9 |
+| Config | `pyproject.toml` |
+| Controlled interpreter | `.venv/bin/python` |
+| Quick gate | `.venv/bin/python -m pytest tests/unit/hardware_runtime -x` |
+| Full local gate | `.venv/bin/python -m pytest tests/unit -x` |
+| Hardware gate | Deferred; `--run-hardware` plus explicit target/allocation only |
+| Feedback timing | Measured and recorded by 01-01 Task 1 before tracer evidence |
 
-The controller did not have a runnable project test environment during phase
-research. Wave 0 must create one before implementation evidence can be
-accepted. Hardware tests remain opt-in and require explicit bench allocation.
+Sampling: run the task-specific command after each task; run the hardware-runtime quick gate after each wave; run the full local gate in 01-33 Task 2. Target quick feedback is under 60 seconds; actual durations supersede the target once measured.
 
----
+## Exact plan/task validation map
 
-## Sampling Rate
+| Wave | Plan/task | Requirements implemented | Automated command | Status |
+|---:|---|---|---|---|
+| 1 | 01-01 T1 — controlled environment, fakes, vectors, import guard, harness shell | TST-04 infrastructure | `test -x .venv/bin/python && .venv/bin/python -c 'import sys; assert sys.version_info >= (3, 9)' && .venv/bin/python -m pytest tests/unit/hardware_runtime/test_import_boundaries.py -x` | pending |
+| 2 | 01-02 T1 — public API and independent fixture wheel | HWR-02, SPI-02 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_public_api_fixture.py -x` | pending |
+| 3 | 01-03 T1 — installed-fixture catalog→resolve→claim tracer | HWR-03, SPI-01 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_catalog_claim_tracer.py -x` | pending |
+| 4 | 01-04 T1 — claimed binding→child host→handle→bus tracer | HWR-02, SPI-06 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_runtime_tracer.py -x` | pending |
+| 5 | 01-05 T1 — manifest/catalog and typed config | SPI-03, SPI-04, SPI-05 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_catalog.py tests/unit/hardware_runtime/test_config.py -x` | pending |
+| 5 | 01-08 T1 — logical envelope/correlation | ISO-03 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_protocol.py -k 'logical or correlation or unknown' -x` | pending |
+| 5 | 01-08 T2 — framed JSON and attachments | ISO-04 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_protocol.py -x` | pending |
+| 6 | 01-06 T1 — facts, profiles, resolver evidence | HWR-01, CMP-01, CMP-02, CMP-03, CMP-04, TST-02 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_resolver.py -x` | pending |
+| 7 | 01-07 T1 — normalized atomic broker | RUN-02 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_broker.py -x` | pending |
+| 8 | 01-09 T1 — lifecycle/readiness/events | RUN-01 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_lifecycle.py -x` | pending |
+| 8 | 01-09 T2 — process host/supervisor/recovery | ISO-01, ISO-05, ISO-07 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_process_host.py -x` | pending |
+| 9 | 01-10 T1 — configurable in-process host | **ISO-02**, ISO-06 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_in_process_host.py -x` | pending |
+| 9 | 01-10 T2 — shared dual-host conformance | TST-01 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_conformance.py tests/unit/hardware_runtime/test_in_process_host.py -x` | pending |
+| 10 | 01-11 T1 — display core/common contract | HWR-02, SPI-06 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_builtin_display_core.py -x` | pending |
+| 11 | 01-12 T1 — complete 2.13 display variant family | HWR-02, TST-04 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_builtin_display_2in13_variants.py -x` | pending |
+| 11 | 01-13 T1 — auxiliary display variants/support | HWR-02, TST-04 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_builtin_display_aux_variants.py tests/unit/test_mock_transports.py -x` | pending |
+| 12 | 01-14 T1 — 2.13 compatibility re-exports | API-04, API-05, TST-04 | `.venv/bin/python -m pytest tests/unit/test_display_2in13_compat.py tests/unit/hardware_runtime/test_import_boundaries.py -x` | pending |
+| 12 | 01-15 T1 — auxiliary display compatibility re-exports | API-04, API-05, TST-04 | `.venv/bin/python -m pytest tests/unit/test_display_aux_compat.py tests/unit/hardware_runtime/test_import_boundaries.py -x` | pending |
+| 13 | 01-16 T1 — power provider | HWR-02, SPI-06, TST-04 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_builtin_power.py tests/unit/test_pisugar2.py tests/unit/test_waveshare_ups_hat_c.py -x` | pending |
+| 14 | 01-17 T1 — NFC provider | HWR-02, SPI-06, TST-04 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_builtin_nfc.py -x` | pending |
+| 15 | 01-18 T1 — storage provider/path scope | HWR-02, SPI-06, TST-04 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_builtin_storage.py tests/unit/test_storage.py -x` | pending |
+| 16 | 01-19 T1 — radio contracts/shared support/coexistence | API-02, RUN-03 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_radio_resources.py tests/unit/hardware_runtime/test_radio_shared_support.py -x` | pending |
+| 17 | 01-20 T1 — Wi-Fi provider/session behavior | API-02, RUN-03, TST-04 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_builtin_wifi.py tests/unit/test_radio_primitives.py -k 'wifi or nan' -x` | pending |
+| 18 | 01-21 T1 — Wi-Fi/support compatibility re-exports | API-04, API-05, TST-04 | `.venv/bin/python -m pytest tests/unit/test_wifi_provider_compat.py tests/unit/hardware_runtime/test_import_boundaries.py -x` | pending |
+| 19 | 01-22 T1 — Bluetooth provider | API-02, RUN-03, TST-04 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_builtin_bluetooth.py tests/unit/test_radio_primitives.py -k 'bluetooth or bluez or l2cap or gatt' -x` | pending |
+| 20 | 01-23 T1 — sole eager runtime/handles | HWR-04 | `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_runtime.py -x` | pending |
+| 21 | 01-24 T1 — loopback bus/SSE | API-01 | `.venv/bin/python -m pytest tests/unit/test_hardware_bus.py -x` | pending |
+| 22 | 01-25 T1 — screen ports and bus mapping | API-03 | `.venv/bin/python -m pytest tests/unit/test_screen.py -k 'port or bus or display' -x` | pending |
+| 22 | 01-25 T2 — boot/readiness and totem-screen adapter | API-04 | `.venv/bin/python -m pytest tests/unit/test_screen.py -x` | pending |
+| 23 | 01-26 T1 — REST/WebSocket/env/client translators | API-04, API-05, TST-04 | `.venv/bin/python -m pytest tests/unit/test_service_api.py tests/unit/test_radio_api.py tests/unit/test_api_facades.py -x` | pending |
+| 24 | 01-27 T1 — manager facades | API-04, API-05, TST-04 | `.venv/bin/python -m pytest tests/unit/test_manager_facades.py tests/unit/test_radio_api.py -k 'manager or facade' -x` | pending |
+| 25 | 01-28 T1 — registry/contracts facade | API-04, API-05, TST-04 | `.venv/bin/python -m pytest tests/unit/test_driver_registry.py tests/unit/test_driver_contracts.py tests/unit/test_registry_facade.py -x` | pending |
+| 26 | 01-29 T1 — display/power wrappers | API-04, API-05, TST-04 | `.venv/bin/python -m pytest tests/unit/test_device_display_power_facades.py tests/unit/hardware_runtime/test_import_boundaries.py -x` | pending |
+| 26 | 01-30 T1 — NFC/storage wrappers | API-04, API-05, TST-04 | `.venv/bin/python -m pytest tests/unit/test_device_nfc_storage_facades.py tests/unit/test_storage.py tests/unit/hardware_runtime/test_import_boundaries.py -x` | pending |
+| 26 | 01-31 T1 — radio wrappers | API-02, API-04, API-05, TST-04 | `.venv/bin/python -m pytest tests/unit/test_device_radio_facades.py tests/unit/test_radio_primitives.py tests/unit/hardware_runtime/test_import_boundaries.py -x` | pending |
+| 27 | 01-32 T1 — CLI/env/package/systemd composition | HWR-04, API-04, TST-04 | `.venv/bin/python -m pytest tests/unit/test_cli_compat.py tests/unit/test_systemd_contracts.py tests/unit/hardware_runtime/test_import_boundaries.py -x` | pending |
+| 28 | 01-33 T1 — benchmark/runbook/manual gate | ISO-01, TST-03 | `.venv/bin/python -m pytest tests/hardware/test_driver_host_bench.py --collect-only -q && .venv/bin/python scripts/benchmark_driver_host.py --self-test` | pending local / deferred hardware |
+| 28 | 01-33 T2 — complete local regression/ledger | HWR-04, TST-04 | `.venv/bin/python -m pytest tests/unit -x && git diff --check` | pending |
 
-- **After every task commit:** Run the narrowest affected unit-test module, or
-  `python -m pytest tests/unit -m 'unit and mock_transport' -x` when a task
-  crosses module boundaries.
-- **After every plan wave:** Run `python -m pytest tests/unit -x`.
-- **Before `$gsd-verify-work`:** The full local suite must be green; the
-  Pi-class acceptance matrix must be reported separately as passed or deferred.
-- **Max feedback latency:** 60 seconds for the quick local gate.
+## Requirement → concrete implementation owner
 
----
+| Requirement | Plan/task |
+|---|---|
+| HWR-01 | 01-06 T1 |
+| HWR-02 | 01-02 T1; 01-04 T1; 01-11 T1; 01-12 T1; 01-13 T1; 01-16 T1; 01-17 T1; 01-18 T1 |
+| HWR-03 | 01-03 T1 |
+| HWR-04 | 01-23 T1; 01-32 T1; 01-33 T2 |
+| SPI-01 | 01-03 T1 |
+| SPI-02 | 01-02 T1 |
+| SPI-03 | 01-05 T1 |
+| SPI-04 | 01-05 T1 |
+| SPI-05 | 01-05 T1 |
+| SPI-06 | 01-04 T1; 01-11 T1; 01-16 T1; 01-17 T1; 01-18 T1 |
+| CMP-01 | 01-06 T1 |
+| CMP-02 | 01-06 T1 |
+| CMP-03 | 01-06 T1 |
+| CMP-04 | 01-06 T1 |
+| ISO-01 | 01-09 T2; 01-33 T1 |
+| **ISO-02** | **01-10 T1 only** |
+| ISO-03 | 01-08 T1 |
+| ISO-04 | 01-08 T2 |
+| ISO-05 | 01-09 T2 |
+| ISO-06 | 01-10 T1 |
+| ISO-07 | 01-09 T2 |
+| RUN-01 | 01-09 T1 |
+| RUN-02 | 01-07 T1 |
+| RUN-03 | 01-19 T1; 01-20 T1; 01-22 T1 |
+| API-01 | 01-24 T1 |
+| API-02 | 01-19 T1; 01-20 T1; 01-22 T1; 01-31 T1 |
+| API-03 | 01-25 T1 |
+| API-04 | 01-14 T1; 01-15 T1; 01-21 T1; 01-25 T2; 01-26 T1; 01-27 T1; 01-28 T1; 01-29 T1; 01-30 T1; 01-31 T1; 01-32 T1 |
+| API-05 | 01-14 T1; 01-15 T1; 01-21 T1; 01-26 T1; 01-27 T1; 01-28 T1; 01-29 T1; 01-30 T1; 01-31 T1 |
+| TST-01 | 01-10 T2 |
+| TST-02 | 01-06 T1 |
+| TST-03 | 01-33 T1 |
+| TST-04 | 01-01 T1; 01-12 T1; 01-13 T1; 01-14 T1; 01-15 T1; 01-16 T1; 01-17 T1; 01-18 T1; 01-20 T1; 01-21 T1; 01-22 T1; 01-26 T1; 01-27 T1; 01-28 T1; 01-29 T1; 01-30 T1; 01-31 T1; 01-32 T1; 01-33 T2 |
 
-## Per-Task Verification Map
+All 33 requirement IDs are present above. ISO-02 has one and only one implementation owner: **01-10 Task 1**.
 
-The planner assigns final task IDs. Each row below is a mandatory coverage
-unit and must be attached to an implementation task before execution begins.
+## Required fault injection
 
-| Coverage Unit | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
-|---------------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| Public API, catalog, fixture distribution | HWR-02..03, SPI-01..06 | T-01 / T-02 | Manifest and API incompatibilities fail before provider import | unit + install fixture | `python -m pytest tests/unit/hardware_runtime/test_catalog.py -x` | ❌ W0 | ⬜ pending |
-| Facts, profiles, deterministic resolution | HWR-01, CMP-01..04 | T-03 | Ambiguity and unmet prerequisites fail closed with stable diagnostics | unit | `python -m pytest tests/unit/hardware_runtime/test_resolver.py -x` | ❌ W0 | ⬜ pending |
-| Lifecycle and resource broker | HWR-04, RUN-01..03 | T-04 | Conflicting resources never initialize; one runtime owns every lease | unit | `python -m pytest tests/unit/hardware_runtime/test_lifecycle.py tests/unit/hardware_runtime/test_broker.py -x` | ❌ W0 | ⬜ pending |
-| Framed logical protocol | ISO-03..04 | T-05 | Bounded JSON/attachment frames reject malformed, oversized, or mismatched input | unit | `python -m pytest tests/unit/hardware_runtime/test_protocol.py -x` | ❌ W0 | ⬜ pending |
-| Process host and supervisor | ISO-01, ISO-05, ISO-07 | T-04 / T-06 | Child death is confirmed before lease release; retry ends in quarantine | unit + mock transport | `python -m pytest tests/unit/hardware_runtime/test_process_host.py -x` | ❌ W0 | ⬜ pending |
-| In-process host | ISO-02, ISO-06 | T-07 | Uncooperative work contaminates the binding and retains leases until restart | unit | `python -m pytest tests/unit/hardware_runtime/test_in_process_host.py -x` | ❌ W0 | ⬜ pending |
-| Dual-host conformance | TST-01 | T-05 / T-07 | Both hosts produce the same normalized request/result/push transcript | conformance | `python -m pytest tests/unit/hardware_runtime/test_conformance.py -x` | ❌ W0 | ⬜ pending |
-| Canonical NIP-5D bus and capability handles | API-01..03 | T-08 | Loopback-only bus validates envelopes and routes by capability handles | API/unit | `python -m pytest tests/unit/test_hardware_bus.py tests/unit/test_screen.py -x` | ❌ W0 / existing migration | ⬜ pending |
-| Built-ins and clean-break facades | API-02, API-04..05, TST-04 | T-09 | Facades translate only; canonical modules cannot import legacy ownership code | unit + static layer | `python -m pytest tests/unit/test_legacy_facades.py tests/unit/test_service_api.py -x` | ❌ W0 / existing migration | ⬜ pending |
-| Pi-class benchmark harness | TST-03 | T-10 | Results identify host grouping and never infer Pi acceptance from controller data | opt-in hardware | `python -m pytest tests/hardware/test_driver_host_bench.py --run-hardware -x` | ❌ W0 | ⬜ pending |
+- Child omits `host.ready`; crash and uncooperative hang; cancel→terminate→kill→confirmed wait; stale generation response/event; lease held until confirmed death; bounded backoff and quarantine.
+- One-byte fragmented, pipelined, truncated, oversized, unknown codec/version/type, duplicate/correlation, checksum/offset/count mismatch carrier inputs.
+- Empty/adjacent/ambiguous facts and plugins; invalid config affecting one binding; secret refs/inherited descriptors; simultaneous conflicting broker claims.
+- Cooperative and uncooperative in-process cancellation, contamination, new-work rejection, retained leases, daemon-restart health.
+- Compatible and incompatible Wi-Fi/Bluetooth shared-PHY operations with one versus independent adapters.
+- Loopback bypass attempts, bounded legacy base64 translation, SSE backpressure/redaction, multiple facade instances against one owner.
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+## Wave-0 completion checklist
 
----
+- [ ] 01-01 T1 creates `.venv` with Python >=3.9, installs project tests, and records actual quick/full timing.
+- [ ] Fake clock/process/socket/broker/transcript fixtures and protocol vectors exist independently of spike code.
+- [ ] AST import guard enforces `totem.hardware` canonical ownership.
+- [ ] Benchmark harness shell is collection-safe and cannot contact hardware without explicit opt-in/allocation.
+- [ ] 01-02 T1 builds/installs the independent public API and fixture wheels; 01-03 and 01-04 consume them and prove provider import occurs only in the selected child after resolution and claims.
 
-## Required Fault Injection
+## Manual deferred gates
 
-- Child never sends `host.ready`: startup deadline emits `startup_timeout`
-  without releasing an unconfirmed owner as if startup had succeeded.
-- Malformed prefix/header/attachment, oversize declaration, duplicate IDs,
-  checksum mismatch, unsupported codec/version, fragmentation, and pipelining.
-- Unknown unsolicited pushes are ignored; unknown requests carrying an `id`
-  receive stable `.result` errors.
-- Isolated child crash/hang leaves the daemon alive, confirms exit before lease
-  release, advances generation, applies bounded backoff, then quarantines.
-- Cooperative in-process cancellation leaves later work usable; uncooperative
-  work marks the binding `CONTAMINATED`, rejects new work, and retains leases.
-- Binding overrides beat automatic matches but cannot bypass API-major,
-  configuration, prerequisite, or resource compatibility checks.
-- Separate Wi-Fi and Bluetooth requests exercise both denied and permitted
-  shared-radio combinations.
+| Behavior | Requirements | Why manual | Required evidence |
+|---|---|---|---|
+| Pi startup, PSS, p50/p95 command latency, 4,000-byte frame, event load, crash/hang recovery, post-death leases on armv6l/armv7l/aarch64 | TST-03, ISO-01 | Requires explicitly allocated devices and `/proc` process evidence | Run the Plan 33 pinned workload on each allocated architecture; record architecture, Python/runtime/packages, grouping/mode, PSS (labeled RSS fallback), timings, recovery, generation, lease state, and rollback metadata. |
+| Deployed-default cutover | HWR-04, ISO-01, API-04 | One-owner/systemd behavior must be observed on allocated hardware before changing a deployed default | Only after all local gates and complete three-architecture evidence: deploy under rollback, exercise commands/routes/bus, induce child failure, verify recovery/leases, and restore on any failure. |
 
----
+Controller-only results never satisfy either row. No plan runs `--run-hardware`, SSH, deployment, restart, or live-default mutation.
 
-## Wave 0 Requirements
+## Sign-off
 
-- [ ] Create/install a Python 3.9-compatible project test environment and
-  record the actual quick/full-suite runtimes.
-- [ ] Add the public driver-API fixture distribution and an installed-wheel
-  fixture registered under `totem.hardware.drivers`.
-- [ ] Promote spike protocol and dual-host vectors into production-independent
-  test fixtures; production code must not import the spike package.
-- [ ] Add fake clock, process, Unix-socket, and resource-broker fixtures.
-- [ ] Add a static import-layer test forbidding `totem.hardware` imports from
-  legacy `totem.api`, `totem.devices`, and `totem.managers` modules.
-- [ ] Add the Pi benchmark harness and evidence template without scheduling a
-  bench run.
-
----
-
-## Manual-Only Verifications
-
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| Pi-class startup, PSS, p50/p95 command latency, 4,000-byte frame transfer, event load, kill/hang recovery, and post-death leases on armv6l, armv7l, and aarch64 | TST-03 | Requires explicitly allocated physical Totem devices and process memory data from `/proc` | Run the pinned benchmark workload from the phase runbook on each allocated architecture; capture Python/runtime/package versions, provider-versus-binding grouping, `smaps_rollup` PSS (label RSS fallback), timings, recovery outcome, and lease state. Do not infer acceptance from macOS results. |
-| Deployment-default cutover | HWR-04, ISO-01, API-04 | Hardware ownership and systemd behavior must be observed on an allocated device before changing the deployed default | After all local gates pass and allocation is explicit, install the candidate build, verify one runtime owner, exercise legacy commands/routes and the NIP-5D bus, induce a child failure, verify recovery, then restore the prior deployment if any acceptance check fails. |
-
----
-
-## Validation Sign-Off
-
-- [ ] All planner tasks are mapped to an automated command or an explicit
-  Wave 0 dependency.
-- [ ] No three consecutive implementation tasks lack automated verification.
-- [ ] Wave 0 covers every currently missing test reference.
-- [ ] Quick and full commands contain no watch-mode flags.
-- [ ] Quick feedback latency is below 60 seconds.
-- [ ] All local suites pass.
-- [ ] Pi-class evidence is either accepted after explicit allocation or
-  explicitly recorded as the remaining cutover gate.
-- [ ] `nyquist_compliant: true` is set in frontmatter only after these checks.
+- [ ] All 33 plans and every task have a controlled automated command.
+- [ ] All 33 requirements map to concrete tasks; ISO-02 maps only to 01-10 T1.
+- [ ] The 43-item probe equality in `01-PROBE-LEDGER.md` holds.
+- [ ] ASVS L1 applicable controls in `01-SECURITY.md` have task/test evidence.
+- [ ] Quick/full feedback durations are measured; all local suites pass; no worker/thread/socket remains.
+- [ ] `wave_0_complete` and `nyquist_compliant` become true only after their evidence exists; Pi/cutover remain deferred until allocated.
 
 **Approval:** pending

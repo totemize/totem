@@ -137,7 +137,7 @@ make legacy managers/routes only translators over capability handles.
 | Python stdlib `importlib.metadata` | Python 3.9 | Enumerate installed entry points/distribution files without importing providers | It supports import-free cataloging; actual entry-point loading is deferred to the chosen host. |
 | Python stdlib `socket`, `struct`, `json`, `hashlib`, `subprocess` | Python 3.9 | Unix-socket framed canonical JSON carrier, checksums, child supervision | Spike v1 candidate avoids a new codec dependency and executable serialization. |
 | Pydantic already in project | `>=2.6,<3.0` | HTTP/bus request validation and typed configuration validation | Existing FastAPI models establish the project pattern ([VERIFIED: `pyproject.toml`], [VERIFIED: `src/totem/api/models.py`]). |
-| `tomli` backport | proposed `>=2,<3` | Parse startup TOML on Python 3.9 | Python 3.9 has no `tomllib`; this is the smallest non-hand-rolled parser. **Package gate:** the local legitimacy seam marked it `SUS` only because download metadata was unavailable, so a planner must add a human-verify checkpoint before adding it. [ASSUMED] |
+| `tomli` backport | `>=2,<3; python_version < "3.11"` | Parse startup TOML on Python 3.9/3.10 | Python 3.9 has no `tomllib`; official PyPI metadata and the upstream `hukkin/tomli` repository were verified on 2026-08-22, including the documented `tomli`/`tomllib` compatibility-layer pattern and Python `>=3.8` support. |
 
 ### Supporting
 
@@ -161,7 +161,7 @@ make legacy managers/routes only translators over capability handles.
 
 | Package | Registry | Verdict | Disposition |
 |---|---|---|---|
-| `tomli` | PyPI | `SUS` (local package-legitimacy seam: unavailable download statistic) | Flagged: human verify its official repository/release before adding; no install is authorized by this research. |
+| `tomli` | PyPI (`https://pypi.org/project/tomli/`) / upstream (`https://github.com/hukkin/tomli`) | `VERIFIED` | Official project metadata identifies the upstream repository, MIT license, Python `>=3.8`, pure-Python wheels, and the conditional dependency/import pattern; use `>=2,<3` only on Python `<3.11`. |
 
 No other dependency is required for the phase's core protocol or supervision.
 
@@ -625,11 +625,11 @@ may be inferred from local macOS spike RSS/latency
 
 ## Open Questions
 
-1. **Which exact TOML parser release is approved?**
-   - Known: Python 3.9 requires a backport; the local package seam marked
-     `tomli` suspicious solely for missing download metadata.
-   - Recommendation: verify the official repository/release in the plan's
-     package checkpoint, then pin the compatible range.
+1. **Which TOML parser range is approved? — RESOLVED**
+   - Official PyPI metadata and the upstream repository were verified on
+     2026-08-22. Use `tomli>=2,<3; python_version < "3.11"` and stdlib
+     `tomllib` on Python 3.11+; test both branches through the injectable
+     typed-config seam.
 2. **What service identity/device-node/D-Bus policy will enforce ISO-07?**
    - Known: process isolation is not a full sandbox; the existing units use
      `NoNewPrivileges` but do not define provider-specific device policies.

@@ -1,10 +1,18 @@
 ---
-gsd_state_version: '1.0'
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+current_phase: 1
+current_phase_name: Capability-Oriented Hardware Runtime
 status: planning
+stopped_at: Phase 1 defined; driver-host spike alignment pending
+last_updated: "2026-08-22T15:26:22.996Z"
+last_activity: 2026-08-22
+last_activity_desc: Added Phase 1 and captured its architecture contract
 progress:
   total_phases: 1
   completed_phases: 0
-  total_plans: 0
+  total_plans: 33
   completed_plans: 0
   percent: 0
 ---
@@ -38,6 +46,7 @@ Progress: ░░░░░░░░░░ 0%
 - Both host modes share one transport-neutral contract.
 - That contract follows NIP-5D's typed message and correlated-result pattern,
   matching the vocabulary already used by `totemd`.
+
 - PR #22 commit `211f890b` is the implementation baseline.
 
 ### Roadmap Evolution
