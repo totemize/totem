@@ -54,3 +54,18 @@ incremental migration from the PR #22 baseline.
 | 002a | NIP-5D framed JSON | comparison | Given control envelopes and binary frames, when carried over a Unix socket as framed JSON plus bounded attachments, then requests, results, events, fragmentation, and rejection paths remain deterministic | PARTIAL | ipc, nip-5d, json, unix-socket |
 | 002b | NIP-5D MessagePack | comparison | Given the identical logical envelopes and payloads, when only control encoding changes to MessagePack, then size and latency gains can be weighed against dependency and operability cost | PARTIAL | ipc, nip-5d, messagepack, unix-socket |
 | 003 | Dual-host contract and failure parity | standard | Given one capability provider and conformance suite, when run in process and out of process, then functional outcomes match and containment differences are explicit | VALIDATED | host, conformance, lifecycle, isolation |
+
+## Comparison Outcomes
+
+- **Process granularity:** one process per provider distribution is the
+  provisional default because it amortizes interpreter cost across bindings.
+  Per-binding process grouping remains an explicit override for a smaller
+  crash domain. Pi PSS and representative import measurements must lock this.
+- **Carrier codec:** canonical JSON with bounded raw attachments is the
+  provisional v1 default. MessagePack remains a reserved/negotiable codec, not
+  a baseline dependency; its full display frame was only 47 bytes smaller and
+  the un-wheeled pure-Python path was slower locally.
+- **Host parity:** both modes share capability semantics and conformance tests.
+  Only process mode promises hard termination, native-crash containment, and
+  lease release after confirmed child death. In-process mode is an explicit
+  trust/performance opt-in with cooperative cancellation.
