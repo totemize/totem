@@ -1,0 +1,52 @@
+# Roadmap: Totem Hardware Runtime
+
+## Overview
+
+Evolve the PR #22 Python hardware stack into a capability-oriented runtime
+whose independently packaged drivers are discovered, matched, isolated,
+supervised, and exposed without central device-type edits. Migration is
+incremental: existing commands, routes, imports, configuration, and services
+remain operational through compatibility facades.
+
+## Phases
+
+- [ ] **Phase 1: Capability-Oriented Hardware Runtime** — Replace the closed
+  manager/registry hierarchy with a public, capability-oriented plugin runtime
+  whose drivers are process-isolated by default.
+
+## Phase Details
+
+### Phase 1: Capability-Oriented Hardware Runtime
+
+**Goal:** Deliver an independently versioned driver API, import-free plugin
+catalog, deterministic compatibility resolver, resource broker, explicit
+lifecycle, dual execution hosts, capability services, and compatibility facades
+across the complete Python hardware subsystem.
+**Requirements:** HWR-01..04, SPI-01..06, CMP-01..04, ISO-01..06,
+RUN-01..03, API-01..05, TST-01..04
+**Depends on:** PR #22 commit `211f890b` and the driver-host feasibility spike
+**Success Criteria** (what must be TRUE):
+  1. A separately packaged fixture driver is discovered, matched, configured,
+     and bound without editing Totem core or a central registry.
+  2. The same driver and capability conformance tests pass through isolated and
+     in-process hosts; isolated driver failure cannot terminate the daemon and
+     releases its resource leases.
+  3. Exact matches, overrides, unsupported versions, missing prerequisites,
+     resource conflicts, and ambiguous matches produce deterministic results
+     with actionable evidence.
+  4. Display, power, storage, NFC, Wi-Fi, and Bluetooth behavior is exposed via
+     capability handles while existing imports, commands, routes, environment
+     names, and systemd units continue to work through facades.
+  5. Pi-class measurements establish an acceptable default IPC encoding and
+     process granularity, with the decision recorded in the public contract.
+**Plans:** TBD
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 1 to break down)
+
+## Progress
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 1. Capability-Oriented Hardware Runtime | 0/TBD | Not started | - |
