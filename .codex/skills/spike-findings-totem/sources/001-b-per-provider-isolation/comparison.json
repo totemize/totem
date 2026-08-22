@@ -1,0 +1,51 @@
+{
+  "schema": "totem.process-topology-comparison@1",
+  "binding_count": 8,
+  "rounds_per_binding_per_trial": 200,
+  "per_binding": {
+    "trials": 5,
+    "host_process_count": 8,
+    "memory_metric": "rss_kib",
+    "median_total_memory_kib": 94768,
+    "median_startup_to_all_ready_ms": 26.016,
+    "median_of_round_trip_medians_ms": 0.018417,
+    "median_of_round_trip_p95_ms": 0.03575,
+    "median_replacement_ready_ms": 19.372,
+    "lost_binding_counts": [
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "all_survivor_checks_passed": true
+  },
+  "per_provider": {
+    "trials": 5,
+    "host_process_count": 1,
+    "memory_metric": "rss_kib",
+    "median_total_memory_kib": 11872,
+    "median_startup_to_all_ready_ms": 19.264,
+    "median_of_round_trip_medians_ms": 0.012625,
+    "median_of_round_trip_p95_ms": 0.023044,
+    "median_replacement_ready_ms": 19.195,
+    "lost_binding_counts": [
+      8,
+      8,
+      8,
+      8,
+      8
+    ],
+    "all_survivor_checks_passed": true
+  },
+  "ratios_per_binding_over_per_provider": {
+    "host_process_count": 8.0,
+    "total_memory": 7.982,
+    "startup": 1.35
+  },
+  "interpretation": {
+    "per_binding": "smallest crash domain; interpreter cost scales with bindings",
+    "per_provider": "amortized interpreter; all bindings from that provider fate-share",
+    "pi_gate": "repeat with Linux PSS and representative plugin imports on Pi-class hardware"
+  }
+}
