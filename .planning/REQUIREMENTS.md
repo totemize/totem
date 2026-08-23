@@ -15,7 +15,7 @@ without editing Totem core or destabilizing existing capabilities.
 - [x] **HWR-02**: Drivers provide one or more independently versioned capability
   contracts such as display output, battery telemetry, Wi-Fi P2P, or BLE GATT.
 
-- [ ] **HWR-03**: Core discovery, resolution, lifecycle, and API modules contain
+- [x] **HWR-03**: Core discovery, resolution, lifecycle, and API modules contain
   no imports of concrete vendor drivers.
 
 - [ ] **HWR-04**: A single hardware runtime owns the plugin catalog, binding
@@ -23,7 +23,7 @@ without editing Totem core or destabilizing existing capabilities.
 
 ### Public plugin SPI
 
-- [ ] **SPI-01**: A third party can ship a driver as an independent Python
+- [x] **SPI-01**: A third party can ship a driver as an independent Python
   distribution and register it through the `totem.hardware.drivers` entry-point
   group without changing Totem source.
 

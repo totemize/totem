@@ -29,6 +29,7 @@ working environment.
 
 | Date | Summary |
 |------|---------|
+| [2026-08-23 — catalog-to-claim tracer](journal/2026-08-23.md#catalog-to-claim-tracer) | Added import-free installed-driver cataloging, exact-fact resolution, and atomic synthetic SPI claims; all 152 local unit tests passed without provider or device execution. |
 | [2026-08-23 — public driver API and fixture distribution](journal/2026-08-23.md#public-driver-api-and-fixture-distribution) | Published independently buildable Python 3.9 public driver and synthetic provider wheels with import-free package data, immutable JSON contracts, and a passing 146-test local suite without device contact. |
 | [2026-08-22 — Wave-0 controller test portability](journal/2026-08-22.md#wave-0-controller-test-portability-follow-up) | Added the declared `dbus-next` dev/test dependency for cross-platform driver-contract imports while retaining the Linux-only production marker; full controlled unit suite passed 143 tests without hardware contact. |
 | [2026-08-22 — capability runtime Wave-0 foundation](journal/2026-08-22.md#capability-oriented-hardware-runtime-wave-0-foundation) | Created the controlled Python 3.9 test environment, deterministic local hardware-runtime fixtures, canonical import guard, protocol vectors, and explicitly non-contact benchmark shell; recorded a passing focused gate and macOS Linux-only dependency baseline without contacting devices. |
