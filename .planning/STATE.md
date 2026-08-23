@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-01-PLAN.md
-last_updated: "2026-08-22T15:34:16.283Z"
+stopped_at: Completed HW-01-02-PLAN.md
+last_updated: "2026-08-23T19:33:29.770Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 2 of 33
+Plan: 3 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [░░░░░░░░░░] 3%
+Progress: ░░░░░░░░░░ [█░░░░░░░░░] 6%
 
 ## Accumulated Context
 
@@ -49,6 +49,9 @@ Progress: ░░░░░░░░░░ [░░░░░░░░░░] 3%
 - PR #22 commit `211f890b` is the implementation baseline.
 - [Phase HW-01]: Use .venv/bin/python for all later local Python and pytest claims.
 - [Phase HW-01]: Synthetic benchmark evidence is local-only and cannot claim Pi acceptance.
+- [Phase HW-01]: Public driver API is stdlib-only and supports Python 3.9 or newer.
+- [Phase HW-01]: Driver manifests are package data inspected before an entry point can import provider code.
+- [Phase HW-01]: Public messages copy strict JSON values into immutable containers before concurrent reuse.
 
 ### Roadmap Evolution
 
@@ -65,8 +68,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-22T15:34:06.449Z
-Stopped at: Completed HW-01-01-PLAN.md
+Last session: 2026-08-23T19:33:29.763Z
+Stopped at: Completed HW-01-02-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -74,3 +77,4 @@ Resume file: None
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase HW-01 P01 | 4m | 1 tasks | 8 files |
+| Phase HW-01-capability-oriented-hardware-runtime P02 | 5m | 1 tasks | 14 files |
