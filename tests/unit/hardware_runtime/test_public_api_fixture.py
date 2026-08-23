@@ -36,7 +36,8 @@ def _build_wheel(package: Path, destination: Path) -> Path:
         capture_output=True,
         text=True,
     )
-    return next(destination.glob("*.whl"))
+    normalized_name = package.name.replace("-", "_")
+    return next(destination.glob("{}-*.whl".format(normalized_name)))
 
 
 def _install_wheel(wheel: Path, target: Path) -> None:
@@ -107,8 +108,12 @@ from totem_driver_api import API_MAJOR, DriverManifest, IncompatibleApiMajor
 
 assert os.environ.get('TOTEM_DRIVER_FIXTURE_IMPORTED') is None
 distribution = metadata.distribution('totem-driver-fixture')
+manifest_path = next(
+    path for path in distribution.files
+    if str(path) == 'totem_driver_fixture/totem-driver-manifest.json'
+)
 manifest = DriverManifest.from_json(json.loads(
-    distribution.read_text('totem_driver_fixture/totem-driver-manifest.json')
+    distribution.locate_file(manifest_path).read_text(encoding='utf-8')
 ))
 assert manifest.capabilities[0].identifier == 'display.frame-sink@1'
 assert manifest.api_major == API_MAJOR
@@ -134,6 +139,7 @@ def test_frozen_contract_values_reject_mutation_and_reuse_concurrently() -> None
     """Catalog snapshots can share contract values safely across callers."""
     from totem_driver_api import CapabilityId, DriverManifest, ResourceClaim
     from totem_driver_api.capabilities.display import FrameSinkRequest
+    from totem_driver_api.messages import LogicalMessage
 
     capability = CapabilityId("display.frame-sink", 1)
     request = FrameSinkRequest(
@@ -154,6 +160,11 @@ def test_frozen_contract_values_reject_mutation_and_reuse_concurrently() -> None
         request.width = 1  # type: ignore[misc]
     with pytest.raises(FrozenInstanceError):
         manifest.provider_id = "different.provider"  # type: ignore[misc]
+
+    caller_payload = {"nested": ["stable"]}
+    message = LogicalMessage("display.frame.write", fields=(("payload", caller_payload),))
+    caller_payload["nested"].append("mutated")
+    assert message.to_json_value()["payload"] == {"nested": ["stable"]}
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         values = list(

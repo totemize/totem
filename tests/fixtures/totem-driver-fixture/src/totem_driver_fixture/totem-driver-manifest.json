@@ -1,0 +1,13 @@
+{
+  "api_major": 1,
+  "provider_id": "fixture.display",
+  "provider_version": "1.0.0",
+  "capabilities": ["display.frame-sink@1"],
+  "resources": [
+    {
+      "kind": "spi",
+      "identifier": "spi0.0",
+      "exclusive": true
+    }
+  ]
+}
