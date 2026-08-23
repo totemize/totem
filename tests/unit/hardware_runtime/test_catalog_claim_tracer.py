@@ -142,11 +142,6 @@ def test_empty_catalog_returns_structured_unavailable_before_provider_import() -
 def test_api_major_mismatch_is_catalog_diagnostic_before_resolution(tmp_path: Path) -> None:
     site = _build_and_install_fixture(tmp_path)
     fixture = _fixture_distribution(site)
-    incompatible = _ManifestDistribution(
-        fixture,
-        name="incompatible-display",
-        provider_id="fixture.display",
-    )
 
     class _IncompatibleDistribution(_ManifestDistribution):
         def locate_file(self, path):
@@ -163,7 +158,6 @@ def test_api_major_mismatch_is_catalog_diagnostic_before_resolution(tmp_path: Pa
         ),
     ).snapshot()
 
-    assert incompatible.metadata["Name"] == "incompatible-display"
     assert catalog.records == ()
     assert catalog.diagnostics[0].code == "incompatible_api_major"
     assert os.environ.get("TOTEM_DRIVER_FIXTURE_IMPORTED") is None
