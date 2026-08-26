@@ -28,6 +28,7 @@ working environment.
 ## Journal index
 
 | Date | Summary |
+| [2026-08-26 — NFC and storage wrapper delegation](journal/2026-08-26.md#nfc-and-storage-wrapper-delegation) | Replaced NFC/storage probing and driver loading with injected canonical-client facades; 30 focused local tests passed without hardware contact. |
 | [2026-08-26 — display and power wrapper delegation](journal/2026-08-26.md#display-and-power-wrapper-delegation) | Replaced display and UPS driver loading/probing with injected canonical-client facades; 13 focused local tests passed without hardware contact. |
 | [2026-08-26 — manager facade integration repair](journal/2026-08-26.md#manager-facade-integration-repair) | Replaced stale manager-owned mock fixtures with explicit local client fakes; 142 focused non-contact tests passed while preserving the Plan 01-28 clean-break implementation. |
 | [2026-08-26 — compatibility-only manager facades](journal/2026-08-26.md#compatibility-only-manager-facades) | Converted every legacy hardware manager to an injected canonical-client adapter with separate Wi-Fi/Bluetooth action routing and no hardware ownership; 90 local injected-fake tests passed without hardware contact. |
