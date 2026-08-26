@@ -8,7 +8,7 @@ without editing Totem core or destabilizing existing capabilities.
 
 ### Ontology and dependency boundaries
 
-- [ ] **HWR-01**: The runtime represents a physical component using observed
+- [x] **HWR-01**: The runtime represents a physical component using observed
   hardware facts and optional data-only device profiles, not a subclass chosen
   from a closed device-type hierarchy.
 
@@ -45,18 +45,18 @@ without editing Totem core or destabilizing existing capabilities.
 
 ### Compatibility resolution
 
-- [ ] **CMP-01**: Discovery records stable hardware evidence such as bus,
+- [x] **CMP-01**: Discovery records stable hardware evidence such as bus,
   address, vendor/product IDs, device-tree compatible strings, modaliases,
   interfaces, architecture, OS, kernel, and required services.
 
-- [ ] **CMP-02**: Resolution produces ranked candidates with match evidence,
+- [x] **CMP-02**: Resolution produces ranked candidates with match evidence,
   rejected prerequisites, specificity, and deterministic priority.
 
-- [ ] **CMP-03**: An explicit operator binding override wins over automatic
+- [x] **CMP-03**: An explicit operator binding override wins over automatic
   detection, while equally valid automatic matches fail closed rather than
   selecting an arbitrary driver.
 
-- [ ] **CMP-04**: Compatibility decisions and known composite device profiles
+- [x] **CMP-04**: Compatibility decisions and known composite device profiles
   are data-driven and testable without connected hardware.
 
 ### Driver execution and supervision
@@ -123,7 +123,7 @@ without editing Totem core or destabilizing existing capabilities.
 - [ ] **TST-01**: A reusable conformance suite verifies every driver against
   its declared capability and lifecycle contracts in both execution modes.
 
-- [ ] **TST-02**: Resolver fixtures cover exact matches, missing prerequisites,
+- [x] **TST-02**: Resolver fixtures cover exact matches, missing prerequisites,
   override precedence, ambiguity, resource conflicts, and unsupported platform
   combinations.
 
