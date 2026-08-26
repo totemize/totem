@@ -1,11 +1,25 @@
-from totem.devices.storage.device import Storage
-from totem.logging import logger
+"""Legacy storage name translated through the canonical hardware client."""
+
+from __future__ import annotations
+
 from typing import Optional
 
+from totem.compat.hardware_client import LegacyHardwareClient
+
+
 class StorageManager:
-    def __init__(self, driver_name: Optional[str] = None, *, storage_root=None):
-        self.storage_device = Storage(driver_name, storage_root=storage_root)
-        self.storage_device.initialize()
+    """Compatibility-only storage facade; the runtime owns roots and leases."""
+
+    def __init__(
+        self,
+        driver_name: Optional[str] = None,
+        *,
+        storage_root: Optional[object] = None,
+        client: Optional[LegacyHardwareClient] = None,
+    ) -> None:
+        self.client = client or LegacyHardwareClient()
+        self.legacy_config = {"driver_name": driver_name, "storage_root": storage_root}
+        self._closed = False
 
     def write_data(self, file_path: str, data: bytes, options: Optional[dict] = None) -> bool:
         """
@@ -23,17 +37,7 @@ class StorageManager:
         Returns:
             bool: True if write was successful.
         """
-        logger.info(f"Writing data to {file_path} with options: {options}")
-        if options is None:
-            options = {}
-        default_options = {
-            "append": False,
-            "atomic": True,
-            "sync": False,
-            "permissions": None
-        }
-        config = {**default_options, **options}
-        return self.storage_device.write_file(file_path, data, config)
+        return self.client.write_data(file_path, data, options or {})
         
     def read_data(self, file_path: str) -> bytes:
         """
@@ -45,8 +49,7 @@ class StorageManager:
         Returns:
             bytes: Data read from file
         """
-        logger.info(f"Reading data from {file_path}")
-        return self.storage_device.read_file(file_path)
+        return self.client.read_data(file_path)
 
     def close(self) -> None:
-        self.storage_device.driver.close()
+        self._closed = True
