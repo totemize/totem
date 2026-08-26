@@ -5,14 +5,9 @@ from typing import Protocol, Set
 
 from totem.logging import logger
 from totem.screen.model import ScreenFrame, ScreenState
+from totem.screen.ports import FrameSink
 from totem.screen.readiness import SERVICE_SPECS, statuses
 from totem.screen.render import FrameRenderer
-
-
-class Display(Protocol):
-    async def wait_ready(self, timeout: float = 60.0) -> None: ...
-
-    async def show(self, image) -> None: ...
 
 
 class ReadinessMonitor(Protocol):
@@ -24,7 +19,7 @@ class Notifier(Protocol):
 
 
 class ScreenController:
-    def __init__(self, display: Display, renderer: FrameRenderer):
+    def __init__(self, display: FrameSink, renderer: FrameRenderer):
         self.display = display
         self.renderer = renderer
         self.current = ScreenFrame(ScreenState.BOOTING, "TOTEM")

@@ -2,10 +2,10 @@
 
 import asyncio
 import json
-from typing import Dict, Iterable, Sequence, Set
+from typing import Dict, Iterable, Optional, Sequence, Set
 
-from totem.screen.display import DeviceManagerDisplay
 from totem.screen.model import ServiceStatus
+from totem.screen.ports import HardwareHealth, PowerStatus
 
 SERVICE_SPECS = (
     ServiceStatus("device", "Device API"),
@@ -33,8 +33,13 @@ async def _json_command(*argv: str) -> Dict:
 class LiveReadinessMonitor:
     """Probe the useful interface of each boot service, not its log output."""
 
-    def __init__(self, display: DeviceManagerDisplay):
-        self.display = display
+    def __init__(
+        self,
+        hardware_health: HardwareHealth,
+        power_status: Optional[PowerStatus] = None,
+    ):
+        self.hardware_health = hardware_health
+        self.power_status = power_status
 
     async def _fips_ready(self) -> bool:
         status = await _json_command("fipsctl", "show", "status")
@@ -59,7 +64,7 @@ class LiveReadinessMonitor:
 
     async def snapshot(self) -> Set[str]:
         results = await asyncio.gather(
-            self.display.ready(),
+            self._hardware_ready(),
             self._fips_ready(),
             self._relay_ready(),
             self._totemd_ready(),
@@ -70,6 +75,11 @@ class LiveReadinessMonitor:
             for service, result in zip(SERVICE_SPECS, results)
             if result is True
         }
+
+    async def _hardware_ready(self) -> bool:
+        """Use only the redacted screen health port for device readiness."""
+
+        return (await self.hardware_health.snapshot()).ready
 
 
 class SyntheticReadinessMonitor:

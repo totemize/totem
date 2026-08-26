@@ -279,3 +279,18 @@ def test_replay_boot_constructs_only_the_screen_bus_adapter(monkeypatch):
     )
 
     assert constructed == ["http://127.0.0.1:8000"]
+
+
+def test_screen_parser_preserves_device_url_and_geometry_environment(monkeypatch):
+    import totem.screen.__main__ as screen_main
+
+    monkeypatch.setenv("TOTEM_DEVICE_API_URL", "http://127.0.0.1:9010")
+    monkeypatch.setenv("TOTEM_SCREEN_WIDTH", "296")
+    monkeypatch.setenv("TOTEM_SCREEN_HEIGHT", "128")
+    monkeypatch.setenv("TOTEM_SCREEN_ROTATION", "180")
+
+    args = screen_main._parser().parse_args(["replay-boot"])
+
+    assert args.command == "replay-boot"
+    assert args.device_api_url == "http://127.0.0.1:9010"
+    assert (args.width, args.height, args.rotation) == (296, 128, 180)
