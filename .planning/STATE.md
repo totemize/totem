@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-05-PLAN.md
-last_updated: "2026-08-26T11:01:37.203Z"
+stopped_at: Completed HW-01-08-PLAN.md
+last_updated: "2026-08-26T11:24:55.607Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -33,7 +33,7 @@ Plan: 6 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [██░░░░░░░░] 15%
+Progress: ░░░░░░░░░░ [██░░░░░░░░] 18%
 
 ## Accumulated Context
 
@@ -60,6 +60,8 @@ Progress: ░░░░░░░░░░ [██░░░░░░░░] 15%
 - [Phase ?]: Manifest version incompatibility, API incompatibility, and unknown metadata are diagnosed before catalog records reach resolution or resource claims.
 - [Phase ?]: Typed startup configuration resolves binding > plugin > global > manifest into immutable values through one binary TOML seam.
 - [Phase ?]: Secret-bearing settings accept only credential, file, or inherited-descriptor references; manifests and diagnostics never carry secret values.
+- [Phase ?]: Codec 1 is canonical UTF-8 JSON; codec 2 remains reserved and rejected.
+- [Phase ?]: Driver request correlation is generation-scoped so stale results cannot satisfy a replacement host.
 
 ### Roadmap Evolution
 
@@ -76,8 +78,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T11:01:37.197Z
-Stopped at: Completed HW-01-05-PLAN.md
+Last session: 2026-08-26T11:24:55.601Z
+Stopped at: Completed HW-01-08-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -89,3 +91,4 @@ Resume file: None
 | Phase HW-01-capability-oriented-hardware-runtime P03 | 4m | 1 tasks | 11 files |
 | Phase HW-01-capability-oriented-hardware-runtime P04 | 4m | 1 tasks | 10 files |
 | Phase HW-01 P05 | 5m | 1 tasks | 10 files |
+| Phase HW-01-capability-oriented-hardware-runtime P08 | 24m | 2 tasks | 8 files |

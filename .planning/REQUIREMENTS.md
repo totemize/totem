@@ -67,12 +67,12 @@ without editing Totem core or destabilizing existing capabilities.
 - [ ] **ISO-02**: An operator can select in-process execution globally or for a
   specific plugin through configuration.
 
-- [ ] **ISO-03**: Isolated and in-process hosts expose the same NIP-5D-shaped
+- [x] **ISO-03**: Isolated and in-process hosts expose the same NIP-5D-shaped
   logical protocol: JSON-object semantics, `type` values in capability-domain
   action form, request/result correlation by `id`, `.result` response types,
   structured success/errors, and unsolicited typed pushes.
 
-- [ ] **ISO-04**: Driver IPC never uses pickle or another executable object
+- [x] **ISO-04**: Driver IPC never uses pickle or another executable object
   serialization format; a carrier encoding may change without changing the
   logical NIP-5D-shaped envelope.
 
