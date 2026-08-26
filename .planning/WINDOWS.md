@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 4
 waived_count: 0
-fixed_count: 16
-total_count: 20
-last_updated: 2026-08-26T16:03:41.967Z
+fixed_count: 17
+total_count: 21
+last_updated: 2026-08-26T16:14:58.047Z
 ---
 
 # Broken Windows Ledger
@@ -35,6 +35,7 @@ last_updated: 2026-08-26T16:03:41.967Z
 | 18 | HW-01 | deviation | src/totem/devices/network/network.py |  | Canonical radio interface bridge was required for deterministic legacy mock-manager coverage. | fixed |  | 2026-08-26T15:10:19.699Z | 2026-08-26T15:11:10.041Z |
 | 19 | HW-01 | deviation | src/totem/hardware/api/bus.py |  | Added canonical status and power dispatch so screen readiness can avoid the legacy health route. | fixed |  | 2026-08-26T15:49:42.842Z | 2026-08-26T15:49:55.994Z |
 | 20 | HW-01 | deviation | src/totem/api/app.py |  | UPS action identity and runtime event projection correction recorded in 01-26 summary | fixed |  | 2026-08-26T16:03:16.626Z | 2026-08-26T16:03:41.967Z |
+| 21 | HW-01 | deviation | src/totem/compat/hardware_client.py |  | Completed canonical client action translations required for client-only manager delegation. | fixed |  | 2026-08-26T16:14:42.971Z | 2026-08-26T16:14:58.047Z |
 
 ````json
 [
@@ -277,6 +278,18 @@ last_updated: 2026-08-26T16:03:41.967Z
     "reason": "",
     "recorded_at": "2026-08-26T16:03:16.626Z",
     "resolved_at": "2026-08-26T16:03:41.967Z"
+  },
+  {
+    "id": 21,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": "src/totem/compat/hardware_client.py",
+    "line": null,
+    "description": "Completed canonical client action translations required for client-only manager delegation.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T16:14:42.971Z",
+    "resolved_at": "2026-08-26T16:14:58.047Z"
   }
 ]
 ````
