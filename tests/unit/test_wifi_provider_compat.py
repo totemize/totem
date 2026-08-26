@@ -26,7 +26,8 @@ LEGACY_TO_CANONICAL = {
 
 
 def _module_path(module_name: str) -> Path:
-    return ROOT / "src" / Path(*module_name.split(".")).with_suffix(".py")
+    module_path = ROOT / "src" / Path(*module_name.split(".")).with_suffix(".py")
+    return module_path if module_path.exists() else module_path.with_suffix("") / "__init__.py"
 
 
 def _public_names(module: object) -> set[str]:
@@ -50,7 +51,11 @@ def test_wifi_legacy_modules_are_exhaustive_direct_reexports(
         canonical_value = getattr(canonical, name)
         assert legacy_value is canonical_value
         if callable(canonical_value):
-            assert inspect.signature(legacy_value) == inspect.signature(canonical_value)
+            try:
+                canonical_signature = inspect.signature(canonical_value)
+            except (TypeError, ValueError):
+                continue
+            assert inspect.signature(legacy_value) == canonical_signature
 
 
 @pytest.mark.unit
