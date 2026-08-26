@@ -31,8 +31,12 @@ totem = "totem.__main__:main"
 totem-api = "totem.api.app:start_server"
 totem-screen = "totem.screen.__main__:main"
 
+[project.entry-points."totem.hardware.drivers"]
+builtin-display = "totem.hardware.builtin.display.provider:create_provider"
+
 [tool.poetry]
 packages = [{ include = "totem", from = "src" }]
+include = ["src/totem/hardware/builtin/display/totem-driver-manifest.json"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=7.3,<9.0"

@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import importlib.metadata as metadata
-import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List
@@ -12,6 +10,7 @@ from typing import Any, Dict, List
 import pytest
 
 from totem_driver_api import ResourceClaim
+from totem_driver_api import DriverManifest
 from totem_driver_api.capabilities.display import FrameSinkRequest
 from totem_driver_api.conformance import ConformanceCase, run_host_conformance
 from totem.hardware.catalog.metadata import CatalogScanner
@@ -91,17 +90,16 @@ def _facts() -> HardwareFacts:
 
 
 def _binding() -> BindingRecord:
-    record = _catalog().records[0]
     return Resolver().resolve(
         _catalog(), facts=_facts(), profile=_profile(), capability_id="display.frame-sink@1"
     ).require_binding()
 
 
-def _request(request_id: str) -> Dict[str, object]:
+def _request(request_id: str, binding_id: str = "display") -> Dict[str, object]:
     return {
         "type": "display.frame.write",
         "id": request_id,
-        "binding_id": "display",
+        "binding_id": binding_id,
         "frame": {"attachment_id": "frame", "width": 250, "height": 122, "pixel_format": "mono1"},
     }
 
@@ -136,6 +134,32 @@ def test_profile_and_complete_claim_facts_select_the_generic_provider_without_io
     assert unresolved.status is ResolutionStatus.UNAVAILABLE
     assert selected.status is ResolutionStatus.RESOLVED
     assert selected.require_binding().claims == REQUIRED_CLAIMS
+    assert "totem.hardware.builtin.display.provider" not in importlib.sys.modules
+
+
+def test_ambiguous_panel_records_do_not_import_or_open_a_transport() -> None:
+    first = _catalog().records[0]
+    alternate_manifest = DriverManifest.from_json(
+        {
+            **first.manifest.to_json_value(),
+            "provider_id": "alternate.display",
+        }
+    )
+    alternate = type(first)(
+        distribution_name="alternate-display",
+        distribution_version="1.0.0",
+        entry_point_name="alternate-display",
+        entry_point_value="alternate.display.provider:create_provider",
+        manifest=alternate_manifest,
+    )
+    ambiguous = Resolver().resolve(
+        type(_catalog())(records=(first, alternate), diagnostics=()),
+        facts=_facts(),
+        profile=_profile(),
+        capability_id="display.frame-sink@1",
+    )
+
+    assert ambiguous.status is ResolutionStatus.AMBIGUOUS
     assert "totem.hardware.builtin.display.provider" not in importlib.sys.modules
 
 
@@ -175,12 +199,12 @@ def test_core_provider_has_matching_in_process_and_process_conformance_with_mock
         variant="waveshare-2in13-v4", claims=REQUIRED_CLAIMS, transport=transport
     )
     cases = (
-        ConformanceCase("frame", _request("frame"), {"frame": b"mock-frame"}),
-        ConformanceCase("unknown", {"type": "display.unknown", "id": "unknown", "binding_id": "display"}),
+        ConformanceCase("frame", _request("frame", claim.binding_id), {"frame": b"mock-frame"}),
+        ConformanceCase("unknown", {"type": "display.unknown", "id": "unknown", "binding_id": claim.binding_id}),
     )
 
     in_process = run_host_conformance(
-        InProcessDriverHost((claim,), provider, generation=1), cases
+        lambda: InProcessDriverHost((claim,), provider, generation=1), cases
     )
 
     provider_module = tmp_path / "display_core_fixture.py"
@@ -273,4 +297,4 @@ def test_common_base_uses_injected_transports_and_keeps_frame_contract() -> None
     assert panel.width == 250 and panel.height == 122
     assert panel.FRAME_BYTES == 4_000
     assert spi.writes[0] == [panel.SET_RAM_X_ADDRESS_START_END_POSITION]
-    assert gpio.outputs[0] == (panel.power_pin, panel.HIGH)
+    assert gpio.outputs[0] == (panel.power_pin, gpio.HIGH)
