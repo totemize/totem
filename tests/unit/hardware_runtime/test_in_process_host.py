@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytest
 
@@ -57,7 +57,7 @@ def _request(request_id: str = "request-1") -> Dict[str, object]:
 
 
 class CooperativeProvider:
-    def write_frame(self, request: object, *, cancel_event: threading.Event | None = None) -> Dict[str, object]:
+    def write_frame(self, request: object, *, cancel_event: Optional[threading.Event] = None) -> Dict[str, object]:
         assert cancel_event is not None
         cancel_event.wait(1.0)
         return {"attachment_id": getattr(request, "attachment_id"), "accepted": False}
@@ -67,7 +67,7 @@ class UncooperativeProvider:
     def __init__(self) -> None:
         self.release = threading.Event()
 
-    def write_frame(self, request: object, *, cancel_event: threading.Event | None = None) -> Dict[str, object]:
+    def write_frame(self, request: object, *, cancel_event: Optional[threading.Event] = None) -> Dict[str, object]:
         del cancel_event
         self.release.wait(1.0)
         return {"attachment_id": getattr(request, "attachment_id"), "accepted": True}
@@ -103,8 +103,9 @@ def test_uncooperative_deadline_contaminates_and_supervisor_retains_leases_until
     assert status.held_leases == ("display",)
     assert status.live_invocation is True
     assert broker.actions == ["acquire"]
-    with pytest.raises(SupervisorError, match="host_unavailable"):
+    with pytest.raises(SupervisorError) as unavailable:
         supervisor.request("display", _request("request-2"), attachments={"frame": b"x"})
+    assert unavailable.value.code == "host_unavailable"
     supervisor.close()
     assert broker.actions == ["acquire"]
     provider.release.set()

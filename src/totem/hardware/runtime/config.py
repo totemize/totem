@@ -144,6 +144,32 @@ class RuntimeConfig:
             _validate_setting(rule, setting, manifest.provider_id, binding_id, field_name)
         return EffectiveSettings(values)
 
+    def execution_mode(self, provider_id: str, binding_id: str, manifest_default: object = "process") -> str:
+        """Resolve the explicit host-selection seam without reading provider code.
+
+        Host choice is intentionally a runtime concern, separate from provider
+        grouping.  It has the same controlled-start precedence as settings:
+        binding, plugin, global, then the manifest default.  Only ``process``
+        is implicit; in-process execution must be an explicit accepted value.
+        """
+
+        mode = manifest_default
+        global_mode = self.global_settings.get("host_mode")
+        if global_mode is not None:
+            mode = global_mode
+        plugin = next((item for item in self.plugins if item.plugin_id == provider_id), None)
+        if plugin is not None and "host_mode" in plugin.settings:
+            mode = plugin.settings["host_mode"]
+        binding = next((item for item in self.bindings if item.binding_id == binding_id), None)
+        if binding is not None:
+            if binding.plugin_id != provider_id:
+                raise ConfigValidationError(_diagnostic("binding_plugin_mismatch", provider_id, binding_id, "plugin"))
+            if "host_mode" in binding.settings:
+                mode = binding.settings["host_mode"]
+        if mode not in {"process", "in_process"}:
+            raise ConfigValidationError(_diagnostic("invalid_config_value", provider_id, binding_id, "host_mode"))
+        return str(mode)
+
 
 def toml_loader_for_version(
     version: Tuple[int, int], importer: Callable[[str], object] = importlib.import_module

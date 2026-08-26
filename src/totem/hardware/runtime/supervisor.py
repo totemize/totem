@@ -51,6 +51,11 @@ class SupervisorSnapshot:
     quarantined: bool
     last_error: Optional[str]
     ready: bool
+    mode: str = "process"
+    contaminated: bool = False
+    restart_required: bool = False
+    held_leases: Tuple[str, ...] = ()
+    live_invocation: bool = False
 
 
 @dataclass
@@ -63,6 +68,8 @@ class _GroupState:
     restart_count: int = 0
     quarantined: bool = False
     last_error: Optional[str] = None
+    contaminated: bool = False
+    restart_required: bool = False
 
 
 class DriverSupervisor:
@@ -116,6 +123,7 @@ class DriverSupervisor:
 
     def snapshot(self, group_id: str) -> SupervisorSnapshot:
         state = self._groups[group_id]
+        host_health = getattr(state.host, "health", lambda: {})() if state.host is not None else {}
         return SupervisorSnapshot(
             group_id=state.group_id,
             binding_ids=tuple(binding.binding_id for binding in state.bindings),
@@ -123,7 +131,12 @@ class DriverSupervisor:
             restart_count=state.restart_count,
             quarantined=state.quarantined,
             last_error=state.last_error,
-            ready=state.host is not None and not state.quarantined,
+            ready=state.host is not None and not state.quarantined and not state.contaminated,
+            mode=str(host_health.get("mode", "process")),
+            contaminated=state.contaminated,
+            restart_required=state.restart_required,
+            held_leases=tuple(lease.binding_id for lease in state.leases),
+            live_invocation=bool(host_health.get("live_invocation", False)),
         )
 
     def request(
@@ -136,16 +149,19 @@ class DriverSupervisor:
         """Route only to the currently ready generation and reject stale results."""
 
         state = self._routes.get(binding_id)
-        if state is None or state.host is None or state.quarantined:
+        if state is None or state.host is None or state.quarantined or state.contaminated:
             raise SupervisorError("host_unavailable")
         try:
             result = state.host.request(dict(message), attachments=attachments, deadline=deadline)
-        except TimeoutError:
-            self._fail_group(state, "operation_timeout")
-            raise SupervisorError("operation_timeout")
-        except Exception:
+        except Exception as exc:
+            if getattr(state.host, "contaminated", False):
+                self._contaminate_group(state)
+                raise SupervisorError("contaminated") from exc
+            if isinstance(exc, TimeoutError):
+                self._fail_group(state, "operation_timeout")
+                raise SupervisorError("operation_timeout") from exc
             self._fail_group(state, "host_exchange_failed")
-            raise SupervisorError("host_exchange_failed")
+            raise SupervisorError("host_exchange_failed") from exc
         if not isinstance(result, Mapping) or result.get("generation") != state.generation:
             self._fail_group(state, "stale_generation")
             raise SupervisorError("stale_generation")
@@ -161,6 +177,8 @@ class DriverSupervisor:
         """An explicit operator/daemon restart is the only quarantine reset."""
 
         state = self._groups[group_id]
+        if state.contaminated:
+            raise SupervisorError("daemon_restart_required")
         if state.host is not None:
             self._stop_and_release(state)
         state.quarantined = False
@@ -172,8 +190,18 @@ class DriverSupervisor:
         """Close every group without replacing it."""
 
         for state in tuple(self._groups.values()):
-            if state.host is not None:
+            if state.host is not None and not state.contaminated:
                 self._stop_and_release(state)
+
+    @staticmethod
+    def host_mode_for(binding: BindingRecord, config: object, manifest: object = None) -> str:
+        """Expose effective host selection for health and controlled starts."""
+
+        record = binding.provider_record
+        selected_manifest = manifest if manifest is not None else getattr(record, "manifest", None)
+        defaults = getattr(selected_manifest, "defaults", {})
+        default = defaults.get("host_mode", "process") if isinstance(defaults, Mapping) else "process"
+        return config.execution_mode(record.provider_id, binding.binding_id, default)
 
     def _start_group(self, state: _GroupState) -> None:
         if state.quarantined:
@@ -230,6 +258,17 @@ class DriverSupervisor:
         if state.host is not None:
             self._stop_and_release(state)
         self._record_failure(state, reason, restart=True)
+
+    def _contaminate_group(self, state: _GroupState) -> None:
+        """Make a live in-process invocation non-routable without releasing it."""
+
+        if state.contaminated:
+            return
+        for binding in state.bindings:
+            self._routes.pop(binding.binding_id, None)
+        state.contaminated = True
+        state.restart_required = True
+        state.last_error = "contaminated"
 
     def _record_failure(self, state: _GroupState, reason: str, *, restart: bool) -> None:
         state.restart_count += 1
