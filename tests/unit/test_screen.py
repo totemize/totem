@@ -1,16 +1,19 @@
 import asyncio
 import socket
 import tempfile
+from types import SimpleNamespace
 
 from PIL import Image, ImageChops
 import pytest
 
 from totem.hardware.hosts.protocol import decode_frame
 from totem.screen.adapters.hardware_bus import HardwareBusScreenAdapter, ScreenBusError
+from totem.screen.display import DeviceManagerDisplay
 from totem.screen.controller import ScreenController
 from totem.screen.model import ScreenFrame, ScreenState
 from totem.screen.ports import HardwareHealthSnapshot, PowerSnapshot
 from totem.screen.readiness import (
+    LiveReadinessMonitor,
     SERVICE_SPECS,
     SyntheticReadinessMonitor,
     statuses,
@@ -200,7 +203,7 @@ def test_hardware_bus_adapter_uses_correlated_raw_canonical_messages():
         "height": 2,
         "pixel_format": "mono1",
     }
-    assert frame["_attachments"] == {"frame-frame-request": b"\x00"}
+    assert frame["_attachments"] == {"frame-frame-request": b"\xc0\xc0"}
     assert frame["_attachment_media_types"] == {
         "frame-frame-request": "application/octet-stream"
     }
@@ -217,3 +220,62 @@ def test_hardware_bus_adapter_maps_stable_bus_errors():
         asyncio.run(adapter.health.snapshot())
 
     assert raised.value.code == "binding_unavailable"
+
+
+def test_display_compatibility_name_is_only_a_canonical_bus_adapter():
+    assert issubclass(DeviceManagerDisplay, HardwareBusScreenAdapter)
+
+
+def test_live_readiness_reads_hardware_health_port(monkeypatch):
+    class Health:
+        async def snapshot(self):
+            return HardwareHealthSnapshot(ready=True, degraded=False)
+
+    monitor = LiveReadinessMonitor(Health())
+    monkeypatch.setattr(monitor, "_fips_ready", lambda: _ready())
+    monkeypatch.setattr(monitor, "_relay_ready", lambda: _ready())
+    monkeypatch.setattr(monitor, "_totemd_ready", lambda: _ready())
+
+    assert asyncio.run(monitor.snapshot()) == {"device", "fips", "relay", "totemd"}
+
+
+async def _ready():
+    return True
+
+
+def test_replay_boot_constructs_only_the_screen_bus_adapter(monkeypatch):
+    import totem.screen.__main__ as screen_main
+
+    constructed = []
+
+    class FakeBus:
+        def __init__(self, base_url):
+            constructed.append(base_url)
+            self.health = self
+            self.power = self
+
+        async def wait_ready(self, timeout=60.0):
+            return None
+
+        async def show(self, _image):
+            return None
+
+        async def snapshot(self):
+            return HardwareHealthSnapshot(ready=True, degraded=False)
+
+    monkeypatch.setattr(screen_main, "HardwareBusScreenAdapter", FakeBus)
+    asyncio.run(
+        screen_main._run(
+            SimpleNamespace(
+                command="replay-boot",
+                device_api_url="http://127.0.0.1:8000",
+                width=250,
+                height=122,
+                rotation=0,
+                poll_interval=0.0,
+                settle_seconds=0.0,
+            )
+        )
+    )
+
+    assert constructed == ["http://127.0.0.1:8000"]
