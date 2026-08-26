@@ -18,7 +18,7 @@ without editing Totem core or destabilizing existing capabilities.
 - [x] **HWR-03**: Core discovery, resolution, lifecycle, and API modules contain
   no imports of concrete vendor drivers.
 
-- [ ] **HWR-04**: A single hardware runtime owns the plugin catalog, binding
+- [x] **HWR-04**: A single hardware runtime owns the plugin catalog, binding
   plan, resource leases, lifecycle state, health, and events.
 
 ### Public plugin SPI

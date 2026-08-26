@@ -46,7 +46,7 @@ RUN-01..03, API-01..05, TST-01..04
 
   5. Pi-class measurements establish an acceptable default IPC encoding and
      process granularity, with the decision recorded in the public contract.
-**Plans:** 22/33 plans executed
+**Plans:** 23/33 plans executed
 
 Plans:
 
@@ -72,7 +72,7 @@ Plans:
 - [x] 01-20-PLAN.md
 - [x] 01-21-PLAN.md
 - [x] 01-22-PLAN.md
-- [ ] 01-23-PLAN.md
+- [x] 01-23-PLAN.md
 - [ ] 01-24-PLAN.md
 - [ ] 01-25-PLAN.md
 - [ ] 01-26-PLAN.md
@@ -90,4 +90,4 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Capability-Oriented Hardware Runtime | 22/33 | In Progress|  |
+| 1. Capability-Oriented Hardware Runtime | 23/33 | In Progress|  |
