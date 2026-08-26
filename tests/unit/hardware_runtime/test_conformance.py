@@ -141,14 +141,19 @@ def test_dual_host_logical_transcripts_match_and_containment_remains_explicit(tm
         finally:
             sys.path.remove(str(site))
 
-    in_process = run_host_conformance(in_process_factory, cases)
-    process = run_host_conformance(lambda: ProcessDriverHost.start(claim, site_packages=site), cases)
+    try:
+        in_process = run_host_conformance(in_process_factory, cases)
+        process = run_host_conformance(lambda: ProcessDriverHost.start(claim, site_packages=site), cases)
 
-    assert process.items == in_process.items
-    host = in_process_factory()
-    assert host.health()["mode"] == "in_process"
-    assert "restart_required" in host.health()
-    host.close()
+        assert process.items == in_process.items
+        host = in_process_factory()
+        assert host.health()["mode"] == "in_process"
+        assert "restart_required" in host.health()
+        host.close()
+    finally:
+        # The fixture's import marker is intentional in an in-process host,
+        # but must not escape this isolated conformance test process.
+        os.environ.pop("TOTEM_DRIVER_FIXTURE_IMPORTED", None)
 
 
 def test_sacrificial_fatal_provider_process_cannot_terminate_the_test_daemon() -> None:
