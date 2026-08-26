@@ -48,8 +48,8 @@ def test_public_wifi_and_bluetooth_contracts_are_narrow_and_json_data_only() -> 
     wifi = WifiScanResult((WifiNetwork(ssid="!Totem", signal_dbm=-42, secure=False),))
     bluetooth = BluetoothDiscoveryResult((BluetoothDevice(address="AA:BB:CC:DD:EE:FF", name="Totem"),))
 
-    assert WIFI_CONNECTION.value == "wifi.connection@1"
-    assert BLUETOOTH_SESSION.value == "bluetooth.session@1"
+    assert (WIFI_CONNECTION.name, WIFI_CONNECTION.major) == ("wifi.connection", 1)
+    assert (BLUETOOTH_SESSION.name, BLUETOOTH_SESSION.major) == ("bluetooth.session", 1)
     assert WifiScanRequest().to_json_value() == {}
     assert WifiConnectRequest("!Totem", password="test").to_json_value() == {
         "ssid": "!Totem",

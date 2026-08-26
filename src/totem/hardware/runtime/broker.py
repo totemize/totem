@@ -139,11 +139,12 @@ ClaimRecord = ResourceLease
 class ResourceBroker:
     """Validate and atomically commit complete resolved binding claim sets."""
 
-    def __init__(self) -> None:
+    def __init__(self, compatibility_policy: object | None = None) -> None:
         self._lock = Lock()
         self._owners: Dict[ResourceKey, Tuple[Tuple[ResourceLease, _NormalizedClaim], ...]] = {}
         self._leases: Dict[str, ResourceLease] = {}
         self._generations: Dict[str, int] = {}
+        self._compatibility_policy = compatibility_policy
 
     def claim(self, binding: BindingRecord) -> ResourceLease:
         """Compatibility spelling for acquiring one complete binding lease."""
@@ -177,6 +178,7 @@ class ResourceBroker:
                 key=lambda item: (item[1].key.kind, item[1].key.identifier, item[0]),
             )
             self._validate_conflicts(requested)
+            self._validate_compatibility(tuple(binding for binding, _claims in normalized))
             for binding_id in binding_ids:
                 if binding_id in self._leases:
                     raise ResourceReleaseError("binding already owns an active resource lease")
@@ -202,6 +204,19 @@ class ResourceBroker:
                         sorted(owners + ((lease, claim),), key=lambda item: item[0].binding_id)
                     )
             return tuple(leases)
+
+    def _validate_compatibility(self, requested_bindings: Tuple[BindingRecord, ...]) -> None:
+        """Apply an optional pure policy before any lease state is mutated."""
+
+        if self._compatibility_policy is None:
+            return
+        validate = getattr(self._compatibility_policy, "validate", None)
+        if not callable(validate):
+            raise TypeError("compatibility policy must define validate")
+        active_bindings = tuple(
+            lease.binding for lease in self._leases.values() if lease.binding is not None
+        )
+        validate(active_bindings + requested_bindings)
 
     def release(self, binding_id: str, generation: int, owner_token: str) -> None:
         """Release resources only after the exact owner confirms its generation died."""
