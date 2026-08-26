@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from totem import __main__ as totem_main
-from totem.hardware.runtime.config import ConfigValidationError
+from totem.hardware.runtime.config import ConfigValidationError, RuntimeConfig
 
 
 pytestmark = pytest.mark.unit
@@ -25,6 +25,9 @@ class _Runtime:
 
     def close(self) -> None:
         self.close_calls += 1
+
+    def handle(self, _capability_id: str, _binding_id: str) -> object:
+        raise RuntimeError("the composition test does not dispatch hardware")
 
 
 def test_composition_loads_typed_toml_and_translates_legacy_environment_once(tmp_path: Path) -> None:
@@ -62,6 +65,22 @@ def test_composition_loads_typed_toml_and_translates_legacy_environment_once(tmp
 
     asyncio.run(exercise_lifespan())
     assert runtime.close_calls == 1
+
+
+def test_injected_runtime_config_takes_precedence_over_the_optional_toml_path(tmp_path: Path) -> None:
+    config_path = tmp_path / "runtime.toml"
+    config_path.write_text("[global]\nsource = 'toml'\n", encoding="utf-8")
+    injected = RuntimeConfig(global_settings={"source": "injected"})
+    received = []
+
+    app = totem_main.compose_application(
+        config_path=config_path,
+        config=injected,
+        runtime_factory=lambda config, legacy: received.append((config, legacy)) or _Runtime(),
+    )
+
+    assert received[0][0] is injected
+    assert app.state.runtime_config is injected
 
 
 def test_composition_rejects_only_the_affected_invalid_binding(tmp_path: Path) -> None:

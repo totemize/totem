@@ -21,7 +21,6 @@ import uvicorn
 from totem import __version__
 from totem.api.event_manager import EventManager
 from totem.compat.hardware_client import LegacyHardwareClient, LegacyHardwareError
-from totem.compat.hardware_env import legacy_runtime_config
 from totem.hardware.api.bus import HardwareBus
 from totem.hardware.api.events import HardwareEventProjection
 from totem.hardware.hosts.protocol import MAX_ATTACHMENT_BYTES, ProtocolError, decode_frame
@@ -122,10 +121,11 @@ def create_app(
     *,
     client: Optional[LegacyHardwareClient] = None,
     runtime: Optional[object] = None,
+    legacy_config: Optional[object] = None,
+    runtime_config: Optional[object] = None,
 ) -> FastAPI:
     """Preserve deployed routes as translators over one injected runtime/bus."""
 
-    configuration = legacy_runtime_config()
     bus = HardwareBus(runtime) if runtime is not None else None
     hardware_client = client or LegacyHardwareClient(
         bus
@@ -134,7 +134,8 @@ def create_app(
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         application.state.hardware_client = hardware_client
-        application.state.legacy_runtime_config = configuration
+        application.state.legacy_runtime_config = legacy_config
+        application.state.runtime_config = runtime_config
         if runtime is not None:
             runtime.start()
         application.state.event_manager = EventManager(getattr(runtime, "events", None))
@@ -155,7 +156,8 @@ def create_app(
     # ASGI unit clients may exercise a translator without entering lifespan;
     # this is still the same injected adapter, never a fallback runtime owner.
     application.state.hardware_client = hardware_client
-    application.state.legacy_runtime_config = configuration
+    application.state.legacy_runtime_config = legacy_config
+    application.state.runtime_config = runtime_config
     application.state.hardware_runtime = runtime
     application.state.hardware_bus = bus
     application.state.hardware_events = (
@@ -937,8 +939,12 @@ app = create_app()
 
 
 def start_server(host="0.0.0.0", port=8000, reload=False):
+    """Keep the ``totem-api`` entry point on the same composed application."""
+
+    from totem.__main__ import compose_application
+
     logger.info(f"Starting Totem API server on {host}:{port}")
-    uvicorn.run("totem.api.app:app", host=host, port=port, reload=reload)
+    uvicorn.run(compose_application(), host=host, port=port, reload=reload)
 
 
 if __name__ == "__main__":

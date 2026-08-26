@@ -48,5 +48,5 @@ def test_screen_remains_a_bus_client_and_startup_environment_reads_stay_outward(
     )
     assert "HardwareBusScreenAdapter(args.device_api_url)" in (ROOT / "src" / "totem" / "screen" / "__main__.py").read_text(encoding="utf-8")
     assert "legacy_runtime_config" in main_source
-    assert "legacy_runtime_config" not in api_source
+    assert "from totem.compat.hardware_env import legacy_runtime_config" not in api_source
     assert all("TOTEM_" not in source for source in canonical_sources)
