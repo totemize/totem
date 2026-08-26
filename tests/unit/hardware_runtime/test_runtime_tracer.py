@@ -15,12 +15,15 @@ import pytest
 
 from totem.hardware.api.app import create_hardware_app
 from totem.hardware.api.bus import HardwareBus
+from totem.compat.hardware_client import LegacyHardwareClient
 from totem.hardware.discovery.facts import HardwareFacts
 from totem.hardware.discovery.resolver import Resolver
 from totem.hardware.catalog.metadata import CatalogScanner
 from totem.hardware.hosts.process import ProcessDriverHost
 from totem.hardware.hosts.protocol import encode_frame
 from totem.hardware.runtime.broker import ResourceBroker
+from totem.hardware.runtime.composition import compose_runtime
+from totem.hardware.runtime.config import RuntimeConfig
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
@@ -162,6 +165,36 @@ def test_concurrent_generic_bus_dispatch_and_safe_errors_use_binding_table(tmp_p
         "id": "bad-1",
         "ok": False,
         "error": {"code": "unknown_type", "message": "unknown message type"},
+        "generation": 1,
     }
     assert "router" not in repr(bus).lower()
     assert "traceback" not in repr(unknown).lower()
+
+
+def test_production_shape_composition_routes_legacy_client_to_selected_child_provider(tmp_path: Path) -> None:
+    site = _build_and_install_fixture(tmp_path)
+    fixture = next(
+        distribution for distribution in metadata.distributions(path=[str(site)])
+        if distribution.metadata["Name"] == "totem-driver-fixture"
+    )
+    catalog = CatalogScanner(distributions=lambda: (fixture,)).snapshot()
+    runtime = compose_runtime(
+        RuntimeConfig(), catalog=catalog,
+        facts=HardwareFacts.from_mapping({"resource.spi": "spi0.0"}),
+        host_factory=lambda leases, generation: ProcessDriverHost.start_group(
+            leases, site_packages=site, generation=generation
+        ),
+    )
+    try:
+        runtime.start()
+        client = LegacyHardwareClient(HardwareBus(runtime))
+        result = client.call(
+            "display.frame.write",
+            {"frame": {"attachment_id": "frame", "width": 2, "height": 2, "pixel_format": "mono1"}},
+            attachments={"frame": b"\x00\x01"},
+        )
+    finally:
+        runtime.close()
+
+    assert result["ok"] is True
+    assert result["bootstrap_binding_id"] == "fixture.display:display.frame-sink@1"

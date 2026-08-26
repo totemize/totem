@@ -81,7 +81,7 @@ class HardwareBus:
 
     def default_binding_id(self, message_type: str) -> Optional[str]:
         if self._runtime is None:
-            return None
+            return next(iter(self._bindings)) if len(self._bindings) == 1 else None
         selector = getattr(self._runtime, "default_binding_id", None)
         return selector(message_type) if callable(selector) else None
 
