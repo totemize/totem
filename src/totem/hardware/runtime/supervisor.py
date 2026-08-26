@@ -206,6 +206,9 @@ class DriverSupervisor:
     def _start_group(self, state: _GroupState) -> None:
         if state.quarantined:
             raise SupervisorError("quarantined")
+        leases: Tuple[object, ...] = ()
+        generation: Optional[int] = None
+        host: object = None
         try:
             leases = tuple(self._broker.acquire_many(state.bindings))
             generations = {getattr(lease, "generation", None) for lease in leases}
@@ -224,27 +227,33 @@ class DriverSupervisor:
             ):
                 raise SupervisorError("ready_mismatch")
         except TimeoutError:
-            if "host" in locals():
+            if host is not None:
                 state.host = host
                 state.leases = leases
                 state.generation = generation
                 self._stop_and_release(state)
+            elif leases:
+                self._release_leases(leases)
             self._record_failure(state, "startup_timeout", restart=False)
             raise SupervisorError("startup_timeout")
         except SupervisorError:
-            if "host" in locals():
+            if host is not None:
                 state.host = host
                 state.leases = leases
                 state.generation = generation
                 self._stop_and_release(state)
+            elif leases:
+                self._release_leases(leases)
             self._record_failure(state, "startup_failed", restart=False)
             raise
         except Exception as exc:
-            if "host" in locals():
+            if host is not None:
                 state.host = host
                 state.leases = leases
                 state.generation = generation
                 self._stop_and_release(state)
+            elif leases:
+                self._release_leases(leases)
             self._record_failure(state, "startup_failed", restart=False)
             raise SupervisorError("startup_failed") from exc
         state.leases = leases
@@ -303,6 +312,17 @@ class DriverSupervisor:
             self._broker.release(lease.binding_id, lease.generation, lease.owner_token)
         state.host = None
         state.leases = ()
+
+    def _release_leases(self, leases: Sequence[object]) -> None:
+        """Release acquired claims when a host was never created.
+
+        A host that exists must follow the confirmed-death ordering above.  If
+        construction itself fails, however, no child owns the claims and the
+        exact acquisition can be returned immediately.
+        """
+
+        for lease in leases:
+            self._broker.release(lease.binding_id, lease.generation, lease.owner_token)
 
     @staticmethod
     def _group_id(binding: BindingRecord) -> str:

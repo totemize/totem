@@ -132,6 +132,22 @@ def test_startup_timeout_publishes_no_handle_and_quarantines_when_policy_is_exha
     assert broker.actions[-1] == "release:display:1"
 
 
+def test_host_factory_failure_releases_acquired_leases_without_waiting_for_a_child() -> None:
+    broker = RecordingBroker()
+    supervisor = DriverSupervisor(
+        broker,
+        lambda _leases, _generation: (_ for _ in ()).throw(RuntimeError("factory failed")),
+        policy=RestartPolicy(max_failures=1),
+    )
+
+    with pytest.raises(SupervisorError) as error:
+        supervisor.start((_binding(),))
+
+    assert error.value.code == "startup_failed"
+    assert broker.actions == ["acquire:1", "release:display:1"]
+    assert supervisor.snapshot("fixture@1.0.0").held_leases == ()
+
+
 def test_hard_hang_confirms_death_and_carrier_close_before_releasing_and_restarting() -> None:
     broker = RecordingBroker()
     first = FakeHost(terminate_exits=False, generation=1)
