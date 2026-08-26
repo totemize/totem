@@ -1,10 +1,9 @@
-"""FastAPI application for Totem's synchronous hardware managers."""
+"""Deployed REST/WebSocket compatibility translators over the hardware bus."""
 
-import asyncio
 import base64
 import binascii
 from contextlib import asynccontextmanager
-import os
+from ipaddress import ip_address
 from typing import Any, Callable, Dict, Optional
 
 from fastapi import (
@@ -16,11 +15,16 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse, StreamingResponse
 import uvicorn
 
 from totem import __version__
 from totem.api.event_manager import EventManager
+from totem.compat.hardware_client import LegacyHardwareClient, LegacyHardwareError
+from totem.compat.hardware_env import legacy_runtime_config
+from totem.hardware.api.bus import HardwareBus
+from totem.hardware.api.events import HardwareEventProjection
+from totem.hardware.hosts.protocol import MAX_ATTACHMENT_BYTES, ProtocolError, decode_frame
 from totem.api.models import (
     BLEAdvertisementRequest,
     BLEAdvertisementResponse,
@@ -29,12 +33,8 @@ from totem.api.models import (
     BLEDiscoveryRequest,
     BLEDiscoveryResponse,
     BluetoothRadioResponse,
-    DeviceEvent,
-    DeviceId,
-    DeviceType,
     DisplayImageRequest,
     DisplayTextRequest,
-    EventType,
     GATTServiceResponse,
     GATTSubscriptionRequest,
     GATTSubscriptionResponse,
@@ -70,165 +70,96 @@ from totem.api.models import (
     WiFiNetworkResponse,
     WiFiRadioResponse,
 )
-from totem.devices.network.errors import RadioOperationError
 from totem.devices.network.models import serialize
 from totem.logging import get_logger
 
 
 logger = get_logger()
-ManagerFactory = Callable[[], Any]
-
-
-def _enabled(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
-
-
+LEGACY_ROUTE_ACTIONS: Dict[tuple[str, str], str] = {}
 def _decode_base64(value: str, field_name: str) -> bytes:
     try:
-        return base64.b64decode(value, validate=True)
+        decoded = base64.b64decode(value, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise HTTPException(
             status_code=422, detail="{} must be valid base64".format(field_name)
         ) from exc
+    if len(decoded) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(
+            status_code=422, detail="{} exceeds the hardware attachment bound".format(field_name)
+        )
+    return decoded
 
 
-def _default_manager_factories() -> Dict[str, ManagerFactory]:
-    allow_mock = _enabled("TOTEM_ALLOW_MOCK_DRIVERS")
+async def _get_manager(request: Request, _name: str) -> LegacyHardwareClient:
+    """Compatibility seam: routes now receive the sole outward bus adapter."""
 
-    def display():
-        from totem.managers.display_manager import DisplayManager
-
-        return DisplayManager(allow_mock=allow_mock)
-
-    def nfc():
-        from totem.managers.nfc_manager import NFCManager
-
-        return NFCManager(allow_mock=allow_mock)
-
-    def network():
-        from totem.managers.network_manager import NetworkManager
-
-        return NetworkManager(allow_mock=allow_mock)
-
-    def storage():
-        from totem.managers.storage_manager import StorageManager
-
-        return StorageManager(storage_root=os.environ.get("TOTEM_STORAGE_ROOT"))
-
-    def ups():
-        from totem.managers.ups_manager import UPSManager
-
-        return UPSManager()
-
-    return {
-        "display": display,
-        "nfc": nfc,
-        "network": network,
-        "storage": storage,
-        "ups": ups,
-    }
-
-
-async def _get_manager(request: Request, name: str):
-    manager = request.app.state.managers.get(name)
-    if manager is not None:
-        return manager
-
-    async with request.app.state.manager_locks[name]:
-        manager = request.app.state.managers.get(name)
-        if manager is None:
-            factory = request.app.state.manager_factories[name]
-            try:
-                manager = await run_in_threadpool(factory)
-            except Exception as exc:
-                logger.error("Unable to initialize %s manager: %s", name, exc)
-                raise HTTPException(
-                    status_code=503,
-                    detail="{} hardware is unavailable".format(name.capitalize()),
-                ) from exc
-            request.app.state.managers[name] = manager
-            if name == "network":
-                setter = getattr(manager, "set_event_callback", None)
-                if setter is not None:
-                    setter(request.app.state.radio_event_callback)
-        return manager
+    return request.app.state.hardware_client
 
 
 async def _call_hardware(
     request: Request, manager_name: str, operation: Callable, *args, **kwargs
 ):
-    """Serialize operations per device while keeping sync drivers off the event loop."""
-    async with request.app.state.operation_locks[manager_name]:
-        try:
-            return await run_in_threadpool(operation, *args, **kwargs)
-        except HTTPException:
-            raise
-        except RadioOperationError as exc:
-            logger.warning("%s radio operation rejected: %s", manager_name, exc.code)
-            raise HTTPException(
-                status_code=exc.http_status,
-                detail={"code": exc.code, "message": exc.detail},
-            ) from exc
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=422,
-                detail={"code": "invalid_radio_request", "message": str(exc)},
-            ) from exc
-        except Exception as exc:
-            logger.error("%s hardware operation failed: %s", manager_name, exc)
-            raise HTTPException(
-                status_code=502,
-                detail="{} hardware operation failed".format(manager_name.capitalize()),
-            ) from exc
+    """Translate canonical result errors to the stable legacy HTTP boundary."""
+
+    try:
+        return operation(*args, **kwargs)
+    except LegacyHardwareError as exc:
+        status = {
+            "invalid_request": 422,
+            "unknown_type": 501,
+            "host_unavailable": 503,
+            "binding_unavailable": 503,
+            "radio_operation_timeout": 504,
+            "unsupported_feature": 501,
+        }.get(exc.code, 502)
+        raise HTTPException(
+            status_code=status,
+            detail={"code": exc.code, "message": "hardware operation failed"},
+        ) from exc
 
 
 def create_app(
-    manager_factories: Optional[Dict[str, ManagerFactory]] = None,
+    *,
+    client: Optional[LegacyHardwareClient] = None,
+    runtime: Optional[object] = None,
 ) -> FastAPI:
-    factories = _default_manager_factories()
-    if manager_factories:
-        factories.update(manager_factories)
+    """Preserve deployed routes as translators over one injected runtime/bus."""
+
+    configuration = legacy_runtime_config()
+    bus = HardwareBus(runtime) if runtime is not None else None
+    hardware_client = client or LegacyHardwareClient(
+        bus
+    )
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
-        application.state.managers = {}
-        application.state.manager_factories = factories
-        application.state.manager_locks = {name: asyncio.Lock() for name in factories}
-        application.state.operation_locks = {name: asyncio.Lock() for name in factories}
-        application.state.event_manager = EventManager()
+        application.state.hardware_client = hardware_client
+        application.state.legacy_runtime_config = configuration
+        if runtime is not None:
+            runtime.start()
+        application.state.event_manager = EventManager(getattr(runtime, "events", None))
         await application.state.event_manager.start()
-        application.state.loop = asyncio.get_running_loop()
-
-        def radio_event_callback(event_name: str, data: Dict[str, Any]) -> None:
-            try:
-                event_type = EventType(event_name)
-            except ValueError:
-                event_type = EventType.HARDWARE_EVENT
-            event = DeviceEvent(
-                device=DeviceId(device_type=DeviceType.NETWORK),
-                event_type=event_type,
-                data=data,
-            )
-            asyncio.run_coroutine_threadsafe(
-                application.state.event_manager.publish_event(event),
-                application.state.loop,
-            )
-
-        application.state.radio_event_callback = radio_event_callback
         try:
             yield
         finally:
-            for manager in application.state.managers.values():
-                close = getattr(manager, "close", None)
-                if close is not None:
-                    await run_in_threadpool(close)
             await application.state.event_manager.shutdown()
+            if runtime is not None:
+                runtime.close()
 
     application = FastAPI(
         title="Totem Hardware Control API",
         description="API for controlling Totem hardware components",
         version=__version__,
         lifespan=lifespan,
+    )
+    # ASGI unit clients may exercise a translator without entering lifespan;
+    # this is still the same injected adapter, never a fallback runtime owner.
+    application.state.hardware_client = hardware_client
+    application.state.legacy_runtime_config = configuration
+    application.state.hardware_runtime = runtime
+    application.state.hardware_bus = bus
+    application.state.hardware_events = (
+        HardwareEventProjection(runtime.events) if runtime is not None else None
     )
     application.add_middleware(
         CORSMiddleware,
@@ -250,8 +181,45 @@ def create_app(
     async def health(request: Request):
         return {
             "status": "healthy",
-            "initialized_managers": sorted(request.app.state.managers),
+            "initialized_managers": [],
         }
+
+    def loopback_or_forbidden(request: Request) -> Optional[JSONResponse]:
+        client_address = request.client
+        try:
+            is_loopback = client_address is not None and ip_address(client_address.host).is_loopback
+        except ValueError:
+            is_loopback = False
+        if not is_loopback:
+            return JSONResponse(status_code=403, content={"detail": "loopback access required"})
+        return None
+
+    @application.post("/bus")
+    async def canonical_dispatch(request: Request) -> JSONResponse:
+        forbidden = loopback_or_forbidden(request)
+        if forbidden is not None:
+            return forbidden
+        if bus is None:
+            return JSONResponse(status_code=503, content={"detail": "hardware runtime unavailable"})
+        try:
+            message = decode_frame(await request.body())
+        except ProtocolError:
+            return JSONResponse(status_code=400, content={"type": "bus.error.result", "id": None, "ok": False, "error": {"code": "invalid_frame"}})
+        result = bus.dispatch(message)
+        return JSONResponse(status_code=202, content={"ok": True}) if result is None else JSONResponse(content=result)
+
+    @application.get("/bus/events")
+    async def canonical_events(request: Request):
+        forbidden = loopback_or_forbidden(request)
+        if forbidden is not None:
+            return forbidden
+        projection = application.state.hardware_events
+        if projection is None:
+            return JSONResponse(status_code=503, content={"detail": "hardware runtime unavailable"})
+        return StreamingResponse(
+            projection.stream(), media_type="text/event-stream",
+            headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
+        )
 
     @application.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
@@ -941,7 +909,9 @@ def create_app(
     @application.get("/ups/status", response_model=UPSStatusResponse)
     async def ups_status(request: Request):
         manager = await _get_manager(request, "ups")
-        status = await _call_hardware(request, "ups", manager.get_status)
+        status = await _call_hardware(request, "ups", manager.get_ups_status)
+        if isinstance(status, dict):
+            return UPSStatusResponse(**status)
         return UPSStatusResponse(
             model=status.model,
             battery_percent=status.battery_percent,
@@ -949,6 +919,16 @@ def create_app(
             current_amps=status.current_amps,
             power_plugged=status.power_plugged,
         )
+
+    LEGACY_ROUTE_ACTIONS.clear()
+    for route in application.routes:
+        methods = getattr(route, "methods", None)
+        path = getattr(route, "path", "")
+        if not methods or path in {"/", "/health", "/bus", "/bus/events", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}:
+            continue
+        endpoint = getattr(route, "endpoint", None)
+        if endpoint is not None:
+            LEGACY_ROUTE_ACTIONS[(next(iter(methods)), path)] = "legacy.{}".format(endpoint.__name__)
 
     return application
 

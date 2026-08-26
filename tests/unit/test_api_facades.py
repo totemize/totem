@@ -82,8 +82,8 @@ def test_route_inventory_has_a_canonical_action_for_every_legacy_hardware_route(
     routes = {
         (next(iter(route.methods)), route.path)
         for route in app.routes
-        if getattr(route, "path", "") not in {"/", "/health", "/ws"}
-        and getattr(route, "path", "") != "/openapi.json"
+        if getattr(route, "path", "")
+        not in {"/", "/health", "/ws", "/bus", "/bus/events", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
         and getattr(route, "methods", None)
     }
 

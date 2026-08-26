@@ -1,145 +1,69 @@
+"""Legacy service routes project canonical bus requests and results."""
+
 import asyncio
 import base64
-from types import SimpleNamespace
+from collections.abc import Mapping
 
 from fastapi.testclient import TestClient
 import pytest
 
-from totem.api.event_manager import EventManager
 from totem.api.app import create_app
+from totem.api.event_manager import EventManager
+from totem.compat.hardware_client import LegacyHardwareClient
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
 
 
-class FakeDisplayManager:
+class FakeBus:
     def __init__(self):
-        self.text_calls = []
-        self.image_calls = []
+        self.calls = []
 
-    def display_text(self, text, font_size, x, y):
-        self.text_calls.append((text, font_size, x, y))
-
-    def display_encoded_image(self, data):
-        self.image_calls.append(data)
-
-
-class FakeNFCManager:
-    def __init__(self):
-        self.writes = []
-
-    def read_card(self):
-        return "totem-tag"
-
-    def write_card(self, data):
-        self.writes.append(data)
-
-
-class FakeStorageManager:
-    def __init__(self):
-        self.files = {"existing.bin": b"\x00\xff"}
-
-    def read_data(self, path):
-        return self.files[path]
-
-    def write_data(self, path, data):
-        self.files[path] = data
-        return True
-
-
-class FakeNetworkManager:
-    def __init__(self):
-        self.connections = []
-        self.hotspots = []
-
-    def connect_to_network(self, ssid, password):
-        self.connections.append((ssid, password))
-
-    def create_hotspot(self, ssid, password):
-        self.hotspots.append((ssid, password))
-
-
-class FakeUPSManager:
-    def get_status(self):
-        return SimpleNamespace(
-            model="PiSugar 2",
-            battery_percent=73.5,
-            voltage_volts=3.91,
-            current_amps=-0.18,
-            power_plugged=False,
-        )
+    def dispatch(self, message: Mapping[str, object]):
+        call = dict(message)
+        self.calls.append(call)
+        values = {
+            "nfc.tag.read": "totem-tag",
+            "storage.files.read": b"\x00\xff",
+            "power.telemetry.read": {
+                "model": "PiSugar 2",
+                "battery_percent": 73.5,
+                "voltage_volts": 3.91,
+                "current_amps": -0.18,
+                "power_plugged": False,
+            },
+        }
+        return {"type": "{}.result".format(message["type"]), "id": message["id"], "ok": True, "value": values.get(message["type"], {})}
 
 
 def make_client():
-    managers = {
-        "display": FakeDisplayManager(),
-        "nfc": FakeNFCManager(),
-        "storage": FakeStorageManager(),
-        "network": FakeNetworkManager(),
-        "ups": FakeUPSManager(),
-    }
-    app = create_app({name: lambda value=value: value for name, value in managers.items()})
-    return TestClient(app), managers
+    bus = FakeBus()
+    return TestClient(create_app(client=LegacyHardwareClient(bus))), bus
 
 
-def test_api_calls_synchronous_manager_contracts():
-    client, managers = make_client()
+def test_api_translates_legacy_service_shapes_to_canonical_bus_requests():
+    client, bus = make_client()
     with client:
-        response = client.post(
-            "/display/text",
-            json={"text": "hello", "font_size": 18, "x": 4, "y": 9},
-        )
-        assert response.status_code == 200
-        assert managers["display"].text_calls == [("hello", 18, 4, 9)]
-
-        response = client.post(
-            "/display/image",
-            json={"image_base64": base64.b64encode(b"image").decode("ascii")},
-        )
-        assert response.status_code == 200
-        assert managers["display"].image_calls == [b"image"]
-
-        response = client.post("/nfc/write", json={"data": "payload"})
-        assert response.status_code == 200
-        assert managers["nfc"].writes == ["payload"]
-
-        response = client.post("/nfc/read")
-        assert response.status_code == 200
-        assert "totem-tag" in response.json()["message"]
-
-        response = client.post(
-            "/storage/write",
-            json={
-                "path": "new.bin",
-                "data_base64": base64.b64encode(b"stored").decode("ascii"),
-            },
-        )
-        assert response.status_code == 200
-        assert managers["storage"].files["new.bin"] == b"stored"
-
-        response = client.post(
-            "/network/configure",
-            json={"ssid": "mesh", "password": "secret", "is_hotspot": True},
-        )
-        assert response.status_code == 200
-        assert managers["network"].hotspots == [("mesh", "secret")]
-
-        response = client.post(
-            "/network/configure",
-            json={"ssid": "wifi", "password": "secret", "is_hotspot": False},
-        )
-        assert response.status_code == 200
-        assert managers["network"].connections == [("wifi", "secret")]
-
-        response = client.get("/ups/status")
-        assert response.status_code == 200
-        assert response.json() == {
-            "model": "PiSugar 2",
-            "battery_percent": 73.5,
-            "voltage_volts": 3.91,
-            "current_amps": -0.18,
-            "power_plugged": False,
+        assert client.post("/display/text", json={"text": "hello", "font_size": 18, "x": 4, "y": 9}).status_code == 200
+        assert client.post("/display/image", json={"image_base64": base64.b64encode(b"image").decode("ascii")}).status_code == 200
+        assert client.post("/nfc/write", json={"data": "payload"}).status_code == 200
+        assert "totem-tag" in client.post("/nfc/read").json()["message"]
+        assert client.post("/storage/write", json={"path": "new.bin", "data_base64": base64.b64encode(b"stored").decode("ascii")}).status_code == 200
+        assert client.post("/network/configure", json={"ssid": "mesh", "password": "secret", "is_hotspot": True}).status_code == 200
+        assert client.post("/network/configure", json={"ssid": "wifi", "password": "secret", "is_hotspot": False}).status_code == 200
+        assert client.get("/ups/status").json() == {
+            "model": "PiSugar 2", "battery_percent": 73.5, "voltage_volts": 3.91,
+            "current_amps": -0.18, "power_plugged": False,
         }
+
+    actions = [call["type"] for call in bus.calls]
+    assert actions == [
+        "display.text.write", "display.frame.write", "nfc.tag.write", "nfc.tag.read",
+        "storage.files.write", "radio.wifi.hotspot.create", "radio.wifi.connection.create",
+        "power.telemetry.read",
+    ]
+    assert bus.calls[1]["_attachments"] == {"frame": b"image"}
+    assert bus.calls[4]["_attachments"] == {"attachment-1": b"stored"}
 
 
 def test_storage_read_returns_binary_as_base64():
@@ -151,34 +75,22 @@ def test_storage_read_returns_binary_as_base64():
     assert base64.b64decode(response.json()["data_base64"]) == b"\x00\xff"
 
 
-def test_binary_endpoints_reject_invalid_base64():
+def test_binary_endpoints_reject_invalid_or_unbounded_base64():
     client, _ = make_client()
     with client:
         image = client.post("/display/image", json={"image_base64": "***"})
-        storage = client.post(
-            "/storage/write",
-            json={"path": "file.bin", "data_base64": "***"},
-        )
+        storage = client.post("/storage/write", json={"path": "file.bin", "data_base64": "***"})
 
     assert image.status_code == 422
     assert storage.status_code == 422
 
 
-def test_manager_initialization_is_lazy_and_failure_is_503():
-    calls = []
-
-    def unavailable():
-        calls.append("nfc")
-        raise RuntimeError("not connected")
-
-    app = create_app({"nfc": unavailable})
-    with TestClient(app) as client:
-        assert calls == []
+def test_canonical_host_unavailability_is_a_stable_503():
+    with TestClient(create_app(client=LegacyHardwareClient())) as client:
         response = client.post("/nfc/read")
 
-    assert calls == ["nfc"]
     assert response.status_code == 503
-    assert response.json()["detail"] == "Nfc hardware is unavailable"
+    assert response.json()["detail"]["code"] == "host_unavailable"
 
 
 def test_event_manager_requires_explicit_lifecycle_and_accepts_once():

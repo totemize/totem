@@ -10,7 +10,12 @@ from totem.hardware.hosts.protocol import MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS
 
 
 _MESSAGE_CAPABILITIES = {
+    "display.text.write": "display.frame-sink@1",
     "display.frame.write": "display.frame-sink@1",
+    "nfc.tag.read": "nfc.tag@1",
+    "nfc.tag.write": "nfc.tag@1",
+    "storage.files.read": "storage.files@1",
+    "storage.files.write": "storage.files@1",
     "power.telemetry.read": "power.telemetry@1",
 }
 
@@ -67,7 +72,7 @@ class HardwareBus:
         message_type = message.get("type")
         if message_type == "hardware.status.get":
             return self._status_result(message)
-        capability_id = _MESSAGE_CAPABILITIES.get(message_type) if isinstance(message_type, str) else None
+        capability_id = self._capability_for(message_type)
         if capability_id is None:
             return _error(message, "unknown_type")
         attachment_error = self._validate_attachments(message.get("_attachments", {}))
@@ -83,6 +88,16 @@ class HardwareBus:
             return dict(handle.dispatch(message))
         except (CapabilityUnavailable, HostError):
             return _error(message, "host_unavailable")
+
+    @staticmethod
+    def _capability_for(message_type: object) -> Optional[str]:
+        if not isinstance(message_type, str):
+            return None
+        if message_type.startswith("radio.wifi."):
+            return "radio.wifi@1"
+        if message_type.startswith("radio.bluetooth."):
+            return "radio.bluetooth@1"
+        return _MESSAGE_CAPABILITIES.get(message_type)
 
     def _resolve_handle(self, capability_id: str, binding_id: str) -> Optional[CapabilityHandle]:
         if self._runtime is None:
