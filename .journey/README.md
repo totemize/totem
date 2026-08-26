@@ -28,6 +28,7 @@ working environment.
 ## Journal index
 
 | Date | Summary |
+| [2026-08-26 — built-in NFC provider](journal/2026-08-26.md#built-in-nfc-provider) | Moved ACR122, PN532, and explicit mock NFC behavior behind the import-free, bounded `nfc.tag@1` provider with mock-only dual-host conformance and exact compatibility facades; 26 focused tests passed without hardware contact. |
 | [2026-08-26 — built-in power telemetry provider](journal/2026-08-26.md#built-in-power-telemetry-provider) | Moved PiSugar2 and Waveshare UPS HAT (C) telemetry behind the import-free `power.telemetry@1` provider with mock-only dual-host conformance and exact legacy facades; 133 hardware-runtime tests passed without hardware contact. |
 | [2026-08-26 — auxiliary display compatibility facade migration](journal/2026-08-26.md#auxiliary-display-compatibility-facade-migration) | Converted six historical mock, Waveshare 3.7/Pi 5, and vendor-support paths to canonical re-exports with exact AST/inventory guards; 17 local compatibility/import-boundary tests passed without hardware contact. |
 | [2026-08-26 — auxiliary display provider migration](journal/2026-08-26.md#auxiliary-display-provider-migration) | Migrated mock, Waveshare 3.7/Pi 5, and vendor support into the built-in provider with exact mock-only inventory and import-boundary coverage; all 126 hardware-runtime tests passed without hardware contact. |

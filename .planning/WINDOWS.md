@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 3
+open_count: 4
 waived_count: 0
 fixed_count: 9
-total_count: 12
-last_updated: 2026-08-26T13:02:21.191Z
+total_count: 13
+last_updated: 2026-08-26T13:13:50.155Z
 ---
 
 # Broken Windows Ledger
@@ -27,6 +27,7 @@ last_updated: 2026-08-26T13:02:21.191Z
 | 10 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | 17 legacy display contract assertions are intentionally pending Plan 01-28: 13 Waveshare 2.13 checks plus three mock/3.7 DeviceDriver inheritance checks and mock_eink.Driver.health(). | open |  | 2026-08-26T12:48:47.331Z |  |
 | 11 | HW-01 | unrun-verify | tests/unit/test_phase1_regression.py |  | SEC-09 final-regression evidence is unavailable until its later owning plan creates this test; Plan 01-15 ran the available resolver/lifecycle evidence subset. | open |  | 2026-08-26T12:53:23.000Z |  |
 | 12 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | Two UPS legacy DeviceDriver/UPSDeviceInterface inheritance assertions (PiSugar2 and Waveshare UPS HAT C) are intentionally pending Plan 01-28; canonical providers preserve telemetry behavior without legacy inheritance. | open |  | 2026-08-26T13:02:21.191Z |  |
+| 13 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | Four NFC legacy contract assertions (ACR122, PN532, and mock_nfc DeviceDriver inheritance plus mock_nfc.health()) are intentionally pending Plan 01-28; canonical provider drivers preserve NFC behavior without legacy inheritance. | open |  | 2026-08-26T13:13:50.155Z |  |
 
 ````json
 [
@@ -172,6 +173,18 @@ last_updated: 2026-08-26T13:02:21.191Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-26T13:02:21.191Z",
+    "resolved_at": null
+  },
+  {
+    "id": 13,
+    "kind": "unmet-truth",
+    "phase": "HW-01",
+    "file": "tests/unit/test_driver_contracts.py",
+    "line": null,
+    "description": "Four NFC legacy contract assertions (ACR122, PN532, and mock_nfc DeviceDriver inheritance plus mock_nfc.health()) are intentionally pending Plan 01-28; canonical provider drivers preserve NFC behavior without legacy inheritance.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-26T13:13:50.155Z",
     "resolved_at": null
   }
 ]

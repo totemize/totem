@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-16-PLAN.md
-last_updated: "2026-08-26T13:07:20.061Z"
+stopped_at: Completed HW-01-17-PLAN.md
+last_updated: "2026-08-26T13:14:36.572Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 16 of 33
+Plan: 17 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [█████░░░░░] 48%
+Progress: ░░░░░░░░░░ [█████░░░░░] 52%
 
 ## Accumulated Context
 
@@ -83,6 +83,9 @@ Progress: ░░░░░░░░░░ [█████░░░░░] 48%
 - [Phase ?]: Obsolete mock/3.7 DeviceDriver and health assertions join the existing Plan 01-28 migration window.
 - [Phase ?]: Power telemetry requires an explicit model, matching I2C address evidence, and acquired I2C lease before provider access.
 - [Phase ?]: Canonical UPS drivers preserve telemetry shapes without legacy DeviceDriver inheritance; Plan 01-28 owns stale inheritance checks.
+- [Phase ?]: Use nfc.tag@1 bounded base64 values so malformed or oversized writes fail before transport I/O.
+- [Phase ?]: Require exact non-mock evidence plus leased NFC reader claims; mock NFC is explicit test configuration only.
+- [Phase ?]: Defer four obsolete NFC legacy-contract assertions to Plan 01-28 rather than restore legacy inheritance.
 
 ### Roadmap Evolution
 
@@ -99,8 +102,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T13:07:20.054Z
-Stopped at: Completed HW-01-16-PLAN.md
+Last session: 2026-08-26T13:14:36.565Z
+Stopped at: Completed HW-01-17-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -123,3 +126,4 @@ Resume file: None
 | Phase HW-01 P14 | 5min | 1 tasks | 10 files |
 | Phase HW-01 P15 | 4min | 1 tasks | 7 files |
 | Phase HW-01 P16 | 12min | 1 tasks | 15 files |
+| Phase HW-01-capability-oriented-hardware-runtime P17 | 4min | 1 tasks | 16 files |
