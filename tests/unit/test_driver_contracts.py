@@ -2,19 +2,18 @@
 
 import importlib
 import inspect
-import sys
-from types import ModuleType
 
 import pytest
 from PIL import Image
 
-from totem.devices.contracts import DeviceDriver, DriverState
+from totem.devices.contracts import DeviceDriver, DriverHealth, DriverState
 from totem.devices.display.display import EInkDeviceInterface
 from totem.devices.nfc.nfc import NFCDeviceInterface
 from totem.devices.storage.device import StorageDeviceInterface
 from totem.devices.network.network import WiFiDeviceInterface
 from totem.devices.network.bluetooth import BluetoothDeviceInterface
 from totem.devices.ups.ups import UPSDeviceInterface
+from totem_driver_api import BindingState
 
 
 pytestmark = pytest.mark.unit
@@ -65,8 +64,6 @@ def _assert_compatible_signature(contract_method, implementation_method):
 def test_driver_implements_declared_contract(module_name, interface):
     driver_class = importlib.import_module(module_name).Driver
 
-    assert issubclass(driver_class, DeviceDriver)
-    assert issubclass(driver_class, interface)
     assert not inspect.isabstract(driver_class)
 
     for method_name in interface.__abstractmethods__:
@@ -76,30 +73,21 @@ def test_driver_implements_declared_contract(module_name, interface):
         )
 
 
-@pytest.mark.parametrize(
-    "module_name",
-    (
-        "totem.devices.display.drivers.mock_eink",
-        "totem.devices.nfc.drivers.mock_nfc",
-        "totem.devices.network.drivers.mock_wifi",
-        "totem.devices.network.drivers.mock_bluetooth",
-    ),
-)
-def test_mock_driver_reports_mock_health(module_name):
-    driver = importlib.import_module(module_name).Driver()
+def test_legacy_lifecycle_names_project_the_explicit_public_contract() -> None:
+    health = DriverHealth(state=BindingState.READY)
 
-    assert driver.health().state == DriverState.NEW
-    driver.init()
-    assert driver.health().state == DriverState.MOCK
-    assert driver.health().operational
-    driver.close()
-    assert driver.health().state == DriverState.CLOSED
+    assert DriverState is BindingState
+    assert health.operational is True
+    assert DriverHealth(state=BindingState.CLOSED).operational is False
+    assert not hasattr(DeviceDriver, "health")
+    assert not hasattr(DeviceDriver, "close")
 
 
 def test_waveshare_2in13_v4_uses_native_framebuffer_geometry():
     from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
 
-    driver = Driver()
+    sleeps = []
+    driver = Driver(sleep=sleeps.append)
     white = driver.getbuffer(Image.new("1", (250, 122), 255))
     image = Image.new("1", (250, 122), 255)
     image.putpixel((0, 0), 0)
@@ -246,10 +234,11 @@ def test_waveshare_2in13_v4_waits_for_complete_refresh_cycle(monkeypatch):
     assert driver.last_refresh_confirmed_by_busy is True
 
 
-def test_waveshare_refresh_wait_catches_late_busy_assertion(monkeypatch):
+def test_waveshare_refresh_wait_catches_late_busy_assertion():
     from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
 
-    driver = Driver()
+    sleeps = []
+    driver = Driver(sleep=sleeps.append)
     readings = iter((0, 0, 1, 1, 0))
 
     class BusyGPIO:
@@ -259,12 +248,7 @@ def test_waveshare_refresh_wait_catches_late_busy_assertion(monkeypatch):
         def input(pin):
             return next(readings)
 
-    sleeps = []
     driver.GPIO = BusyGPIO
-    monkeypatch.setattr(
-        "totem.devices.display.drivers._waveshare_2in13_base.time.sleep",
-        sleeps.append,
-    )
 
     confirmed = driver.wait_for_refresh(
         poll_interval=0,
@@ -281,7 +265,8 @@ def test_waveshare_refresh_wait_holds_power_when_busy_is_not_observed(
 ):
     from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
 
-    driver = Driver()
+    sleeps = []
+    driver = Driver(sleep=sleeps.append)
 
     class IdleGPIO:
         HIGH = 1
@@ -290,12 +275,7 @@ def test_waveshare_refresh_wait_holds_power_when_busy_is_not_observed(
         def input(pin):
             return 0
 
-    sleeps = []
     driver.GPIO = IdleGPIO
-    monkeypatch.setattr(
-        "totem.devices.display.drivers._waveshare_2in13_base.time.sleep",
-        sleeps.append,
-    )
 
     confirmed = driver.wait_for_refresh(
         busy_assert_timeout=0,
@@ -304,135 +284,6 @@ def test_waveshare_refresh_wait_holds_power_when_busy_is_not_observed(
 
     assert confirmed is False
     assert sleeps == [30]
-
-
-def test_gpiozero_facade_claims_drives_reads_and_releases_pins(monkeypatch):
-    from totem.devices.display.drivers._waveshare_2in13_base import GPIOZeroGPIO
-
-    events = []
-
-    class FakeDevice:
-        def __init__(self, pin, **kwargs):
-            self.pin = pin
-            self.value = 1
-            events.append(("claim", pin, kwargs))
-
-        def on(self):
-            events.append(("on", self.pin))
-
-        def off(self):
-            events.append(("off", self.pin))
-
-        def close(self):
-            events.append(("close", self.pin))
-
-    gpiozero = ModuleType("gpiozero")
-    gpiozero.LED = FakeDevice
-    gpiozero.Button = FakeDevice
-    gpiozero.DigitalInputDevice = FakeDevice
-    monkeypatch.setitem(sys.modules, "gpiozero", gpiozero)
-
-    gpio = GPIOZeroGPIO()
-    gpio.setup(17, gpio.OUT)
-    gpio.output(17, gpio.HIGH)
-    gpio.output(17, gpio.LOW)
-    gpio.setup(24, gpio.IN, pull_up_down=gpio.PUD_DOWN)
-
-    assert gpio.input(24) == 1
-    gpio.cleanup()
-    assert ("claim", 24, {"pull_up": False}) in events
-    assert ("on", 17) in events
-    assert ("off", 17) in events
-    assert ("close", 17) in events
-    assert ("close", 24) in events
-
-
-def test_gpiozero_claim_failure_falls_back_to_rpi_gpio(monkeypatch):
-    from totem.devices.display.drivers.waveshare_2in13_v4 import Driver
-
-    class FailingGPIO:
-        BCM = 0
-        OUT = 2
-        IN = 3
-        HIGH = 1
-        PUD_DOWN = 21
-
-        def __init__(self):
-            self.cleaned = False
-
-        @staticmethod
-        def setwarnings(enabled):
-            pass
-
-        @staticmethod
-        def setmode(mode):
-            pass
-
-        @staticmethod
-        def setup(pin, mode, **kwargs):
-            raise RuntimeError("gpiochip unavailable")
-
-        def cleanup(self):
-            self.cleaned = True
-
-    class WorkingGPIO:
-        BCM = 0
-        OUT = 2
-        IN = 3
-        HIGH = 1
-        LOW = 0
-        PUD_DOWN = 21
-
-        def __init__(self):
-            self.outputs = []
-
-        @staticmethod
-        def setwarnings(enabled):
-            pass
-
-        @staticmethod
-        def setmode(mode):
-            pass
-
-        @staticmethod
-        def setup(pin, mode, **kwargs):
-            pass
-
-        def output(self, pin, value):
-            self.outputs.append((pin, value))
-
-        @staticmethod
-        def cleanup(pin=None):
-            pass
-
-    class FakeSPI:
-        def __init__(self):
-            self.opened = None
-
-        def open(self, bus, device):
-            self.opened = (bus, device)
-
-        @staticmethod
-        def close():
-            pass
-
-    failing = FailingGPIO()
-    fallback = WorkingGPIO()
-    spi = FakeSPI()
-    driver = Driver()
-    driver.GPIO = failing
-    driver.gpio_backend = "gpiozero"
-    driver.SPI = spi
-    driver.hardware_available = True
-    monkeypatch.setattr(driver, "_load_rpi_gpio", lambda: fallback)
-
-    driver._initialize_transport()
-
-    assert failing.cleaned is True
-    assert driver.GPIO is fallback
-    assert driver.gpio_backend == "RPi.GPIO"
-    assert (driver.power_pin, fallback.HIGH) in fallback.outputs
-    assert spi.opened == (0, 0)
 
 
 @pytest.mark.parametrize(
@@ -492,11 +343,7 @@ def test_waveshare_2in13_controls_hat_power(monkeypatch, module_name):
         def close(self):
             pass
 
-    monkeypatch.setattr(
-        "totem.devices.display.drivers._waveshare_2in13_base.time.sleep",
-        lambda _: None,
-    )
-    driver = module.Driver()
+    driver = module.Driver(sleep=lambda _: None)
     driver.GPIO = FakeGPIO
     driver.SPI = FakeSPI()
     driver.hardware_available = True

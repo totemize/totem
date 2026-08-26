@@ -86,8 +86,10 @@ def test_legacy_errors_remain_actionable_without_provider_loading() -> None:
     registry = _registry()
     with pytest.raises(UnknownDriverError, match="expected one of"):
         registry.lookup("missing")
+
+    handleless_registry = _registry(_record())
     with pytest.raises(DriverLoadError, match="canonical runtime handle"):
-        registry.load("missing")
+        handleless_registry.load("fixture.display")
 
     mock_registry = _registry(_record("fixture.mock"))
     with pytest.raises(MockDriverNotAllowedError, match="allow_mock=True"):
