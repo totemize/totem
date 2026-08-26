@@ -16,6 +16,7 @@ from scripts.benchmark_driver_host import (
     ARCHITECTURES,
     PINNED_WORKLOAD,
     BenchmarkEvidenceError,
+    architecture_acceptance,
     acceptance_row,
     validate_evidence,
 )
@@ -35,6 +36,7 @@ def _complete_evidence(architecture: str = "armv6l") -> dict[str, object]:
         "runtime": {"version": "local-build", "mode": "process", "codec": "canonical-json-v1"},
         "packages": {"totem": "local-build"},
         "grouping": "provider",
+        "provider_imports": ["totem.hardware.hosts.process", "totem_driver_api"],
         "startup_to_ready_ms": 25.0,
         "memory": {"steady_kib": 1024, "measurement": "pss", "source": "/proc/123/smaps_rollup"},
         "control_latency_ms": {"p50": 1.0, "p95": 2.0, "samples": 20},
@@ -60,7 +62,7 @@ def test_pinned_workload_covers_both_grouping_cases_and_required_faults() -> Non
 def test_complete_evidence_is_accepted_and_has_a_human_row() -> None:
     row = acceptance_row(validate_evidence(_complete_evidence()))
 
-    assert row["accepted"] is True
+    assert row["run_complete"] is True
     assert row["architecture"] == "armv6l"
     assert row["memory_measurement"] == "pss"
 
@@ -71,6 +73,19 @@ def test_missing_recovery_or_lease_evidence_cannot_be_accepted() -> None:
 
     with pytest.raises(BenchmarkEvidenceError, match="post_death_leases"):
         validate_evidence(evidence)
+
+
+def test_architecture_cannot_be_accepted_without_both_grouping_records() -> None:
+    provider = _complete_evidence()
+    binding = _complete_evidence()
+    binding["grouping"] = "binding"
+
+    pending = architecture_acceptance((provider,), "armv6l")
+    complete = architecture_acceptance((provider, binding), "armv6l")
+
+    assert pending["accepted"] is False
+    assert pending["missing_groupings"] == ["binding"]
+    assert complete["accepted"] is True
 
 
 @pytest.mark.hardware

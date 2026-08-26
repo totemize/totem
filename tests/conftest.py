@@ -20,5 +20,8 @@ def pytest_collection_modifyitems(config, items):
         reason="requires --run-hardware and connected Totem hardware"
     )
     for item in items:
-        if "hardware" in item.keywords:
+        # A directory named ``hardware`` is itself a pytest keyword.  Gate
+        # only tests explicitly marked hardware so controller-safe schema
+        # checks can live beside their opt-in device harness.
+        if any(item.iter_markers(name="hardware")):
             item.add_marker(skip_hardware)
