@@ -19,10 +19,11 @@ from totem.hardware.discovery.facts import HardwareFacts
 from totem.hardware.discovery.resolver import Resolver
 from totem.hardware.catalog.metadata import CatalogScanner
 from totem.hardware.hosts.process import ProcessDriverHost
+from totem.hardware.hosts.protocol import encode_frame
 from totem.hardware.runtime.broker import ResourceBroker
 
 
-pytestmark = (pytest.mark.unit, pytest.mark.mock_transport)
+pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
 
 
 ROOT = Path(__file__).parents[3]
@@ -114,7 +115,11 @@ def test_claimed_fixture_binding_starts_child_and_returns_correlated_bus_result(
         async def post_bus():
             transport = httpx.ASGITransport(app=app)
             async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-                return await client.post("/bus", json=_request("request-1", b"\x00\x01"))
+                return await client.post(
+                    "/bus",
+                    content=encode_frame(_request("request-1", b"\x00\x01")),
+                    headers={"content-type": "application/octet-stream"},
+                )
 
         response = asyncio.run(post_bus())
     finally:
@@ -159,4 +164,3 @@ def test_concurrent_generic_bus_dispatch_and_safe_errors_use_binding_table(tmp_p
     }
     assert "router" not in repr(bus).lower()
     assert "traceback" not in repr(unknown).lower()
-
