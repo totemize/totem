@@ -24,6 +24,7 @@ key-files:
     - src/totem/devices/registry.py
     - tests/unit/test_driver_contracts.py
     - tests/unit/test_driver_registry.py
+    - tests/unit/hardware_runtime/test_builtin_display_2in13_variants.py
 key-decisions:
   - "Keep historical registry constructors and error names import-compatible while ignoring their static interface/spec inputs."
   - "Alias DriverState to the public BindingState and remove DeviceDriver attribute inference and lifecycle ownership."
@@ -52,6 +53,8 @@ Legacy registry and lifecycle imports now present catalog metadata and explicit 
 - `.venv/bin/python -m compileall -q src/totem packages/totem-driver-api/src/totem_driver_api` — passed.
 - `git diff --check` — passed.
 - Registry source audit found no `importlib`, built-in provider imports, resource claim/release calls, or registry lifecycle ownership methods.
+- Follow-up focused driver-contract, registry, facade, display-compatibility, and import-boundary suite — 84 passed.
+- Full `.venv/bin/python -m pytest tests/unit -x -q --tb=short` progressed through the formerly order-dependent driver identity assertion and reached 332 passed before the pre-existing client-only manager migration failure recorded below.
 
 ## Decisions Made
 
@@ -73,6 +76,12 @@ Legacy registry and lifecycle imports now present catalog metadata and explicit 
 
 **Total deviations:** 1 auto-fixed (Rule 1). **Impact:** preserves the clean-break contract without restoring legacy hardware ownership.
 
+## Integration Repair
+
+- A provider import-safety test removed canonical Waveshare modules from `sys.modules` without restoring the parent package attribute. That test-only mutation could leave a legacy facade holding the old `Driver` class while a later canonical import created a new class of the same qualified name.
+- `_fresh_variant_import()` now restores both cache entry and parent-package attribute in `finally`, and an order-proof regression imports the legacy generic facade before probing a fresh V2 module.
+- Commit: `4cdfaaf`.
+
 ## Deferred Issues
 
 - Two pre-existing mock-manager expectations still assume local provider construction after Plan 27 made managers client-only. They are recorded in `deferred-items.md` for the display and radio wrapper migrations; no registry behavior was restored.
@@ -85,3 +94,4 @@ None.
 
 - Required source and test files exist.
 - RED commit `40b3fb5` and GREEN commit `710d3eb` exist in git history.
+- Integration repair commit `4cdfaaf` exists in git history.
