@@ -9,9 +9,8 @@ import uvicorn
 
 from totem.api.app import create_app
 from totem.compat.hardware_env import LegacyRuntimeConfig, legacy_runtime_config
-from totem.hardware.runtime.broker import ResourceBroker
 from totem.hardware.runtime.config import RuntimeConfig, load_runtime_config
-from totem.hardware.runtime.runtime import HardwareRuntime
+from totem.hardware.runtime.composition import compose_runtime
 from totem.logging import setup_logger
 
 
@@ -27,25 +26,6 @@ LOG_LEVELS = {
 RuntimeFactory = Callable[[RuntimeConfig, LegacyRuntimeConfig], object]
 
 
-def _empty_runtime(config: RuntimeConfig, _legacy: LegacyRuntimeConfig) -> HardwareRuntime:
-    """Create the sole startup owner until resolved bindings are composed.
-
-    The runtime itself remains the one owner even when a deployment has no
-    resolved bindings.  The host factory is intentionally unreachable for an
-    empty plan, keeping CLI composition local and side-effect free.
-    """
-
-    def unreachable_host_factory(_leases: tuple[object, ...], _generation: int) -> object:
-        raise RuntimeError("an empty runtime must not create a driver host")
-
-    return HardwareRuntime(
-        (),
-        broker=ResourceBroker(),
-        host_factory=unreachable_host_factory,
-        config=config,
-    )
-
-
 def compose_application(
     *,
     config_path: Optional[Path] = None,
@@ -58,7 +38,7 @@ def compose_application(
     if config is None:
         config = load_runtime_config(config_path) if config_path is not None else RuntimeConfig()
     legacy = legacy_runtime_config(environ)
-    runtime = (runtime_factory or _empty_runtime)(config, legacy)
+    runtime = runtime_factory(config, legacy) if runtime_factory is not None else compose_runtime(config)
     return create_app(
         runtime=runtime,
         legacy_config=legacy,

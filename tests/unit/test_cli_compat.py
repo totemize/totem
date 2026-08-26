@@ -8,6 +8,11 @@ from pathlib import Path
 import pytest
 
 from totem import __main__ as totem_main
+from totem_driver_api import CapabilityId, DriverManifest
+from totem.hardware.catalog.metadata import CatalogRecord
+from totem.hardware.discovery.facts import HardwareFacts
+from totem.hardware.discovery.resolver import Resolver
+from totem.hardware.runtime.composition import compose_runtime
 from totem.hardware.runtime.config import ConfigValidationError, RuntimeConfig
 
 
@@ -91,6 +96,30 @@ def test_composition_rejects_only_the_affected_invalid_binding(tmp_path: Path) -
         totem_main.compose_application(config_path=config_path)
 
     assert exc_info.value.diagnostic.code == "missing_binding_plugin"
+
+
+def test_production_composer_builds_a_resolved_plan_instead_of_an_empty_test_owner() -> None:
+    manifest = DriverManifest(
+        api_major=1, provider_id="fixture.display", provider_version="1",
+        capabilities=(CapabilityId.parse("display.frame-sink@1"),), resources=(),
+    )
+    record = CatalogRecord(
+        distribution_name="fixture", distribution_version="1", entry_point_name="display",
+        entry_point_value="fixture:factory", manifest=manifest,
+    )
+    # The resolver-facing record intentionally has no provider import seam.
+    catalog = type("Catalog", (), {"records": (record,)})()
+    runtime = compose_runtime(
+        RuntimeConfig(),
+        catalog=catalog,
+        facts=HardwareFacts.from_mapping({}),
+        resolver=Resolver(),
+        host_factory=lambda _leases, _generation: _Runtime(),
+    )
+    try:
+        assert tuple(runtime.bindings) == ("fixture.display:display.frame-sink@1",)
+    finally:
+        runtime.close()
 
 
 def test_totem_command_runs_the_composed_application_without_an_import_string(monkeypatch) -> None:
