@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping, Optional
 
-from totem.hardware.capabilities.base import CapabilityUnavailable
-from totem.hardware.capabilities.display import DisplayHandle
+from totem.hardware.capabilities.base import CapabilityHandle, CapabilityUnavailable
 from totem.hardware.hosts.process import HostError
 from totem.hardware.hosts.protocol import MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS
 
 
-_MESSAGE_CAPABILITIES = {"display.frame.write": "display.frame-sink@1"}
+_MESSAGE_CAPABILITIES = {
+    "display.frame.write": "display.frame-sink@1",
+    "power.telemetry.read": "power.telemetry@1",
+}
 
 
 def _error(message: Mapping[str, Any], code: str) -> Dict[str, Any]:
@@ -44,7 +46,7 @@ class HardwareBus:
 
     def __init__(self, runtime_or_bindings: object) -> None:
         self._runtime = runtime_or_bindings if hasattr(runtime_or_bindings, "handle") else None
-        self._bindings: Dict[str, DisplayHandle] = (
+        self._bindings: Dict[str, CapabilityHandle] = (
             {} if self._runtime is not None else dict(runtime_or_bindings)  # type: ignore[arg-type]
         )
 
@@ -63,6 +65,8 @@ class HardwareBus:
         if not isinstance(request_id, str) or not request_id:
             return None
         message_type = message.get("type")
+        if message_type == "hardware.status.get":
+            return self._status_result(message)
         capability_id = _MESSAGE_CAPABILITIES.get(message_type) if isinstance(message_type, str) else None
         if capability_id is None:
             return _error(message, "unknown_type")
@@ -80,7 +84,7 @@ class HardwareBus:
         except (CapabilityUnavailable, HostError):
             return _error(message, "host_unavailable")
 
-    def _resolve_handle(self, capability_id: str, binding_id: str) -> Optional[DisplayHandle]:
+    def _resolve_handle(self, capability_id: str, binding_id: str) -> Optional[CapabilityHandle]:
         if self._runtime is None:
             return self._bindings.get(binding_id)
         bindings = getattr(self._runtime, "bindings", {})
@@ -91,6 +95,25 @@ class HardwareBus:
             return self._runtime.handle(capability_id, binding_id)
         except CapabilityUnavailable:
             return None
+
+    def _status_result(self, message: Mapping[str, Any]) -> Dict[str, Any]:
+        """Project only redacted readiness through the canonical bus."""
+
+        if self._runtime is None:
+            return _error(message, "host_unavailable")
+        try:
+            health = self._runtime.health()
+        except (AttributeError, CapabilityUnavailable, HostError):
+            return _error(message, "host_unavailable")
+        return {
+            "type": "hardware.status.get.result",
+            "id": message["id"],
+            "ok": True,
+            "status": {
+                "ready": bool(health.ready),
+                "degraded": bool(health.degraded),
+            },
+        }
 
     @staticmethod
     def _validate_attachments(value: object) -> Optional[str]:

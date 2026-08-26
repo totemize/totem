@@ -124,6 +124,19 @@ def test_bus_correlates_requests_rejects_unknown_pushes_and_bounds_attachments()
     assert oversized["error"]["code"] == "attachment_too_large"
 
 
+def test_bus_projects_redacted_hardware_status_through_canonical_result() -> None:
+    result = HardwareBus(_Runtime()).dispatch(
+        {"type": "hardware.status.get", "id": "health-1"}
+    )
+
+    assert result == {
+        "type": "hardware.status.get.result",
+        "id": "health-1",
+        "ok": True,
+        "status": {"ready": True, "degraded": False},
+    }
+
+
 def test_app_lifespan_uses_one_injected_runtime_and_rejects_spoofed_peers() -> None:
     runtime = _Runtime()
     app = create_hardware_app(runtime=runtime)
