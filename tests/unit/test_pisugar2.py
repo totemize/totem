@@ -1,12 +1,9 @@
 """PiSugar2 UPS primitive and driver tests."""
 
-from pathlib import Path
-
 import pytest
 
 from totem.devices.contracts import DriverState
 from totem.devices.ups.drivers.pisugar2 import Driver
-from totem.devices.ups.ups import UPS
 
 
 pytestmark = pytest.mark.unit
@@ -89,12 +86,14 @@ def test_pisugar2_rejects_implausible_probe_and_closes_bus():
     assert not driver.initialized
 
 
-def test_ups_auto_detection_uses_configured_i2c_bus(monkeypatch):
+def test_pisugar2_driver_uses_configured_i2c_bus_with_an_injected_transport(monkeypatch):
     monkeypatch.setenv("TOTEM_I2C_BUS", "7")
-    monkeypatch.setattr(
-        Path,
-        "exists",
-        lambda path: str(path) == "/dev/i2c-7",
+    opened_buses = []
+    bus = FakeSMBus({0xA2: 0x5D, 0xA3: 0x14})
+    driver = Driver(
+        bus_factory=lambda bus_number: opened_buses.append(bus_number) or bus
     )
 
-    assert UPS._detect_hardware() == "pisugar2"
+    assert driver.bus_number == 7
+    assert driver.init() is True
+    assert opened_buses == [7]
