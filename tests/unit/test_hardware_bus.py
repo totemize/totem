@@ -25,6 +25,13 @@ class _Handle:
 
     def dispatch(self, message: Mapping[str, object]) -> dict[str, object]:
         self.calls.append(dict(message))
+        if message["type"] == "display.unknown":
+            return {
+                "type": "display.unknown.result",
+                "id": message["id"],
+                "ok": False,
+                "error": {"code": "unknown_type", "message": "unknown message type"},
+            }
         return {
             "type": "{}.result".format(message["type"]),
             "id": message["id"],

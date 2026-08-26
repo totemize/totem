@@ -4,17 +4,11 @@ from __future__ import annotations
 
 from threading import RLock
 from types import MappingProxyType
-from typing import Callable, Dict, Iterable, Mapping, Optional, Sequence, Tuple, Type
+from typing import Callable, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 from totem_driver_api.lifecycle import BindingState
 
 from totem.hardware.capabilities.base import CapabilityHandle, CapabilityUnavailable
-from totem.hardware.capabilities.display import DisplayHandle
-from totem.hardware.capabilities.nfc import NFCHandle
-from totem.hardware.capabilities.power import PowerHandle
-from totem.hardware.capabilities.radio.bluetooth import BluetoothHandle
-from totem.hardware.capabilities.radio.wifi import WiFiHandle
-from totem.hardware.capabilities.storage import StorageHandle
 
 from .bindings import BindingRecord
 from .events import RuntimeEventStream
@@ -145,10 +139,26 @@ class HardwareRuntime:
         snapshot = self._lifecycle.snapshot().bindings[binding_id]
         if self._closed or snapshot.state is not BindingState.READY or snapshot.quarantined or snapshot.contaminated:
             raise CapabilityUnavailable("capability binding is unavailable")
-        handle_type = self._handle_type(capability_id)
-        if handle_type is DisplayHandle:
-            return DisplayHandle(binding_id, capability_id=capability_id, dispatch=self._dispatch)
-        return handle_type(capability_id, binding_id, self._dispatch)
+        return CapabilityHandle(capability_id, binding_id, self._dispatch)
+
+    def default_binding_id(self, message_type: str) -> Optional[str]:
+        """Select the sole ready binding for a domain without a type registry.
+
+        Ambiguous domains deliberately require the outward client to supply an
+        explicit binding.  This keeps routing in resolved plan metadata rather
+        than a central provider/capability switch.
+        """
+
+        if not isinstance(message_type, str) or "." not in message_type:
+            return None
+        domain = message_type.split(".", 1)[0]
+        candidates = [
+            binding_id
+            for binding_id, binding in self._bindings.items()
+            if domain in binding.capability_id.split("@", 1)[0].split(".")
+            and self._lifecycle.snapshot().bindings[binding_id].state is BindingState.READY
+        ]
+        return candidates[0] if len(candidates) == 1 else None
 
     def close(self) -> RuntimeHealth:
         """Close every supervisor before releasing the lifespan owner guard."""
@@ -211,19 +221,3 @@ class HardwareRuntime:
     def _transition_group(self, bindings: Sequence[BindingRecord], state: BindingState, *, code: Optional[str] = None) -> None:
         for binding in bindings:
             self._lifecycle.transition(binding.binding_id, state, code=code)
-
-    @staticmethod
-    def _handle_type(capability_id: str) -> Type[CapabilityHandle]:
-        if capability_id.startswith("display."):
-            return DisplayHandle
-        if capability_id.startswith("power."):
-            return PowerHandle
-        if capability_id.startswith("storage."):
-            return StorageHandle
-        if capability_id.startswith("nfc."):
-            return NFCHandle
-        if capability_id.startswith("radio.wifi"):
-            return WiFiHandle
-        if capability_id.startswith("radio.bluetooth"):
-            return BluetoothHandle
-        return CapabilityHandle

@@ -9,17 +9,6 @@ from totem.hardware.hosts.process import HostError
 from totem.hardware.hosts.protocol import MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS
 
 
-_MESSAGE_CAPABILITIES = {
-    "display.text.write": "display.frame-sink@1",
-    "display.frame.write": "display.frame-sink@1",
-    "nfc.tag.read": "nfc.tag@1",
-    "nfc.tag.write": "nfc.tag@1",
-    "storage.files.read": "storage.files@1",
-    "storage.files.write": "storage.files@1",
-    "power.telemetry.read": "power.telemetry@1",
-}
-
-
 def _error(message: Mapping[str, Any], code: str) -> Dict[str, Any]:
     message_type = message.get("type")
     return {
@@ -72,16 +61,17 @@ class HardwareBus:
         message_type = message.get("type")
         if message_type == "hardware.status.get":
             return self._status_result(message)
-        capability_id = self._capability_for(message_type)
-        if capability_id is None:
+        if not isinstance(message_type, str) or "." not in message_type:
             return _error(message, "unknown_type")
         attachment_error = self._validate_attachments(message.get("_attachments", {}))
         if attachment_error is not None:
             return _error(message, attachment_error)
         binding_id = message.get("binding_id")
         if not isinstance(binding_id, str) or not binding_id:
+            binding_id = self.default_binding_id(message_type)
+        if binding_id is None:
             return _error(message, "binding_unavailable")
-        handle = self._resolve_handle(capability_id, binding_id)
+        handle = self._resolve_handle(binding_id)
         if handle is None:
             return _error(message, "binding_unavailable")
         try:
@@ -89,25 +79,21 @@ class HardwareBus:
         except (CapabilityUnavailable, HostError):
             return _error(message, "host_unavailable")
 
-    @staticmethod
-    def _capability_for(message_type: object) -> Optional[str]:
-        if not isinstance(message_type, str):
+    def default_binding_id(self, message_type: str) -> Optional[str]:
+        if self._runtime is None:
             return None
-        if message_type.startswith("radio.wifi."):
-            return "radio.wifi@1"
-        if message_type.startswith("radio.bluetooth."):
-            return "radio.bluetooth@1"
-        return _MESSAGE_CAPABILITIES.get(message_type)
+        selector = getattr(self._runtime, "default_binding_id", None)
+        return selector(message_type) if callable(selector) else None
 
-    def _resolve_handle(self, capability_id: str, binding_id: str) -> Optional[CapabilityHandle]:
+    def _resolve_handle(self, binding_id: str) -> Optional[CapabilityHandle]:
         if self._runtime is None:
             return self._bindings.get(binding_id)
         bindings = getattr(self._runtime, "bindings", {})
         binding = bindings.get(binding_id)
-        if binding is None or getattr(binding, "capability_id", None) != capability_id:
+        if binding is None:
             return None
         try:
-            return self._runtime.handle(capability_id, binding_id)
+            return self._runtime.handle(binding.capability_id, binding_id)
         except CapabilityUnavailable:
             return None
 

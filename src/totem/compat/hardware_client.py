@@ -90,8 +90,9 @@ class LegacyHardwareClient:
     injectable for local ASGI tests and for the composed runtime application.
     """
 
-    def __init__(self, bus: Optional[object] = None) -> None:
+    def __init__(self, bus: Optional[object] = None, *, binding_ids: Optional[Mapping[str, str]] = None) -> None:
         self._bus = bus
+        self._binding_ids = dict(binding_ids or {})
         self._ids = count(1)
 
     def call(
@@ -104,6 +105,12 @@ class LegacyHardwareClient:
         if self._bus is None or not hasattr(self._bus, "dispatch"):
             raise LegacyHardwareError("host_unavailable", "hardware runtime is unavailable")
         message: Dict[str, object] = {"type": action, "id": "legacy-{}".format(next(self._ids))}
+        binding_id = self._binding_ids.get(action)
+        if binding_id is None:
+            selector = getattr(self._bus, "default_binding_id", None)
+            binding_id = selector(action) if callable(selector) else None
+        if isinstance(binding_id, str) and binding_id:
+            message["binding_id"] = binding_id
         if payload:
             message.update(dict(payload))
         if attachments:
