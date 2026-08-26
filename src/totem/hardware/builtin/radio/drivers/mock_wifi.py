@@ -7,11 +7,11 @@ import threading
 from typing import Any, Callable, Dict, Optional
 import uuid
 
-from totem.devices.network.errors import (
+from ..errors import (
     InvalidRadioRequestError,
     RadioResourceNotFoundError,
 )
-from totem.devices.network.models import (
+from ..models import (
     ConcurrentInterfaceCombination,
     InterfaceLimit,
     NanDataPath,
@@ -30,7 +30,7 @@ from totem.devices.network.models import (
     WiFiNetwork,
     WiFiRadioState,
 )
-from totem.devices.network.network import WiFiDeviceInterface
+from ..network import WiFiDeviceInterface
 
 
 class Driver(WiFiDeviceInterface):

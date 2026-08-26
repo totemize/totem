@@ -13,21 +13,21 @@ from typing import Any, Callable, Dict, List, Optional
 
 from dbus_next import Variant
 
-from totem.devices.network.capabilities import (
+from ..capabilities import (
     frequency_to_channel,
     modes_fit_combination,
     parse_iw_phy,
     parse_rfkill_json,
 )
-from totem.devices.network.dbus_runtime import DBusCallError, SystemDBusRuntime
-from totem.devices.network.errors import (
+from ..dbus_runtime import DBusCallError, SystemDBusRuntime
+from ..errors import (
     RadioConflictError,
     RadioOperationError,
     RadioResourceNotFoundError,
     UnsupportedFeatureError,
 )
 from totem.hardware.builtin.radio.nan import NanDiscoveryController
-from totem.devices.network.models import (
+from ..models import (
     OperationSupport,
     P2PGroup,
     P2PGroupState,
@@ -40,7 +40,7 @@ from totem.devices.network.models import (
     WiFiNetwork,
     WiFiRadioState,
 )
-from totem.devices.network.network import WiFiDeviceInterface
+from ..network import WiFiDeviceInterface
 from totem.logging import logger
 
 
@@ -145,7 +145,7 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
             )
             return result.stdout
         except subprocess.TimeoutExpired as exc:
-            from totem.devices.network.errors import RadioTimeoutError
+            from ..errors import RadioTimeoutError
 
             raise RadioTimeoutError("Wi-Fi command timed out") from exc
         except (OSError, subprocess.CalledProcessError) as exc:
@@ -302,7 +302,7 @@ class NetworkManagerWiFiDriver(WiFiDeviceInterface):
                 self._emit("wifi_radio_state_changed", {"enabled": enabled})
                 return current
             time.sleep(0.1)
-        from totem.devices.network.errors import RadioTimeoutError
+        from ..errors import RadioTimeoutError
 
         raise RadioTimeoutError("Timed out waiting for Wi-Fi radio state change")
 

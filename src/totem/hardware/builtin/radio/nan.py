@@ -14,13 +14,13 @@ import threading
 from typing import Any, Callable, Dict, Optional, Union
 import uuid
 
-from totem.devices.network.errors import (
+from .errors import (
     InvalidRadioRequestError,
     RadioConflictError,
     RadioOperationError,
     RadioResourceNotFoundError,
 )
-from totem.devices.network.models import NanDiscoverySession, NanFollowup, NanMatch
+from .models import NanDiscoverySession, NanFollowup, NanMatch
 
 
 _SERVICE_NAME = re.compile(r"^[A-Za-z0-9.-]{1,255}$")
