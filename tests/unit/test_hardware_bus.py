@@ -88,13 +88,10 @@ def _request(request_id: str = "request-1") -> dict[str, object]:
     }
 
 
-def _call(app, method: str, path: str, *, client: tuple[str, int], **kwargs):
-    async def run():
-        transport = httpx.ASGITransport(app=app, client=client)
-        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as http:
-            return await getattr(http, method)(path, **kwargs)
-
-    return asyncio.run(run())
+async def _call(app, method: str, path: str, *, client: tuple[str, int], **kwargs):
+    transport = httpx.ASGITransport(app=app, client=client)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as http:
+        return await http.request(method, path, **kwargs)
 
 
 def test_bus_correlates_requests_rejects_unknown_pushes_and_bounds_attachments() -> None:
@@ -134,7 +131,7 @@ def test_app_lifespan_uses_one_injected_runtime_and_rejects_spoofed_peers() -> N
     async def lifespan() -> None:
         async with app.router.lifespan_context(app):
             assert runtime.started == 1
-            accepted = _call(
+            accepted = await _call(
                 app,
                 "post",
                 "/bus",
@@ -144,9 +141,9 @@ def test_app_lifespan_uses_one_injected_runtime_and_rejects_spoofed_peers() -> N
             )
             assert accepted.status_code == 200
             assert accepted.json()["id"] == "request-1"
-            assert _call(app, "get", "/health", client=("127.0.0.1", 4455)).json()["ready"] is True
+            assert (await _call(app, "get", "/health", client=("127.0.0.1", 4455))).json()["ready"] is True
             for path in ("/bus", "/bus/events", "/health"):
-                response = _call(
+                response = await _call(
                     app,
                     "post" if path == "/bus" else "get",
                     path,
@@ -164,6 +161,7 @@ def test_app_lifespan_uses_one_injected_runtime_and_rejects_spoofed_peers() -> N
 def test_sse_projection_is_typed_ordered_lossy_and_redacted() -> None:
     runtime = _Runtime()
     app = create_hardware_app(runtime=runtime)
+    slow_subscriber = runtime.events.subscribe()
 
     runtime.events.publish("display", "starting", "ready", details={"token": "secret", "safe": "one"})
     runtime.events.publish("display", "ready", "failed", code="child_exit", details={"traceback": "private", "safe": "two"})
@@ -176,4 +174,6 @@ def test_sse_projection_is_typed_ordered_lossy_and_redacted() -> None:
     assert projection[1]["details"] == {"safe": "two"}
     assert "secret" not in repr(projection)
     assert "private" not in repr(projection)
-    assert app.state.hardware_events.dropped_events >= 0
+    assert runtime.events.dropped_events == 1
+    assert slow_subscriber.get_nowait().sequence == 2
+    assert app.state.hardware_events.dropped_events == 1

@@ -30,6 +30,14 @@ class RuntimeEventStream:
         self._history: list[LifecycleEvent] = []
         self._subscribers: Dict[int, Queue[LifecycleEvent]] = {}
         self._next_subscriber = 0
+        self._dropped_events = 0
+
+    @property
+    def dropped_events(self) -> int:
+        """Return the aggregate count of events dropped for slow subscribers."""
+
+        with self._lock:
+            return self._dropped_events
 
     def subscribe(self) -> Queue[LifecycleEvent]:
         with self._lock:
@@ -37,6 +45,15 @@ class RuntimeEventStream:
             subscriber = Queue(maxsize=self._queue_size)
             self._subscribers[self._next_subscriber] = subscriber
             return subscriber
+
+    def unsubscribe(self, subscriber: Queue[LifecycleEvent]) -> None:
+        """Release a disconnected consumer without retaining its queue."""
+
+        with self._lock:
+            for identifier, current in tuple(self._subscribers.items()):
+                if current is subscriber:
+                    del self._subscribers[identifier]
+                    return
 
     def publish(
         self,
@@ -66,6 +83,7 @@ class RuntimeEventStream:
                 try:
                     subscriber.put_nowait(event)
                 except Full:
+                    self._dropped_events += 1
                     try:
                         subscriber.get_nowait()
                     except Empty:
