@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 4
+open_count: 1
 waived_count: 0
-fixed_count: 17
+fixed_count: 20
 total_count: 21
-last_updated: 2026-08-26T16:14:58.047Z
+last_updated: 2026-08-26T16:31:56.502Z
 ---
 
 # Broken Windows Ledger
@@ -24,10 +24,10 @@ last_updated: 2026-08-26T16:14:58.047Z
 | 7 | HW-01 | deviation | tests/unit/hardware_runtime/test_conformance.py |  | Fixture import marker cleanup retained for package-boundary test isolation | fixed |  | 2026-08-26T12:05:30.497Z | 2026-08-26T12:05:47.435Z |
 | 8 | HW-01 | deviation | src/totem/hardware/builtin/display/totem-driver-manifest.json |  | Manifest selector was corrected from a V4-specific predicate to the Waveshare 2.13 family. | fixed |  | 2026-08-26T12:15:34.526Z | 2026-08-26T12:15:48.111Z |
 | 9 | HW-01 | deviation | src/totem/hardware/builtin/display/drivers/waveshare_2in13_v3.py | 15 | Restored exact 159-byte V3 full-update LUT after mock initialization detected a shortened transcription. | fixed |  | 2026-08-26T12:24:07.048Z | 2026-08-26T12:24:21.137Z |
-| 10 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | 17 legacy display contract assertions are intentionally pending Plan 01-28: 13 Waveshare 2.13 checks plus three mock/3.7 DeviceDriver inheritance checks and mock_eink.Driver.health(). | open |  | 2026-08-26T12:48:47.331Z |  |
+| 10 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | 17 legacy display contract assertions are intentionally pending Plan 01-28: 13 Waveshare 2.13 checks plus three mock/3.7 DeviceDriver inheritance checks and mock_eink.Driver.health(). | fixed |  | 2026-08-26T12:48:47.331Z | 2026-08-26T16:31:56.389Z |
 | 11 | HW-01 | unrun-verify | tests/unit/test_phase1_regression.py |  | SEC-09 final-regression evidence is unavailable until its later owning plan creates this test; Plan 01-15 ran the available resolver/lifecycle evidence subset. | open |  | 2026-08-26T12:53:23.000Z |  |
-| 12 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | Two UPS legacy DeviceDriver/UPSDeviceInterface inheritance assertions (PiSugar2 and Waveshare UPS HAT C) are intentionally pending Plan 01-28; canonical providers preserve telemetry behavior without legacy inheritance. | open |  | 2026-08-26T13:02:21.191Z |  |
-| 13 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | Four NFC legacy contract assertions (ACR122, PN532, and mock_nfc DeviceDriver inheritance plus mock_nfc.health()) are intentionally pending Plan 01-28; canonical provider drivers preserve NFC behavior without legacy inheritance. | open |  | 2026-08-26T13:13:50.155Z |  |
+| 12 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | Two UPS legacy DeviceDriver/UPSDeviceInterface inheritance assertions (PiSugar2 and Waveshare UPS HAT C) are intentionally pending Plan 01-28; canonical providers preserve telemetry behavior without legacy inheritance. | fixed |  | 2026-08-26T13:02:21.191Z | 2026-08-26T16:31:56.445Z |
+| 13 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | Four NFC legacy contract assertions (ACR122, PN532, and mock_nfc DeviceDriver inheritance plus mock_nfc.health()) are intentionally pending Plan 01-28; canonical provider drivers preserve NFC behavior without legacy inheritance. | fixed |  | 2026-08-26T13:13:50.155Z | 2026-08-26T16:31:56.502Z |
 | 14 | HW-01 | deviation | src/totem/hardware/hosts/worker.py |  | Added required storage host dispatch and structural legacy driver validation. | fixed |  | 2026-08-26T14:10:00.433Z | 2026-08-26T14:10:27.848Z |
 | 15 | HW-01 | deviation | src/totem/hardware/hosts/in_process.py |  | Corrected shared in-process read/write forwarding after storage integration. | fixed |  | 2026-08-26T14:10:00.488Z | 2026-08-26T14:10:27.903Z |
 | 16 | HW-01 | deviation | tests/unit/hardware_runtime/test_radio_resources.py |  | Corrected TDD capability identity assertion to use CapabilityId name and major fields. | fixed |  | 2026-08-26T14:21:20.607Z | 2026-08-26T14:22:11.760Z |
@@ -154,10 +154,10 @@ last_updated: 2026-08-26T16:14:58.047Z
     "file": "tests/unit/test_driver_contracts.py",
     "line": null,
     "description": "17 legacy display contract assertions are intentionally pending Plan 01-28: 13 Waveshare 2.13 checks plus three mock/3.7 DeviceDriver inheritance checks and mock_eink.Driver.health().",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-26T12:48:47.331Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-26T16:31:56.389Z"
   },
   {
     "id": 11,
@@ -178,10 +178,10 @@ last_updated: 2026-08-26T16:14:58.047Z
     "file": "tests/unit/test_driver_contracts.py",
     "line": null,
     "description": "Two UPS legacy DeviceDriver/UPSDeviceInterface inheritance assertions (PiSugar2 and Waveshare UPS HAT C) are intentionally pending Plan 01-28; canonical providers preserve telemetry behavior without legacy inheritance.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-26T13:02:21.191Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-26T16:31:56.445Z"
   },
   {
     "id": 13,
@@ -190,10 +190,10 @@ last_updated: 2026-08-26T16:14:58.047Z
     "file": "tests/unit/test_driver_contracts.py",
     "line": null,
     "description": "Four NFC legacy contract assertions (ACR122, PN532, and mock_nfc DeviceDriver inheritance plus mock_nfc.health()) are intentionally pending Plan 01-28; canonical provider drivers preserve NFC behavior without legacy inheritance.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-26T13:13:50.155Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-26T16:31:56.502Z"
   },
   {
     "id": 14,

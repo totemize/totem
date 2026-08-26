@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-27-PLAN.md
-last_updated: "2026-08-26T16:14:43.400Z"
+stopped_at: Completed HW-01-28-PLAN.md
+last_updated: "2026-08-26T16:33:27.716Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 27
+  completed_plans: 28
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 27 of 33
+Plan: 28 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [████████░░] 82%
+Progress: ░░░░░░░░░░ [█████████░] 85%
 
 ## Accumulated Context
 
@@ -110,6 +110,8 @@ Progress: ░░░░░░░░░░ [████████░░] 82%
 - [Phase ?]: Legacy manager constructor selections remain inert compatibility config; managers never construct, probe, or select hardware.
 - [Phase ?]: NetworkManager aggregates separate Wi-Fi and Bluetooth client actions while coexistence remains broker policy.
 - [Phase ?]: Manager close is facade-local so shared injected clients and the sole runtime stay live.
+- [Phase ?]: Legacy registry records derive only from catalog metadata and can request only existing canonical runtime handles.
+- [Phase ?]: DriverState aliases public BindingState; DeviceDriver no longer infers lifecycle, mock state, or ownership.
 
 ### Roadmap Evolution
 
@@ -126,8 +128,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T16:14:43.393Z
-Stopped at: Completed HW-01-27-PLAN.md
+Last session: 2026-08-26T16:33:27.709Z
+Stopped at: Completed HW-01-28-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -161,3 +163,4 @@ Resume file: None
 | Phase HW-01 P25 | 4m | 2 tasks | 10 files |
 | Phase HW-01 P26 | 25min | 1 tasks | 9 files |
 | Phase HW-01 P27 | 8m | 1 tasks | 7 files |
+| Phase HW-01 P28 | 18m | 1 tasks | 5 files |

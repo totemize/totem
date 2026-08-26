@@ -1,0 +1,87 @@
+---
+phase: HW-01-capability-oriented-hardware-runtime
+plan: "28"
+subsystem: hardware compatibility registry and lifecycle contracts
+tags: [catalog, compatibility, driver-api, lifecycle, import-boundary]
+requires:
+  - phase: HW-01-27
+    provides: client-only manager facades and canonical hardware client
+provides:
+  - Catalog-backed legacy DriverRegistry with no provider-import or resource-ownership path.
+  - Explicit public lifecycle aliases and structural legacy driver-contract coverage.
+  - Fixture-plugin regression proving no central registry edit or provider import is needed.
+affects: [HW-01-29, HW-01-30, HW-01-31, legacy-device-facades]
+tech-stack:
+  added: []
+  patterns:
+    - Legacy registry records are projections of immutable catalog metadata.
+    - Legacy loading can only request an already-ready canonical runtime handle.
+key-files:
+  created:
+    - tests/unit/test_registry_facade.py
+  modified:
+    - src/totem/devices/contracts.py
+    - src/totem/devices/registry.py
+    - tests/unit/test_driver_contracts.py
+    - tests/unit/test_driver_registry.py
+key-decisions:
+  - "Keep historical registry constructors and error names import-compatible while ignoring their static interface/spec inputs."
+  - "Alias DriverState to the public BindingState and remove DeviceDriver attribute inference and lifecycle ownership."
+patterns-established:
+  - "Compatibility lookup reads catalog metadata and delegates only through an injected runtime handle port."
+requirements-completed: [API-04, API-05, TST-04]
+metrics:
+  duration: "18m"
+  completed: "2026-08-26"
+status: complete
+---
+
+# Phase HW-01 Plan 28: Catalog-Only Legacy Registry Facade Summary
+
+Legacy registry and lifecycle imports now present catalog metadata and explicit public lifecycle state without loading, constructing, or owning concrete providers.
+
+## Tasks Completed
+
+1. Replaced `DriverRegistry` provider imports and allow-list execution with catalog projections and injected opaque runtime-handle delegation.
+2. Replaced inferred `DeviceDriver` lifecycle behavior with a no-behavior compatibility protocol and explicit `BindingState`-based health projection.
+3. Converted the accumulated display, UPS, and NFC inheritance assertions into structural contract checks and closed Windows entries 10, 12, and 13.
+
+## Verification
+
+- `.venv/bin/python -m pytest tests/unit/test_driver_registry.py tests/unit/test_driver_contracts.py tests/unit/test_registry_facade.py tests/unit/hardware_runtime/test_import_boundaries.py -x` — 50 passed.
+- `.venv/bin/python -m compileall -q src/totem packages/totem-driver-api/src/totem_driver_api` — passed.
+- `git diff --check` — passed.
+- Registry source audit found no `importlib`, built-in provider imports, resource claim/release calls, or registry lifecycle ownership methods.
+
+## Decisions Made
+
+- `DriverRegistry.load()` can only obtain an existing canonical runtime handle through `handle(capability_id, binding_id)`; it cannot resolve hardware, claim resources, or instantiate providers.
+- Historical static `DriverSpec` lists are accepted only to keep imports viable until Plans 29–31 migrate their family wrappers; catalog metadata is the sole registry record source.
+- Public `BindingState` is the authoritative lifecycle vocabulary; legacy `NEW`/`MOCK` attribute inference is retired.
+
+## Deviations from Plan
+
+### Auto-fixed Issues
+
+1. [Rule 1 - Bug] Retired obsolete display transport implementation assertions
+   - **Found during:** Task 1 verification
+   - **Issue:** Legacy contract tests patched removed module globals and expected removed GPIO fallback behavior, causing either import failures or real-time sleeps after the provider clean break.
+   - **Fix:** Targeted the canonical provider only where behavior remains relevant, used injected sleep, and removed obsolete ownership assertions.
+   - **Files modified:** `tests/unit/test_driver_contracts.py`
+   - **Verification:** focused 50-test suite passed.
+   - **Commit:** `710d3eb`
+
+**Total deviations:** 1 auto-fixed (Rule 1). **Impact:** preserves the clean-break contract without restoring legacy hardware ownership.
+
+## Deferred Issues
+
+- Two pre-existing mock-manager expectations still assume local provider construction after Plan 27 made managers client-only. They are recorded in `deferred-items.md` for the display and radio wrapper migrations; no registry behavior was restored.
+
+## Known Stubs
+
+None.
+
+## Self-Check: PASSED
+
+- Required source and test files exist.
+- RED commit `40b3fb5` and GREEN commit `710d3eb` exist in git history.
