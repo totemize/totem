@@ -29,6 +29,7 @@ working environment.
 
 | Date | Summary |
 |------|---------|
+| [2026-08-26 — atomic resource brokerage](journal/2026-08-26.md#atomic-resource-brokerage) | Added normalized all-or-none generation-scoped resource leases, explicit sharing policy, token-authorized release, and credential-redacted diagnostics; all 215 local unit tests passed without hardware contact. |
 | [2026-08-26 — evidence-bearing hardware resolver](journal/2026-08-26.md#evidence-bearing-hardware-resolver) | Added immutable normalized facts/profiles and a deterministic, evidence-complete resolver with safe explicit overrides; all 208 local unit tests passed without hardware contact. |
 | [2026-08-26 — bounded driver IPC contract](journal/2026-08-26.md#bounded-driver-ipc-contract) | Added strict NIP-5D-shaped public messages, generation-scoped correlation, and bounded THW1 canonical JSON Unix framing; full local unit suite passed without hardware contact. |
 | [2026-08-26 — versioned manifest and typed startup configuration](journal/2026-08-26.md#versioned-manifest-and-typed-startup-configuration) | Added strict import-free manifest validation, immutable TOML/injected config precedence, descriptor-only secrets, and passing 166-test local verification without hardware contact. |

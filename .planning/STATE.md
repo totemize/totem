@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-06-PLAN.md
-last_updated: "2026-08-26T11:33:14.488Z"
+stopped_at: Completed HW-01-07-PLAN.md
+last_updated: "2026-08-26T11:41:34.994Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 7 of 33
+Plan: 8 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [██░░░░░░░░] 21%
+Progress: ░░░░░░░░░░ [██░░░░░░░░] 24%
 
 ## Accumulated Context
 
@@ -64,6 +64,8 @@ Progress: ░░░░░░░░░░ [██░░░░░░░░] 21%
 - [Phase ?]: Driver request correlation is generation-scoped so stale results cannot satisfy a replacement host.
 - [Phase HW-01]: Observed predicate evidence outranks supplemental profile evidence; profiles cannot satisfy resources or service prerequisites.
 - [Phase HW-01]: Explicit bindings select a provider only after capability, config, prerequisite, and resource validation.
+- [Phase ?]: Resource broker atomically grants normalized claim sets or none, with deterministic conflict owners.
+- [Phase ?]: Lease release requires the active binding, generation, and opaque owner token; snapshots redact credentials.
 
 ### Roadmap Evolution
 
@@ -80,8 +82,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T11:33:14.481Z
-Stopped at: Completed HW-01-06-PLAN.md
+Last session: 2026-08-26T11:41:34.987Z
+Stopped at: Completed HW-01-07-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -95,3 +97,4 @@ Resume file: None
 | Phase HW-01 P05 | 5m | 1 tasks | 10 files |
 | Phase HW-01-capability-oriented-hardware-runtime P08 | 24m | 2 tasks | 8 files |
 | Phase HW-01 P06 | 8min | 1 tasks | 8 files |
+| Phase HW-01 P07 | 7m | 1 tasks | 2 files |

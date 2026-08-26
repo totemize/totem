@@ -93,7 +93,7 @@ without editing Totem core or destabilizing existing capabilities.
 - [ ] **RUN-01**: Every binding exposes explicit lifecycle states from discovery
   through binding, startup, readiness/degradation, shutdown, failure, and close.
 
-- [ ] **RUN-02**: A resource broker detects conflicts across GPIO, SPI, I2C,
+- [x] **RUN-02**: A resource broker detects conflicts across GPIO, SPI, I2C,
   network PHYs/interfaces, Bluetooth adapters, D-Bus services, sockets, and
   other exclusive resources before driver initialization.
 
