@@ -42,7 +42,7 @@ def test_nfc_accepts_an_injected_canonical_client_without_hardware_probe():
     assert facade.legacy_config == {"driver_name": "pn532", "allow_mock": True}
     assert facade.initialize() is True
     assert facade.read_data() == b"tag"
-    assert facade.write_data(b"next") is True
+    assert facade.write_data(b"next") is None
     assert client.calls == [
         ("read_card", (), {}),
         ("write_card", (b"next",), {}),
