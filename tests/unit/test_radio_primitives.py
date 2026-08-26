@@ -35,6 +35,162 @@ from totem.managers.network_manager import NetworkManager
 pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
 
 
+class RadioFacadeFake:
+    """Stateful local client fake for manager compatibility checks."""
+
+    def __init__(self) -> None:
+        self.callback = None
+        self.wifi_enabled = True
+        self.p2p_discovering = False
+        self.p2p_groups = []
+        self.discovery_sessions = []
+        self.advertisements = []
+        self.listeners = []
+        self.connections = []
+        self.nan_sessions = []
+        self.nan_paths = []
+
+    def set_event_callback(self, callback):
+        self.callback = callback
+
+    def get_wifi_capabilities(self):
+        return {"operations": {"p2p_group": {"supported": True}}, "aware": {"discovery": {"supported": True}, "followup": {"supported": True}, "data_path": {"supported": True}, "interface_mode": "NAN", "data_interface_mode": "NAN-data"}}
+
+    def get_bluetooth_capabilities(self):
+        return {"operations": {"gatt_client": {"supported": True}}, "l2cap": {"le_coc_listen": {"supported": True}, "le_coc_connect": {"supported": True}, "fd_handoff": {"supported": True}}, "version": 9, "manufacturer": 15}
+
+    def get_wifi_radio_state(self):
+        return {"enabled": self.wifi_enabled, "block": {"soft_blocked": not self.wifi_enabled}}
+
+    def set_wifi_radio_enabled(self, enabled, timeout=15.0):
+        changed = self.wifi_enabled != enabled
+        self.wifi_enabled = enabled
+        if changed and self.callback is not None:
+            self.callback("wifi_radio_state_changed", self.get_wifi_radio_state())
+
+    def list_wifi_interfaces(self):
+        return []
+
+    def is_p2p_discovering(self):
+        return self.p2p_discovering
+
+    def get_bluetooth_radio_state(self):
+        return {"enabled": True}
+
+    def bluetooth_discovery_session_count(self):
+        return len(self.discovery_sessions)
+
+    def list_bluetooth_advertisements(self):
+        return list(self.advertisements)
+
+    def start_p2p_discovery(self, duration_seconds=30, timeout=15.0):
+        self.p2p_discovering = True
+
+    def stop_p2p_discovery(self, timeout=15.0):
+        self.p2p_discovering = False
+
+    def list_p2p_peers(self):
+        return [SimpleNamespace(id="peer-1")]
+
+    def create_p2p_group(self, peer_id, timeout=45.0):
+        if peer_id == "missing":
+            raise RadioResourceNotFoundError("missing")
+        group = SimpleNamespace(id="group-1")
+        self.p2p_groups = [group]
+        return group
+
+    def list_p2p_groups(self):
+        return list(self.p2p_groups)
+
+    def remove_p2p_group(self, group_id, timeout=15.0):
+        self.p2p_groups = [group for group in self.p2p_groups if group.id != group_id]
+
+    def start_bluetooth_discovery(self, **kwargs):
+        session = "discovery-{}".format(len(self.discovery_sessions) + 1)
+        self.discovery_sessions.append(session)
+        return session
+
+    def stop_bluetooth_discovery(self, session_id, timeout=15.0):
+        self.discovery_sessions = [item for item in self.discovery_sessions if item != session_id]
+
+    def register_bluetooth_advertisement(self, specification, timeout=15.0):
+        advertisement = SimpleNamespace(id="advertisement-1")
+        self.advertisements = [advertisement]
+        return advertisement
+
+    def unregister_bluetooth_advertisement(self, advertisement_id, timeout=15.0):
+        self.advertisements = [item for item in self.advertisements if item.id != advertisement_id]
+
+    def list_bluetooth_devices(self):
+        return [SimpleNamespace(id="device-1")]
+
+    def connect_bluetooth_device(self, device_id, timeout=30.0):
+        if device_id == "missing":
+            raise RadioResourceNotFoundError("missing")
+
+    def list_gatt(self, device_id):
+        return [SimpleNamespace(characteristics=[SimpleNamespace(id="characteristic-1")])]
+
+    def write_gatt_characteristic(self, *args):
+        return None
+
+    def read_gatt_characteristic(self, *args):
+        return b"new"
+
+    def subscribe_gatt_characteristic(self, *args):
+        return "subscription-1"
+
+    def unsubscribe_gatt_characteristic(self, *args):
+        return None
+
+    def create_l2cap_listener(self, *args):
+        listener = SimpleNamespace(id="listener-1", psm=0x0081)
+        self.listeners = [listener]
+        return listener
+
+    def list_l2cap_listeners(self):
+        return list(self.listeners)
+
+    def connect_l2cap(self, *args):
+        connection = SimpleNamespace(id="connection-1")
+        self.connections = [connection]
+        return connection
+
+    def list_l2cap_connections(self):
+        return list(self.connections)
+
+    def handoff_l2cap_to_fips(self, connection_id, timeout=15.0, metadata=None):
+        self.connections = [item for item in self.connections if item.id != connection_id]
+
+    def close_l2cap_listener(self, listener_id, timeout=15.0):
+        self.listeners = [item for item in self.listeners if item.id != listener_id]
+
+    def start_nan_discovery(self, *args):
+        session = SimpleNamespace(id="session-1")
+        self.nan_sessions = [session]
+        return session
+
+    def list_nan_matches(self, session_id=None):
+        return [SimpleNamespace(id="match-1")]
+
+    def create_nan_data_path(self, match_id, port=4873, timeout=30.0):
+        path = SimpleNamespace(id="path-1", interface="aware_data0", local_ipv6="fe80::1%aware_data0", peer_ipv6="fe80::2%aware_data0", port=port)
+        self.nan_paths = [path]
+        return path
+
+    def list_nan_data_paths(self):
+        return list(self.nan_paths)
+
+    def remove_nan_data_path(self, data_path_id, timeout=15.0):
+        self.nan_paths = [item for item in self.nan_paths if item.id != data_path_id]
+
+    def stop_nan_discovery(self, session_id, timeout=15.0):
+        self.nan_sessions = [item for item in self.nan_sessions if item.id != session_id]
+
+    def list_nan_discovery_sessions(self):
+        return list(self.nan_sessions)
+
+
 IW_PHY = """
 Wiphy phy0
 \tSupported interface modes:
@@ -106,29 +262,29 @@ def test_secret_redaction_is_recursive_and_covers_error_text():
 
 
 def test_mock_radios_report_real_shape_and_transition_idempotently():
-    manager = NetworkManager("mock_wifi", allow_mock=True)
+    manager = NetworkManager("mock_wifi", allow_mock=True, client=RadioFacadeFake())
     events = []
     manager.set_event_callback(lambda event, data: events.append((event, data)))
 
-    assert manager.get_status().wifi_radio.enabled
+    assert manager.get_status()["wifi_radio"]["enabled"]
     manager.set_wifi_radio_enabled(False)
     manager.set_wifi_radio_enabled(False)
-    assert manager.get_status().wifi_radio.block.soft_blocked
+    assert manager.get_status()["wifi_radio"]["block"]["soft_blocked"]
     assert [event for event, _ in events].count("wifi_radio_state_changed") == 1
 
     capabilities = manager.get_capabilities()
-    assert capabilities.wifi.operations["p2p_group"].supported
-    assert capabilities.wifi.aware.discovery.supported
-    assert capabilities.wifi.aware.followup.supported
-    assert capabilities.wifi.aware.data_path.supported
-    assert capabilities.wifi.aware.interface_mode == "NAN"
-    assert capabilities.wifi.aware.data_interface_mode == "NAN-data"
-    assert capabilities.bluetooth.operations["gatt_client"].supported
-    assert capabilities.bluetooth.l2cap.le_coc_listen.supported
-    assert capabilities.bluetooth.l2cap.le_coc_connect.supported
-    assert capabilities.bluetooth.l2cap.fd_handoff.supported
-    assert capabilities.bluetooth.version == 9
-    assert capabilities.bluetooth.manufacturer == 15
+    assert capabilities["wifi"]["operations"]["p2p_group"]["supported"]
+    assert capabilities["wifi"]["aware"]["discovery"]["supported"]
+    assert capabilities["wifi"]["aware"]["followup"]["supported"]
+    assert capabilities["wifi"]["aware"]["data_path"]["supported"]
+    assert capabilities["wifi"]["aware"]["interface_mode"] == "NAN"
+    assert capabilities["wifi"]["aware"]["data_interface_mode"] == "NAN-data"
+    assert capabilities["bluetooth"]["operations"]["gatt_client"]["supported"]
+    assert capabilities["bluetooth"]["l2cap"]["le_coc_listen"]["supported"]
+    assert capabilities["bluetooth"]["l2cap"]["le_coc_connect"]["supported"]
+    assert capabilities["bluetooth"]["l2cap"]["fd_handoff"]["supported"]
+    assert capabilities["bluetooth"]["version"] == 9
+    assert capabilities["bluetooth"]["manufacturer"] == 15
     manager.close()
     manager.close()
 
@@ -222,7 +378,7 @@ def test_network_manager_does_not_weaken_privileges_for_nan(monkeypatch):
 
 
 def test_p2p_discovery_group_and_teardown_lifecycle():
-    manager = NetworkManager("mock_wifi", allow_mock=True)
+    manager = NetworkManager("mock_wifi", allow_mock=True, client=RadioFacadeFake())
 
     manager.start_p2p_discovery(10)
     peer = manager.list_p2p_peers()[0]
@@ -560,20 +716,21 @@ def test_l2cap_failed_mtu_setup_releases_capacity_and_socket():
 
 
 def test_ble_sessions_do_not_cancel_each_other_and_cleanup_is_idempotent():
-    manager = NetworkManager("mock_wifi", allow_mock=True)
+    client = RadioFacadeFake()
+    manager = NetworkManager("mock_wifi", allow_mock=True, client=client)
 
     first = manager.start_bluetooth_discovery(duration_seconds=10)
     second = manager.start_bluetooth_discovery(duration_seconds=10)
     manager.stop_bluetooth_discovery(first)
-    assert manager.bluetooth_device.discovery_session_count() == 1
+    assert client.bluetooth_discovery_session_count() == 1
     manager.stop_bluetooth_discovery(first)
     manager.stop_bluetooth_discovery(second)
-    assert manager.bluetooth_device.discovery_session_count() == 0
+    assert client.bluetooth_discovery_session_count() == 0
     manager.close()
 
 
 def test_ble_advertisement_and_gatt_primitive_lifecycle():
-    manager = NetworkManager("mock_wifi", allow_mock=True)
+    manager = NetworkManager("mock_wifi", allow_mock=True, client=RadioFacadeFake())
     advertisement = manager.register_bluetooth_advertisement(
         {
             "type": "peripheral",
@@ -581,7 +738,7 @@ def test_ble_advertisement_and_gatt_primitive_lifecycle():
             "service_uuids": ["12345678-1234-5678-1234-56789abcdef0"],
         }
     )
-    assert manager.get_status().bluetooth_advertisements == [advertisement]
+    assert manager.get_status()["bluetooth_advertisements"] == [advertisement]
 
     device = manager.list_bluetooth_devices()[0]
     manager.connect_bluetooth_device(device.id)
@@ -597,7 +754,7 @@ def test_ble_advertisement_and_gatt_primitive_lifecycle():
 
 
 def test_mock_l2cap_listener_connection_and_fips_handoff_lifecycle():
-    manager = NetworkManager("mock_wifi", allow_mock=True)
+    manager = NetworkManager("mock_wifi", allow_mock=True, client=RadioFacadeFake())
     listener = manager.create_l2cap_listener("9c90b790-2cc5-42c0-9f87-c9cc40648f4c")
     connection = manager.connect_l2cap("02:00:00:00:10:02", listener.psm)
 
@@ -612,7 +769,7 @@ def test_mock_l2cap_listener_connection_and_fips_handoff_lifecycle():
 
 
 def test_mock_nan_match_data_path_uses_scoped_ipv6_and_tears_down():
-    manager = NetworkManager("mock_wifi", allow_mock=True)
+    manager = NetworkManager("mock_wifi", allow_mock=True, client=RadioFacadeFake())
     session = manager.start_nan_discovery(
         "myco.fips.v1", b'{"port":4873}', duration_seconds=60
     )
@@ -634,7 +791,7 @@ def test_mock_nan_match_data_path_uses_scoped_ipv6_and_tears_down():
 
 
 def test_disappearing_devices_fail_explicitly():
-    manager = NetworkManager("mock_wifi", allow_mock=True)
+    manager = NetworkManager("mock_wifi", allow_mock=True, client=RadioFacadeFake())
 
     with pytest.raises(RadioResourceNotFoundError):
         manager.connect_bluetooth_device("missing")

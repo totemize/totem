@@ -88,7 +88,21 @@ def test_permissions_and_non_atomic_write(storage_driver):
 
 
 def test_manager_accepts_explicit_storage_root(tmp_path):
-    manager = StorageManager("filesystem", storage_root=tmp_path)
+    class LocalStorageClient:
+        def __init__(self):
+            self.files = {}
+
+        def write_data(self, path, data, options):
+            self.files[path] = data
+            return True
+
+        def read_data(self, path):
+            return self.files[path]
+
+    manager = StorageManager(
+        "filesystem", storage_root=tmp_path, client=LocalStorageClient()
+    )
 
     assert manager.write_data("managed.bin", b"managed") is True
     assert manager.read_data("managed.bin") == b"managed"
+    assert manager.legacy_config["storage_root"] == tmp_path
