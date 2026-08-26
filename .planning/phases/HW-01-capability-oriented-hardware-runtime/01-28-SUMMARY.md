@@ -25,6 +25,8 @@ key-files:
     - tests/unit/test_driver_contracts.py
     - tests/unit/test_driver_registry.py
     - tests/unit/hardware_runtime/test_builtin_display_2in13_variants.py
+    - tests/unit/hardware_runtime/test_builtin_wifi.py
+    - tests/unit/test_wifi_provider_compat.py
 key-decisions:
   - "Keep historical registry constructors and error names import-compatible while ignoring their static interface/spec inputs."
   - "Alias DriverState to the public BindingState and remove DeviceDriver attribute inference and lifecycle ownership."
@@ -55,6 +57,8 @@ Legacy registry and lifecycle imports now present catalog metadata and explicit 
 - Registry source audit found no `importlib`, built-in provider imports, resource claim/release calls, or registry lifecycle ownership methods.
 - Follow-up focused driver-contract, registry, facade, display-compatibility, and import-boundary suite — 84 passed.
 - Full `.venv/bin/python -m pytest tests/unit -x -q --tb=short` progressed through the formerly order-dependent driver identity assertion and reached 332 passed before the pre-existing client-only manager migration failure recorded below.
+- Follow-up focused Wi-Fi provider, facade, registry, and import-boundary suite — 37 passed.
+- Final `.venv/bin/python -m pytest tests/unit -x -q --tb=short` — 440 passed.
 
 ## Decisions Made
 
@@ -82,9 +86,13 @@ Legacy registry and lifecycle imports now present catalog metadata and explicit 
 - `_fresh_variant_import()` now restores both cache entry and parent-package attribute in `finally`, and an order-proof regression imports the legacy generic facade before probing a fresh V2 module.
 - Commit: `4cdfaaf`.
 
+- The Wi-Fi catalog import probe had the same cache-restoration defect: evicting `network_manager_wifi` left a legacy package facade holding the former module object. The probe now restores every evicted module and its parent attribute, and an ordered regression proves direct legacy package re-exports retain canonical module identity.
+- The Wi-Fi inventory also reloads each one-line facade before comparing identities, preventing a sibling legacy-child import from replacing a package re-export with the legacy module object.
+- Commit: `a9c3642`.
+
 ## Deferred Issues
 
-- Two pre-existing mock-manager expectations still assume local provider construction after Plan 27 made managers client-only. They are recorded in `deferred-items.md` for the display and radio wrapper migrations; no registry behavior was restored.
+None. The prior client-only manager test expectations were repaired independently in Plan 01-27 before this final full-suite run.
 
 ## Known Stubs
 
@@ -95,3 +103,4 @@ None.
 - Required source and test files exist.
 - RED commit `40b3fb5` and GREEN commit `710d3eb` exist in git history.
 - Integration repair commit `4cdfaaf` exists in git history.
+- Wi-Fi integration repair commit `a9c3642` exists in git history.
