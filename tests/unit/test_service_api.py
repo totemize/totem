@@ -10,6 +10,7 @@ import pytest
 from totem.api.app import create_app
 from totem.api.event_manager import EventManager
 from totem.compat.hardware_client import LegacyHardwareClient
+from totem.hardware.runtime.events import RuntimeEventStream
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
@@ -114,3 +115,34 @@ def test_event_manager_requires_explicit_lifecycle_and_accepts_once():
         return websocket.accept_count
 
     assert asyncio.run(exercise()) == 1
+
+
+def test_event_manager_projects_the_injected_runtime_event_stream_without_a_manager_queue():
+    class FakeWebSocket:
+        def __init__(self):
+            self.messages = []
+
+        async def accept(self):
+            pass
+
+        async def send_text(self, value):
+            self.messages.append(value)
+
+    async def exercise():
+        events = RuntimeEventStream()
+        manager = EventManager(events)
+        websocket = FakeWebSocket()
+        await manager.start()
+        await asyncio.sleep(0.01)
+        await manager.connect(websocket)
+        events.publish("radio-wifi", "starting", "ready", code="ready")
+        for _ in range(50):
+            if websocket.messages:
+                break
+            await asyncio.sleep(0.01)
+        await manager.shutdown()
+        return websocket.messages
+
+    messages = asyncio.run(exercise())
+    assert '"event_type":"hardware_event"' in messages[0]
+    assert '"binding_id":"radio-wifi"' in messages[0]

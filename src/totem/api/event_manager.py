@@ -4,7 +4,7 @@ from queue import Empty
 from typing import Awaitable, Callable, Dict, List, Optional, Set
 from fastapi import WebSocket
 
-from totem.api.models import DeviceEvent, DeviceType, EventType
+from totem.api.models import DeviceEvent, DeviceId, DeviceType, EventType
 
 logger = logging.getLogger(__name__)
 
