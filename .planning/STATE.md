@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-28-PLAN.md integration repair
-last_updated: "2026-08-26T17:16:09.539Z"
+stopped_at: Completed HW-01-27 integration repair
+last_updated: "2026-08-26T17:27:33.058Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
@@ -112,6 +112,7 @@ Progress: ░░░░░░░░░░ [█████████░] 85%
 - [Phase ?]: Manager close is facade-local so shared injected clients and the sole runtime stay live.
 - [Phase ?]: Legacy registry records derive only from catalog metadata and can request only existing canonical runtime handles.
 - [Phase ?]: DriverState aliases public BindingState; DeviceDriver no longer infers lifecycle, mock state, or ownership.
+- [Phase ?]: Legacy manager integration tests use explicit local client fakes; tests do not construct direct mock drivers through manager facades.
 
 ### Roadmap Evolution
 
@@ -128,8 +129,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T17:16:09.531Z
-Stopped at: Completed HW-01-28-PLAN.md integration repair
+Last session: 2026-08-26T17:27:33.047Z
+Stopped at: Completed HW-01-27 integration repair
 Resume file: None
 
 ## Performance Metrics

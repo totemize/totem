@@ -26,6 +26,9 @@ key-files:
     - src/totem/managers/nfc_manager.py
     - src/totem/managers/storage_manager.py
     - src/totem/managers/network_manager.py
+    - tests/unit/test_mock_transports.py
+    - tests/unit/test_radio_primitives.py
+    - tests/unit/test_storage.py
 key-decisions:
   - "Manager constructors preserve legacy selection inputs as inert outward-boundary configuration and never probe or initialize a driver."
   - "Network status and capability aggregation dispatches separate Wi-Fi and Bluetooth client actions; coexistence remains broker policy."
@@ -79,7 +82,7 @@ status: complete
 - **Duration:** 8m
 - **Started:** 2026-08-26T16:06:06Z
 - **Tasks:** 1/1
-- **Files modified:** 7
+- **Files modified:** 10
 
 ## Accomplishments
 
@@ -92,6 +95,7 @@ status: complete
 
 1. **Task 1: Delegate every manager method through the canonical client (RED)** — `3846a58` (`test`)
 2. **Task 1: Delegate every manager method through the canonical client (GREEN)** — `8e61436` (`feat`)
+3. **Integration repair: Replace stale direct-manager mock fixtures** — `cf219bc` (`test`)
 
 ## Verification
 
@@ -99,12 +103,15 @@ status: complete
 - `.venv/bin/python -m compileall -q src/totem/managers src/totem/compat` and `git diff --check` — passed.
 - The AST/source ownership scan found no manager imports of `totem.devices`, built-in providers, or `DriverRegistry`, and no lifecycle, discovery, load, or restart calls.
 - All checks used injected local fakes only; no SSH, network, live service, radio, device, USB/serial/I2C/GPIO, deployment, or hardware-marked test was contacted.
+- `.venv/bin/python -m pytest tests/unit/test_mock_transports.py tests/unit/test_radio_primitives.py tests/unit/test_storage.py tests/unit/test_manager_facades.py tests/unit/test_radio_api.py tests/unit/hardware_runtime/test_import_boundaries.py -x` — passed (142 tests).
+- The non-hardware-marked full unit suite passed 425 tests before an unrelated order-sensitive Plan 01-28 Wi-Fi re-export identity assertion; its isolated suite passes (18 tests), and this repair leaves the Plan 01-28 code untouched.
 
 ## Files Created/Modified
 
 - `src/totem/compat/hardware_client.py` — Extended canonical action translation for the remaining facade operations and independent radio snapshots.
 - `src/totem/managers/{display_manager,ups_manager,nfc_manager,storage_manager,network_manager}.py` — Converted legacy managers into client-only adapters.
 - `tests/unit/test_manager_facades.py` — Added exhaustive local compatibility, close, method-inventory, and import-boundary coverage.
+- `tests/unit/{test_mock_transports,test_radio_primitives,test_storage}.py` — Replaced stale direct-manager mock fixtures with explicit stateful local client fakes.
 
 ## Decisions Made
 
@@ -124,14 +131,22 @@ status: complete
 - **Verification:** Manager facade, radio API, and import-boundary suites passed (90 tests).
 - **Committed in:** `8e61436`.
 
+**2. [Rule 1 - Bug] Repaired stale direct-manager mock transport fixtures**
+- **Found during:** Post-plan non-hardware unit integration run.
+- **Issue:** Mock transport, radio primitive, and storage tests still constructed managers without an injected client and asserted direct driver internals, causing `host_unavailable` failures and contradicting the facade-only contract.
+- **Fix:** Replaced those fixtures with explicit stateful local client fakes and retained behavior-level assertions at the compatibility boundary.
+- **Files modified:** `tests/unit/test_mock_transports.py`, `tests/unit/test_radio_primitives.py`, `tests/unit/test_storage.py`.
+- **Verification:** The 142-test focused manager/mock/radio/storage/API/import suite passed; the original display mock transport failure is covered and passes.
+- **Committed in:** `cf219bc`.
+
 ---
 
-**Total deviations:** 1 auto-fixed (1 Rule 2 missing critical functionality).
+**Total deviations:** 2 auto-fixed (1 Rule 1 bug, 1 Rule 2 missing critical functionality).
 **Impact on plan:** Required for complete facade delegation and preserves the planned sole-runtime ownership architecture.
 
 ## Issues Encountered
 
-None.
+The full non-hardware unit command reaches an unrelated order-sensitive Plan 01-28 Wi-Fi re-export identity assertion after 425 passing tests; running that test module alone passes all 18 tests. The Plan 01-28 code was not changed during this repair.
 
 ## Known Stubs
 
@@ -159,3 +174,4 @@ None — no external service configuration required.
 
 - Found every declared facade, client, and test file on disk.
 - Found TDD commits `3846a58` and `8e61436` in git history.
+- Found integration repair commit `cf219bc` in git history.

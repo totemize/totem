@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 1
 waived_count: 0
-fixed_count: 20
-total_count: 21
-last_updated: 2026-08-26T16:31:56.502Z
+fixed_count: 21
+total_count: 22
+last_updated: 2026-08-26T17:27:32.892Z
 ---
 
 # Broken Windows Ledger
@@ -36,6 +36,7 @@ last_updated: 2026-08-26T16:31:56.502Z
 | 19 | HW-01 | deviation | src/totem/hardware/api/bus.py |  | Added canonical status and power dispatch so screen readiness can avoid the legacy health route. | fixed |  | 2026-08-26T15:49:42.842Z | 2026-08-26T15:49:55.994Z |
 | 20 | HW-01 | deviation | src/totem/api/app.py |  | UPS action identity and runtime event projection correction recorded in 01-26 summary | fixed |  | 2026-08-26T16:03:16.626Z | 2026-08-26T16:03:41.967Z |
 | 21 | HW-01 | deviation | src/totem/compat/hardware_client.py |  | Completed canonical client action translations required for client-only manager delegation. | fixed |  | 2026-08-26T16:14:42.971Z | 2026-08-26T16:14:58.047Z |
+| 22 | HW-01 | deviation | tests/unit/test_mock_transports.py |  | Replaced stale direct-manager mock fixtures with explicit local client fakes. | fixed |  | 2026-08-26T17:27:32.820Z | 2026-08-26T17:27:32.892Z |
 
 ````json
 [
@@ -290,6 +291,18 @@ last_updated: 2026-08-26T16:31:56.502Z
     "reason": "",
     "recorded_at": "2026-08-26T16:14:42.971Z",
     "resolved_at": "2026-08-26T16:14:58.047Z"
+  },
+  {
+    "id": 22,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": "tests/unit/test_mock_transports.py",
+    "line": null,
+    "description": "Replaced stale direct-manager mock fixtures with explicit local client fakes.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T17:27:32.820Z",
+    "resolved_at": "2026-08-26T17:27:32.892Z"
   }
 ]
 ````
