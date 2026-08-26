@@ -29,6 +29,7 @@ working environment.
 
 | Date | Summary |
 |------|---------|
+| [2026-08-26 — versioned manifest and typed startup configuration](journal/2026-08-26.md#versioned-manifest-and-typed-startup-configuration) | Added strict import-free manifest validation, immutable TOML/injected config precedence, descriptor-only secrets, and passing 166-test local verification without hardware contact. |
 | [2026-08-26 — process host and canonical bus tracer](journal/2026-08-26.md#process-host-and-canonical-bus-tracer) | Added the isolated fixture child, session-bound readiness/result correlation, bounded attachment carrier, and generic display bus tracer; all 154 local unit tests passed without hardware contact. |
 | [2026-08-23 — catalog-to-claim tracer](journal/2026-08-23.md#catalog-to-claim-tracer) | Added import-free installed-driver cataloging, exact-fact resolution, and atomic synthetic SPI claims; all 152 local unit tests passed without provider or device execution. |
 | [2026-08-23 — public driver API and fixture distribution](journal/2026-08-23.md#public-driver-api-and-fixture-distribution) | Published independently buildable Python 3.9 public driver and synthetic provider wheels with import-free package data, immutable JSON contracts, and a passing 146-test local suite without device contact. |

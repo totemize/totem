@@ -30,14 +30,14 @@ without editing Totem core or destabilizing existing capabilities.
 - [x] **SPI-02**: The public driver API is independently versioned and does not
   expose daemon-internal manager or API implementation types.
 
-- [ ] **SPI-03**: The runtime can read and validate a plugin manifest before it
+- [x] **SPI-03**: The runtime can read and validate a plugin manifest before it
   imports or initializes plugin code.
 
-- [ ] **SPI-04**: Manifests declare driver/API versions, provided capability
+- [x] **SPI-04**: Manifests declare driver/API versions, provided capability
   versions, compatibility rules, dependencies, configuration schema, resource
   claims, and factory entry point.
 
-- [ ] **SPI-05**: Incompatible driver API or capability major versions are
+- [x] **SPI-05**: Incompatible driver API or capability major versions are
   rejected with structured, actionable diagnostics.
 
 - [x] **SPI-06**: Installing or removing a compatible plugin requires no edit

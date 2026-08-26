@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-04-PLAN.md
-last_updated: "2026-08-26T10:51:19.141Z"
+stopped_at: Completed HW-01-05-PLAN.md
+last_updated: "2026-08-26T11:01:37.203Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 5 of 33
+Plan: 6 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [█░░░░░░░░░] 12%
+Progress: ░░░░░░░░░░ [██░░░░░░░░] 15%
 
 ## Accumulated Context
 
@@ -57,6 +57,9 @@ Progress: ░░░░░░░░░░ [█░░░░░░░░░] 12%
 - [Phase HW-01]: Broker normalizes resource identities and atomically grants all binding claims or none.
 - [Phase HW-01]: Parent-owned spawn sessions verify host.ready and results against the claimed binding before publishing a handle.
 - [Phase HW-01]: The child carrier and POST /bus share a bounded NIP-5D-shaped envelope with raw attachments and generic binding dispatch.
+- [Phase ?]: Manifest version incompatibility, API incompatibility, and unknown metadata are diagnosed before catalog records reach resolution or resource claims.
+- [Phase ?]: Typed startup configuration resolves binding > plugin > global > manifest into immutable values through one binary TOML seam.
+- [Phase ?]: Secret-bearing settings accept only credential, file, or inherited-descriptor references; manifests and diagnostics never carry secret values.
 
 ### Roadmap Evolution
 
@@ -73,8 +76,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T10:51:19.134Z
-Stopped at: Completed HW-01-04-PLAN.md
+Last session: 2026-08-26T11:01:37.197Z
+Stopped at: Completed HW-01-05-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -85,3 +88,4 @@ Resume file: None
 | Phase HW-01-capability-oriented-hardware-runtime P02 | 5m | 1 tasks | 14 files |
 | Phase HW-01-capability-oriented-hardware-runtime P03 | 4m | 1 tasks | 11 files |
 | Phase HW-01-capability-oriented-hardware-runtime P04 | 4m | 1 tasks | 10 files |
+| Phase HW-01 P05 | 5m | 1 tasks | 10 files |
