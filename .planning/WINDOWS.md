@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 4
 waived_count: 0
-fixed_count: 9
-total_count: 13
-last_updated: 2026-08-26T13:13:50.155Z
+fixed_count: 11
+total_count: 15
+last_updated: 2026-08-26T14:10:27.903Z
 ---
 
 # Broken Windows Ledger
@@ -28,6 +28,8 @@ last_updated: 2026-08-26T13:13:50.155Z
 | 11 | HW-01 | unrun-verify | tests/unit/test_phase1_regression.py |  | SEC-09 final-regression evidence is unavailable until its later owning plan creates this test; Plan 01-15 ran the available resolver/lifecycle evidence subset. | open |  | 2026-08-26T12:53:23.000Z |  |
 | 12 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | Two UPS legacy DeviceDriver/UPSDeviceInterface inheritance assertions (PiSugar2 and Waveshare UPS HAT C) are intentionally pending Plan 01-28; canonical providers preserve telemetry behavior without legacy inheritance. | open |  | 2026-08-26T13:02:21.191Z |  |
 | 13 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | Four NFC legacy contract assertions (ACR122, PN532, and mock_nfc DeviceDriver inheritance plus mock_nfc.health()) are intentionally pending Plan 01-28; canonical provider drivers preserve NFC behavior without legacy inheritance. | open |  | 2026-08-26T13:13:50.155Z |  |
+| 14 | HW-01 | deviation | src/totem/hardware/hosts/worker.py |  | Added required storage host dispatch and structural legacy driver validation. | fixed |  | 2026-08-26T14:10:00.433Z | 2026-08-26T14:10:27.848Z |
+| 15 | HW-01 | deviation | src/totem/hardware/hosts/in_process.py |  | Corrected shared in-process read/write forwarding after storage integration. | fixed |  | 2026-08-26T14:10:00.488Z | 2026-08-26T14:10:27.903Z |
 
 ````json
 [
@@ -186,6 +188,30 @@ last_updated: 2026-08-26T13:13:50.155Z
     "reason": "",
     "recorded_at": "2026-08-26T13:13:50.155Z",
     "resolved_at": null
+  },
+  {
+    "id": 14,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": "src/totem/hardware/hosts/worker.py",
+    "line": null,
+    "description": "Added required storage host dispatch and structural legacy driver validation.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T14:10:00.433Z",
+    "resolved_at": "2026-08-26T14:10:27.848Z"
+  },
+  {
+    "id": 15,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": "src/totem/hardware/hosts/in_process.py",
+    "line": null,
+    "description": "Corrected shared in-process read/write forwarding after storage integration.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T14:10:00.488Z",
+    "resolved_at": "2026-08-26T14:10:27.903Z"
   }
 ]
 ````
