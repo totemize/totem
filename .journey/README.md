@@ -28,6 +28,7 @@ working environment.
 ## Journal index
 
 | Date | Summary |
+| [2026-08-26 — auxiliary display compatibility facade migration](journal/2026-08-26.md#auxiliary-display-compatibility-facade-migration) | Converted six historical mock, Waveshare 3.7/Pi 5, and vendor-support paths to canonical re-exports with exact AST/inventory guards; 17 local compatibility/import-boundary tests passed without hardware contact. |
 | [2026-08-26 — auxiliary display provider migration](journal/2026-08-26.md#auxiliary-display-provider-migration) | Migrated mock, Waveshare 3.7/Pi 5, and vendor support into the built-in provider with exact mock-only inventory and import-boundary coverage; all 126 hardware-runtime tests passed without hardware contact. |
 | [2026-08-26 — Waveshare 2.13 provider variant migration](journal/2026-08-26.md#waveshare-213-provider-variant-migration) | Migrated all seven Waveshare 2.13 variants into the built-in provider with exhaustive injected-mock inventory/frame/orientation/CS coverage; all 116 hardware-runtime tests passed without hardware contact. |
 | [2026-08-26 — built-in display provider core](journal/2026-08-26.md#built-in-display-provider-core) | Added an import-free display manifest/entry point, variant-neutral child provider, injected 2.13 common base, and mock dual-host conformance; all 236 local unit tests passed without hardware contact. |

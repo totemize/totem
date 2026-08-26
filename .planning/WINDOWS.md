@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 2
 waived_count: 0
 fixed_count: 9
-total_count: 10
-last_updated: 2026-08-26T12:48:47.331Z
+total_count: 11
+last_updated: 2026-08-26T12:53:23.000Z
 ---
 
 # Broken Windows Ledger
@@ -24,7 +24,8 @@ last_updated: 2026-08-26T12:48:47.331Z
 | 7 | HW-01 | deviation | tests/unit/hardware_runtime/test_conformance.py |  | Fixture import marker cleanup retained for package-boundary test isolation | fixed |  | 2026-08-26T12:05:30.497Z | 2026-08-26T12:05:47.435Z |
 | 8 | HW-01 | deviation | src/totem/hardware/builtin/display/totem-driver-manifest.json |  | Manifest selector was corrected from a V4-specific predicate to the Waveshare 2.13 family. | fixed |  | 2026-08-26T12:15:34.526Z | 2026-08-26T12:15:48.111Z |
 | 9 | HW-01 | deviation | src/totem/hardware/builtin/display/drivers/waveshare_2in13_v3.py | 15 | Restored exact 159-byte V3 full-update LUT after mock initialization detected a shortened transcription. | fixed |  | 2026-08-26T12:24:07.048Z | 2026-08-26T12:24:21.137Z |
-| 10 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | 13 legacy Waveshare contract assertions are intentionally pending Plan 01-28 because they require obsolete DeviceDriver inheritance or removed legacy-base internals. | open |  | 2026-08-26T12:48:47.331Z |  |
+| 10 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | 17 legacy display contract assertions are intentionally pending Plan 01-28: 13 Waveshare 2.13 checks plus three mock/3.7 DeviceDriver inheritance checks and mock_eink.Driver.health(). | open |  | 2026-08-26T12:48:47.331Z |  |
+| 11 | HW-01 | unrun-verify | tests/unit/test_phase1_regression.py |  | SEC-09 final-regression evidence is unavailable until its later owning plan creates this test; Plan 01-15 ran the available resolver/lifecycle evidence subset. | open |  | 2026-08-26T12:53:23.000Z |  |
 
 ````json
 [
@@ -142,10 +143,22 @@ last_updated: 2026-08-26T12:48:47.331Z
     "phase": "HW-01",
     "file": "tests/unit/test_driver_contracts.py",
     "line": null,
-    "description": "13 legacy Waveshare contract assertions are intentionally pending Plan 01-28 because they require obsolete DeviceDriver inheritance or removed legacy-base internals.",
+    "description": "17 legacy display contract assertions are intentionally pending Plan 01-28: 13 Waveshare 2.13 checks plus three mock/3.7 DeviceDriver inheritance checks and mock_eink.Driver.health().",
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-26T12:48:47.331Z",
+    "resolved_at": null
+  },
+  {
+    "id": 11,
+    "kind": "unrun-verify",
+    "phase": "HW-01",
+    "file": "tests/unit/test_phase1_regression.py",
+    "line": null,
+    "description": "SEC-09 final-regression evidence is unavailable until its later owning plan creates this test; Plan 01-15 ran the available resolver/lifecycle evidence subset.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-26T12:53:23.000Z",
     "resolved_at": null
   }
 ]
