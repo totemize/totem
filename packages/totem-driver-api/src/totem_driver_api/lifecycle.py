@@ -48,6 +48,7 @@ class LifecycleEvent:
     state: BindingState
     code: Optional[str] = None
     details: Mapping[str, object] = field(default_factory=dict)
+    snapshot: object = None
 
     def __post_init__(self) -> None:
         if self.sequence < 1:

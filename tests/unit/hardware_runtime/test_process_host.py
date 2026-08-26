@@ -134,8 +134,8 @@ def test_startup_timeout_publishes_no_handle_and_quarantines_when_policy_is_exha
 
 def test_hard_hang_confirms_death_and_carrier_close_before_releasing_and_restarting() -> None:
     broker = RecordingBroker()
-    first = FakeHost(terminate_exits=False)
-    replacement = FakeHost()
+    first = FakeHost(terminate_exits=False, generation=1)
+    replacement = FakeHost(generation=2)
     hosts = [first, replacement]
     supervisor = DriverSupervisor(
         broker,
@@ -155,8 +155,12 @@ def test_hard_hang_confirms_death_and_carrier_close_before_releasing_and_restart
 
 def test_stale_generation_result_never_satisfies_a_replacement_request() -> None:
     broker = RecordingBroker()
-    host = FakeHost(response_generation=0)
-    supervisor = DriverSupervisor(broker, lambda leases, generation: host)
+    host = FakeHost(generation=1, response_generation=0)
+    supervisor = DriverSupervisor(
+        broker,
+        lambda leases, generation: host,
+        policy=RestartPolicy(max_failures=1),
+    )
     supervisor.start((_binding(),))
 
     with pytest.raises(SupervisorError) as error:
@@ -169,7 +173,7 @@ def test_stale_generation_result_never_satisfies_a_replacement_request() -> None
 def test_bounded_backoff_ends_in_actionable_quarantine_without_unbounded_respawn() -> None:
     broker = RecordingBroker()
     clock = FakeClock()
-    hosts = [FakeHost() for _ in range(5)]
+    hosts = [FakeHost(generation=index) for index in range(1, 6)]
     supervisor = DriverSupervisor(
         broker,
         lambda leases, generation: hosts.pop(0),

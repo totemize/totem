@@ -4,6 +4,7 @@ from .bindings import BindingPlan, BindingRecord
 from .broker import ClaimConflict, ClaimRecord, ResourceBroker
 from .events import RuntimeEventStream
 from .lifecycle import BindingLifecycle, BindingSnapshot, LifecycleTransitionError, RuntimeLifecycle, RuntimeSnapshot
+from .supervisor import DriverSupervisor, RestartPolicy, SupervisorError, SupervisorSnapshot
 
 __all__ = [
     "BindingLifecycle",
@@ -12,9 +13,13 @@ __all__ = [
     "BindingSnapshot",
     "ClaimConflict",
     "ClaimRecord",
+    "DriverSupervisor",
     "LifecycleTransitionError",
     "ResourceBroker",
+    "RestartPolicy",
     "RuntimeEventStream",
     "RuntimeLifecycle",
     "RuntimeSnapshot",
+    "SupervisorError",
+    "SupervisorSnapshot",
 ]

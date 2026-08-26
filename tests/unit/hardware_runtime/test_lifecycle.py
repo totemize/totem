@@ -59,6 +59,8 @@ def test_required_optional_and_empty_runtime_readiness_are_reconcileable() -> No
     assert snapshot.health.value == "degraded"
     assert snapshot.bindings["optional-power"].state is BindingState.FAILED
     assert snapshot.bindings["optional-power"].restart_count == 0
+    with pytest.raises(TypeError):
+        snapshot.bindings["changed"] = snapshot.bindings["required-display"]
 
     empty = RuntimeLifecycle()
     assert empty.snapshot().ready is True

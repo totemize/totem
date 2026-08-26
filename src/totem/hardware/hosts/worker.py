@@ -38,9 +38,10 @@ def _result(message: Dict[str, Any], *, ok: bool, **values: Any) -> Dict[str, An
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--fd", type=int, required=True)
-    parser.add_argument("--binding-id", required=True)
+    parser.add_argument("--binding-id", required=True, action="append")
     parser.add_argument("--entry-point", required=True)
     parser.add_argument("--session-id", required=True)
+    parser.add_argument("--generation", type=int, required=True)
     args = parser.parse_args()
     module_name, separator, factory_name = args.entry_point.partition(":")
     if not separator or not module_name or not factory_name:
@@ -52,8 +53,9 @@ def main() -> int:
         carrier,
         {
             "type": "host.ready",
-            "binding_id": args.binding_id,
+            "binding_ids": args.binding_id,
             "session_id": args.session_id,
+            "generation": args.generation,
         },
     )
     while True:
@@ -61,9 +63,15 @@ def main() -> int:
             message = receive_frame(carrier)
         except (OSError, ProtocolError):
             return 0
-        result = _dispatch(provider, message)
-        result["binding_id"] = args.binding_id
+        binding_id = message.get("binding_id")
+        if binding_id not in args.binding_id:
+            result = _result(message, ok=False, error={"code": "invalid_request"})
+            binding_id = ""
+        else:
+            result = _dispatch(provider, message)
+        result["binding_id"] = binding_id
         result["session_id"] = args.session_id
+        result["generation"] = args.generation
         send_frame(carrier, result)
 
 

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from threading import Lock, RLock
+from threading import RLock
+from types import MappingProxyType
 from typing import Callable, Dict, Mapping, Optional, Tuple
 
 from totem_driver_api.lifecycle import BindingState, HealthState
@@ -66,6 +67,9 @@ class RuntimeSnapshot:
     ready: bool
     health: HealthState
     closed: bool
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "bindings", MappingProxyType(dict(self.bindings)))
 
 
 def legal_transitions() -> Mapping[BindingState, Tuple[BindingState, ...]]:

@@ -54,10 +54,8 @@ class RuntimeEventStream:
                 state=state,
                 code=code,
                 details=details or {},
+                snapshot=snapshot,
             )
-            # The public event stays runtime-mechanics-free; the immutable
-            # snapshot is attached only to this runtime instance's event flow.
-            object.__setattr__(event, "snapshot", snapshot)
             self._history.append(event)
             for subscriber in self._subscribers.values():
                 try:
