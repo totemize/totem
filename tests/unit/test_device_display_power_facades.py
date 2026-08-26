@@ -106,10 +106,26 @@ def test_wrapper_sources_have_no_provider_registry_transport_or_hardware_probe(f
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
 
-    assert imports == ["__future__", "abc", "dataclasses", "typing", "totem.compat.hardware_client", "totem.devices.contracts"]
+    expected_imports = {
+        EInk: [
+            "__future__",
+            "abc",
+            "typing",
+            "totem.compat.hardware_client",
+            "totem.devices.contracts",
+        ],
+        UPS: [
+            "__future__",
+            "abc",
+            "dataclasses",
+            "typing",
+            "totem.compat.hardware_client",
+            "totem.devices.contracts",
+        ],
+    }
+    assert imports == expected_imports[facade]
     assert not {"_detect_hardware", "_load_driver_by_name"} & names
     assert "DriverRegistry" not in source
     assert "DriverSpec" not in source
     assert "/dev/" not in source
     assert "totem.hardware.builtin" not in source
-
