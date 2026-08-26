@@ -127,7 +127,7 @@ without editing Totem core or destabilizing existing capabilities.
   override precedence, ambiguity, resource conflicts, and unsupported platform
   combinations.
 
-- [ ] **TST-03**: The isolated host is benchmarked on Pi-class hardware for
+- [x] **TST-03**: The isolated host is benchmarked on Pi-class hardware for
   startup time, steady memory, command latency, binary-frame transfer, crash
   recovery, and process-granularity tradeoffs.
 

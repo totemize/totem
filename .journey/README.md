@@ -28,6 +28,7 @@ working environment.
 ## Journal index
 
 | Date | Summary |
+| [2026-08-26 — final capability runtime regression and Pi acceptance gate](journal/2026-08-26.md#final-capability-runtime-regression-and-pi-acceptance-gate) | Added fail-closed allocated-Pi evidence validation, public runtime/cutover contracts, and a 470-test local regression while retaining all hardware acceptance as manual. |
 | [2026-08-26 — deployment command and systemd composition](journal/2026-08-26.md#deployment-command-and-systemd-composition) | Routed `totem` and `totem-api` through typed local composition of one canonical runtime while retaining package scripts, screen-client behavior, and static service contracts; 24 local tests passed without hardware contact. |
 | [2026-08-26 — radio family wrapper delegation](journal/2026-08-26.md#radio-family-wrapper-delegation) | Replaced Wi-Fi/Bluetooth discovery and driver loading with injected canonical-client facades; 41 focused local tests passed without hardware or service contact. |
 | [2026-08-26 — NFC and storage wrapper delegation](journal/2026-08-26.md#nfc-and-storage-wrapper-delegation) | Replaced NFC/storage probing and driver loading with injected canonical-client facades; 30 focused local tests passed without hardware contact. |
