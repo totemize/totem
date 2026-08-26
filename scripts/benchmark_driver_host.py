@@ -10,7 +10,9 @@ validate and render the evidence.  Missing or inconsistent fields fail closed.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Dict, Iterable, Mapping, Optional, Sequence
@@ -53,6 +55,8 @@ def _number(value: object, path: str, *, positive: bool = True) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise BenchmarkEvidenceError("{} must be numeric".format(path))
     result = float(value)
+    if not math.isfinite(result):
+        raise BenchmarkEvidenceError("{} must be finite".format(path))
     if positive and result <= 0:
         raise BenchmarkEvidenceError("{} must be greater than zero".format(path))
     if not positive and result < 0:
@@ -82,7 +86,7 @@ def _reject_secret_values(value: object, path: str = "evidence") -> None:
             _reject_secret_values(nested, "{}[{}]".format(path, index))
 
 
-def validate_evidence(value: object) -> Dict[str, object]:
+def validate_evidence(value: object, *, allow_synthetic: bool = False) -> Dict[str, object]:
     """Return a normalized complete run record or reject it before acceptance.
 
     A validated record represents a single grouping run.  Architecture-level
@@ -94,6 +98,21 @@ def validate_evidence(value: object) -> Dict[str, object]:
     _reject_secret_values(evidence)
     if evidence.get("schema_version") != 1:
         raise BenchmarkEvidenceError("schema_version must be 1")
+    if evidence.get("evidence_scope") != "allocated-hardware":
+        if not (allow_synthetic and evidence.get("evidence_scope") == "local-synthetic-only"):
+            raise BenchmarkEvidenceError("evidence_scope must be allocated-hardware")
+    if evidence.get("hardware_contacted") is not True and not allow_synthetic:
+        raise BenchmarkEvidenceError("hardware_contacted must be true")
+    captured_at = _string(evidence.get("captured_at"), "captured_at")
+    try:
+        parsed_capture = datetime.fromisoformat(captured_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise BenchmarkEvidenceError("captured_at must be an ISO-8601 timestamp") from exc
+    if parsed_capture.tzinfo is None or parsed_capture > datetime.now(timezone.utc):
+        raise BenchmarkEvidenceError("captured_at must be a past timestamp with timezone")
+    attestation = _mapping(evidence.get("attestation"), "attestation")
+    _string(attestation.get("operator"), "attestation.operator")
+    _string(attestation.get("device_identity"), "attestation.device_identity")
     target = _string(evidence.get("target"), "target")
     allocation = _string(evidence.get("allocation"), "allocation")
     architecture = _string(evidence.get("architecture"), "architecture")
@@ -107,9 +126,10 @@ def validate_evidence(value: object) -> Dict[str, object]:
     _string(python.get("version"), "python.version")
     runtime = _mapping(evidence.get("runtime"), "runtime")
     _string(runtime.get("version"), "runtime.version")
-    if _string(runtime.get("mode"), "runtime.mode") not in {"process", "in_process"}:
-        raise BenchmarkEvidenceError("runtime.mode must name a supported host mode")
-    _string(runtime.get("codec"), "runtime.codec")
+    if _string(runtime.get("mode"), "runtime.mode") != "process":
+        raise BenchmarkEvidenceError("runtime.mode must equal the pinned process mode")
+    if _string(runtime.get("codec"), "runtime.codec") != "canonical-json-v1":
+        raise BenchmarkEvidenceError("runtime.codec must equal the pinned canonical-json-v1 codec")
     packages = _mapping(evidence.get("packages"), "packages")
     if not packages:
         raise BenchmarkEvidenceError("packages must identify the installed distributions")
@@ -117,8 +137,8 @@ def validate_evidence(value: object) -> Dict[str, object]:
     if grouping not in GROUPINGS:
         raise BenchmarkEvidenceError("grouping must be provider or binding")
     provider_imports = evidence.get("provider_imports")
-    if not isinstance(provider_imports, list) or not provider_imports or not all(isinstance(item, str) and item for item in provider_imports):
-        raise BenchmarkEvidenceError("provider_imports must list realistic provider imports")
+    if provider_imports != PINNED_WORKLOAD["provider_imports"]:
+        raise BenchmarkEvidenceError("provider_imports must equal the pinned workload")
     _number(evidence.get("startup_to_ready_ms"), "startup_to_ready_ms")
     memory = _mapping(evidence.get("memory"), "memory")
     _number(memory.get("steady_kib"), "memory.steady_kib")
@@ -189,10 +209,14 @@ def architecture_acceptance(records: Iterable[Mapping[str, object]], architectur
     complete = [validate_evidence(record) for record in records if record.get("architecture") == architecture]
     groupings = {str(record["grouping"]) for record in complete}
     missing = [grouping for grouping in GROUPINGS if grouping not in groupings]
+    duplicates = sorted(grouping for grouping in groupings if sum(record["grouping"] == grouping for record in complete) != 1)
+    extra = [str(record["grouping"]) for record in complete if str(record["grouping"]) not in GROUPINGS]
     return {
         "architecture": architecture,
-        "accepted": not missing,
+        "accepted": not missing and not duplicates and not extra and len(complete) == len(GROUPINGS),
         "missing_groupings": missing,
+        "duplicate_groupings": duplicates,
+        "extra_groupings": extra,
         "rows": [acceptance_row(record) for record in complete],
     }
 
@@ -200,6 +224,10 @@ def architecture_acceptance(records: Iterable[Mapping[str, object]], architectur
 def _self_test_evidence() -> Dict[str, object]:
     return {
         "schema_version": 1,
+        "evidence_scope": "local-synthetic-only",
+        "hardware_contacted": False,
+        "captured_at": "2026-08-26T00:00:00+00:00",
+        "attestation": {"operator": "self-test", "device_identity": "synthetic"},
         "target": "local-self-test",
         "allocation": "not-a-hardware-allocation",
         "architecture": "armv6l",
@@ -242,7 +270,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--evidence-json", action="append", default=[], help="captured evidence record; repeat for both groupings")
     args = parser.parse_args(argv)
     if args.self_test:
-        record = validate_evidence(_self_test_evidence())
+        record = validate_evidence(_self_test_evidence(), allow_synthetic=True)
         print(json.dumps({"evidence_scope": "local-synthetic-only", "hardware_contacted": False, "pi_acceptance": False, "row": acceptance_row(record)}, sort_keys=True))
         return 0
     if args.workload:

@@ -28,6 +28,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
 def _complete_evidence(architecture: str = "armv6l") -> dict[str, object]:
     return {
         "schema_version": 1,
+        "evidence_scope": "allocated-hardware",
+        "hardware_contacted": True,
+        "captured_at": "2026-08-26T00:00:00+00:00",
+        "attestation": {"operator": "test-operator", "device_identity": "test-device"},
         "target": "allocated-{}".format(architecture),
         "allocation": "ticket-{}".format(architecture),
         "architecture": architecture,
@@ -86,6 +90,24 @@ def test_architecture_cannot_be_accepted_without_both_grouping_records() -> None
     assert pending["accepted"] is False
     assert pending["missing_groupings"] == ["binding"]
     assert complete["accepted"] is True
+
+
+def test_non_hardware_or_non_finite_or_duplicate_evidence_cannot_be_accepted() -> None:
+    local = _complete_evidence()
+    local["hardware_contacted"] = False
+    with pytest.raises(BenchmarkEvidenceError, match="hardware_contacted"):
+        validate_evidence(local)
+
+    non_finite = _complete_evidence()
+    non_finite["startup_to_ready_ms"] = float("nan")
+    with pytest.raises(BenchmarkEvidenceError, match="finite"):
+        validate_evidence(non_finite)
+
+    provider = _complete_evidence()
+    duplicate = _complete_evidence()
+    result = architecture_acceptance((provider, duplicate), "armv6l")
+    assert result["accepted"] is False
+    assert result["duplicate_groupings"] == ["provider"]
 
 
 @pytest.mark.hardware
