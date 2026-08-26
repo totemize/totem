@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-20 integration repair
-last_updated: "2026-08-26T14:47:10.920Z"
+stopped_at: Completed HW-01-21-PLAN.md
+last_updated: "2026-08-26T14:54:26.763Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 20
+  completed_plans: 21
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 20 of 33
+Plan: 21 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [██████░░░░] 61%
+Progress: ░░░░░░░░░░ [██████░░░░] 64%
 
 ## Accumulated Context
 
@@ -94,6 +94,8 @@ Progress: ░░░░░░░░░░ [██████░░░░] 61%
 - [Phase ?]: Wi-Fi validates leased NetworkManager service, interface, and PHY facts before driver composition; caller payloads never select identities.
 - [Phase ?]: The existing catalog filename remains authoritative, so the requested Wi-Fi declaration is accompanied by a package-discoverable totem-driver-manifest.json copy.
 - [Phase ?]: Canonical Wi-Fi modules own their shared radio models, errors, parsers, D-Bus runtime, and session interface; legacy errors are compatibility-only re-exports.
+- [Phase ?]: Each historical Wi-Fi/support path re-exports its complete canonical public surface with a single import-only statement.
+- [Phase ?]: Compatibility verification treats package __init__.py facades as first-class inventory members and compares signatures only when Python exposes one.
 
 ### Roadmap Evolution
 
@@ -110,8 +112,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T14:47:10.913Z
-Stopped at: Completed HW-01-20 integration repair
+Last session: 2026-08-26T14:54:26.756Z
+Stopped at: Completed HW-01-21-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -138,3 +140,4 @@ Resume file: None
 | Phase HW-01 P18 | 40min | 1 tasks | 16 files |
 | Phase HW-01 P19 | 15min | 1 tasks | 13 files |
 | Phase HW-01 P20 | 13min | 1 tasks | 16 files |
+| Phase HW-01 P21 | 3min | 1 tasks | 10 files |
