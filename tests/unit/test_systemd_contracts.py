@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,15 @@ def test_package_scripts_and_systemd_service_identities_are_preserved() -> None:
     assert "After=totem.service" in screen_unit
     assert "Before=fips.service strfry.service totemd.service" in screen_unit
     assert "ExecStart=/opt/totem/.venv/bin/totem-screen run" in screen_unit
+
+
+def test_all_deployed_package_entrypoints_resolve_to_callables() -> None:
+    for module_name, function_name in (
+        ("totem.__main__", "main"),
+        ("totem.api.app", "start_server"),
+        ("totem.screen.__main__", "main"),
+    ):
+        assert callable(getattr(import_module(module_name), function_name))
 
 
 def test_screen_remains_a_bus_client_and_startup_environment_reads_stay_outward() -> None:
