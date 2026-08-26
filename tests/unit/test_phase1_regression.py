@@ -85,6 +85,7 @@ def test_validation_ledger_marks_all_local_commands_green_but_keeps_pi_manual() 
 
     assert "nyquist_compliant: true" in validation
     assert "wave_0_complete: true" in validation
-    assert "| pending" not in validation
+    local_mapping = validation.split("## Requirement → concrete implementation owner", 1)[0]
+    assert "| pending" not in local_mapping
     assert "Pi/cutover remain deferred" in validation
     assert "Controller-only results never satisfy either row" in validation
