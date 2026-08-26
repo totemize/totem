@@ -52,6 +52,21 @@ class _CancelableProvider:
 
         return getattr(self._provider, "telemetry_push")()
 
+    def read(self) -> object:
+        """Forward one NFC tag read through the same logical host boundary."""
+
+        return getattr(self._provider, "read")()
+
+    def write(self, data: bytes) -> object:
+        """Forward an already validated NFC write through the host boundary."""
+
+        return getattr(self._provider, "write")(data)
+
+    def poll(self) -> object:
+        """Forward one NFC presence poll through the same host boundary."""
+
+        return getattr(self._provider, "poll")()
+
 
 class InProcessDriverHost(DriverHost):
     """Same logical host contract with honest cooperative-only cancellation."""

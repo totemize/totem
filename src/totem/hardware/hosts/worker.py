@@ -9,6 +9,7 @@ import socket
 from typing import Any, Dict
 
 from totem_driver_api.capabilities.display import FrameSinkRequest
+from totem_driver_api.capabilities.nfc import NfcWriteRequest
 from totem_driver_api.capabilities.power import PowerTelemetryRequest
 
 from .protocol import ProtocolError, receive_frame, send_frame
@@ -91,6 +92,23 @@ def _dispatch(provider: Any, message: Dict[str, Any]) -> Dict[str, Any]:
         except (AttributeError, TypeError, ValueError):
             return _result(message, ok=False, error={"code": "invalid_request"})
         return _result(message, ok=True, telemetry=telemetry)
+    if message_type == "nfc.tag.read":
+        try:
+            return _result(message, ok=True, tag=provider.read().to_json_value())
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+    if message_type == "nfc.tag.write":
+        try:
+            request = NfcWriteRequest.from_json_value({"data_b64": message.get("data_b64")})
+            provider.write(request.data)
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+        return _result(message, ok=True, accepted=True)
+    if message_type == "nfc.tag.poll":
+        try:
+            return _result(message, ok=True, poll=provider.poll().to_json_value())
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
     if message_type != "display.frame.write":
         return _result(message, ok=False, error={"code": "unknown_type"})
     frame = message.get("frame")

@@ -33,12 +33,14 @@ totem-screen = "totem.screen.__main__:main"
 
 [project.entry-points."totem.hardware.drivers"]
 builtin-display = "totem.hardware.builtin.display.provider:create_provider"
+builtin-nfc = "totem.hardware.builtin.nfc.provider:create_provider"
 builtin-power = "totem.hardware.builtin.power.provider:create_provider"
 
 [tool.poetry]
 packages = [{ include = "totem", from = "src" }]
 include = [
   "src/totem/hardware/builtin/display/totem-driver-manifest.json",
+  "src/totem/hardware/builtin/nfc/totem-driver-manifest.json",
   "src/totem/hardware/builtin/power/totem-driver-manifest.json",
 ]
 
