@@ -40,7 +40,7 @@ without editing Totem core or destabilizing existing capabilities.
 - [ ] **SPI-05**: Incompatible driver API or capability major versions are
   rejected with structured, actionable diagnostics.
 
-- [ ] **SPI-06**: Installing or removing a compatible plugin requires no edit
+- [x] **SPI-06**: Installing or removing a compatible plugin requires no edit
   to a central registry, manager factory, API router, or device-type switch.
 
 ### Compatibility resolution

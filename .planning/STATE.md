@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-03-PLAN.md
-last_updated: "2026-08-23T19:41:50.158Z"
+stopped_at: Completed HW-01-04-PLAN.md
+last_updated: "2026-08-26T10:51:19.141Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 4 of 33
+Plan: 5 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [█░░░░░░░░░] 9%
+Progress: ░░░░░░░░░░ [█░░░░░░░░░] 12%
 
 ## Accumulated Context
 
@@ -55,6 +55,8 @@ Progress: ░░░░░░░░░░ [█░░░░░░░░░] 9%
 - [Phase HW-01]: Catalog captures one locked immutable metadata snapshot per controlled runtime start.
 - [Phase HW-01]: Resolver matches provider resource declarations only against exact observed facts before issuing a generic binding.
 - [Phase HW-01]: Broker normalizes resource identities and atomically grants all binding claims or none.
+- [Phase HW-01]: Parent-owned spawn sessions verify host.ready and results against the claimed binding before publishing a handle.
+- [Phase HW-01]: The child carrier and POST /bus share a bounded NIP-5D-shaped envelope with raw attachments and generic binding dispatch.
 
 ### Roadmap Evolution
 
@@ -71,8 +73,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-23T19:41:50.151Z
-Stopped at: Completed HW-01-03-PLAN.md
+Last session: 2026-08-26T10:51:19.134Z
+Stopped at: Completed HW-01-04-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -82,3 +84,4 @@ Resume file: None
 | Phase HW-01 P01 | 4m | 1 tasks | 8 files |
 | Phase HW-01-capability-oriented-hardware-runtime P02 | 5m | 1 tasks | 14 files |
 | Phase HW-01-capability-oriented-hardware-runtime P03 | 4m | 1 tasks | 11 files |
+| Phase HW-01-capability-oriented-hardware-runtime P04 | 4m | 1 tasks | 10 files |
