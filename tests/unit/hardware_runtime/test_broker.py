@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
 from typing import cast
 
 import pytest
@@ -37,7 +36,7 @@ def test_normalizes_resource_families_without_changing_case_sensitive_paths() ->
     assert ResourceKey.from_claim(ResourceClaim("spi", " /dev/SPIdev0.0 ")).value == "spi:/dev/spidev0.0"
     assert ResourceKey.from_claim(ResourceClaim("i2c", " 1 ")).value == "i2c:1"
     assert ResourceKey.from_claim(ResourceClaim("block", " /dev/SDA ")).value == "block:/dev/sda"
-    assert ResourceKey.from_claim(ResourceClaim("path", " /var/lib/../run/Totem ")).value == "path:/run/Totem"
+    assert ResourceKey.from_claim(ResourceClaim("path", " /var/lib/../run/Totem ")).value == "path:/var/run/Totem"
     assert ResourceKey.from_claim(ResourceClaim("phy", " PHY0 ")).value == "phy:phy0"
     assert ResourceKey.from_claim(ResourceClaim("interface", " WLAN0 ")).value == "interface:wlan0"
     assert ResourceKey.from_claim(ResourceClaim("adapter", " HCI0 ")).value == "adapter:hci0"
