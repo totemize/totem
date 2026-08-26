@@ -131,7 +131,7 @@ without editing Totem core or destabilizing existing capabilities.
   startup time, steady memory, command latency, binary-frame transfer, crash
   recovery, and process-granularity tradeoffs.
 
-- [ ] **TST-04**: Existing unit, mock-transport, API, and opt-in hardware tests
+- [x] **TST-04**: Existing unit, mock-transport, API, and opt-in hardware tests
   remain valid or gain equivalent coverage before a legacy path is retired.
 
 ## v2 Requirements

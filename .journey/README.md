@@ -28,6 +28,7 @@ working environment.
 ## Journal index
 
 | Date | Summary |
+| [2026-08-26 — Waveshare 2.13 provider variant migration](journal/2026-08-26.md#waveshare-213-provider-variant-migration) | Migrated all seven Waveshare 2.13 variants into the built-in provider with exhaustive injected-mock inventory/frame/orientation/CS coverage; all 116 hardware-runtime tests passed without hardware contact. |
 | [2026-08-26 — built-in display provider core](journal/2026-08-26.md#built-in-display-provider-core) | Added an import-free display manifest/entry point, variant-neutral child provider, injected 2.13 common base, and mock dual-host conformance; all 236 local unit tests passed without hardware contact. |
 | [2026-08-26 — in-process host and dual-host conformance](journal/2026-08-26.md#in-process-host-and-dual-host-conformance) | Added explicit same-contract in-process hosting, cancellation contamination/lease retention, execution-mode precedence, and public dual-host transcript conformance; all 230 local unit tests passed without hardware contact. |
 |------|---------|
