@@ -34,6 +34,18 @@ def _public_names(module: object) -> set[str]:
     return {name for name in vars(module) if not name.startswith("_")}
 
 
+def _load_legacy_facade(module_name: str) -> object:
+    """Execute the direct facade after sibling module imports touched its parent.
+
+    Python binds a directly imported child module onto its legacy parent package.
+    Reloading the one-line facade restores its declared canonical re-exports so
+    each inventory row checks the source contract rather than another test's
+    package-attribute side effect.
+    """
+
+    return importlib.reload(importlib.import_module(module_name))
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize("legacy_name,canonical_name", LEGACY_TO_CANONICAL.items())
 def test_wifi_legacy_modules_are_exhaustive_direct_reexports(
@@ -42,7 +54,7 @@ def test_wifi_legacy_modules_are_exhaustive_direct_reexports(
     """Every legacy path exposes the exact canonical objects and signatures."""
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
-        legacy = importlib.import_module(legacy_name)
+        legacy = _load_legacy_facade(legacy_name)
     canonical = importlib.import_module(canonical_name)
 
     assert _public_names(legacy) == _public_names(canonical)

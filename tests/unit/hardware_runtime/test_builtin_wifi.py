@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import importlib
+import sys
+from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Dict
+from types import ModuleType, SimpleNamespace
+from typing import Dict, Iterator, Sequence
 
 import pytest
 
@@ -30,6 +32,51 @@ REQUIRED_CLAIMS = (
     ResourceClaim("interface", "wlan0"),
     ResourceClaim("phy", "phy0"),
 )
+
+
+_MISSING = object()
+
+
+@contextmanager
+def _catalog_import_probe(module_names: Sequence[str]) -> Iterator[None]:
+    """Temporarily evict provider modules without stale package re-exports.
+
+    A legacy ``from canonical_package import *`` facade copies module-valued
+    package attributes.  Import probes must therefore restore the module cache
+    *and* each parent package attribute, otherwise the next canonical import
+    creates a second module object under the same qualified name.
+    """
+
+    snapshots = []
+    for qualified_name in module_names:
+        parent_name, _, module_name = qualified_name.rpartition(".")
+        parent = importlib.import_module(parent_name)
+        snapshots.append(
+            (
+                qualified_name,
+                parent,
+                module_name,
+                sys.modules.get(qualified_name, _MISSING),
+                getattr(parent, module_name, _MISSING),
+            )
+        )
+
+    try:
+        for qualified_name, *_rest in snapshots:
+            sys.modules.pop(qualified_name, None)
+        yield
+    finally:
+        for qualified_name, parent, module_name, previous_module, previous_attribute in snapshots:
+            if previous_module is _MISSING:
+                sys.modules.pop(qualified_name, None)
+            else:
+                sys.modules[qualified_name] = previous_module
+
+            if previous_attribute is _MISSING:
+                if hasattr(parent, module_name):
+                    delattr(parent, module_name)
+            else:
+                setattr(parent, module_name, previous_attribute)
 
 
 class _EntryPoint:
@@ -68,24 +115,46 @@ def _request(request_id: str, message_type: str, **values: object) -> Dict[str, 
 
 
 def test_catalog_reads_wifi_manifest_without_importing_network_manager_provider() -> None:
-    for name in (
+    module_names = (
         "totem.hardware.builtin.radio.wifi_provider",
         "totem.hardware.builtin.radio.drivers.network_manager_wifi",
-    ):
-        importlib.sys.modules.pop(name, None)
-
-    catalog = _catalog()
-
-    assert catalog.diagnostics == ()
-    assert catalog.records[0].manifest.factory == ENTRY_POINT
-    assert catalog.records[0].manifest.capabilities[0].identifier == "wifi.connection@1"
-    assert not any(
-        name in importlib.sys.modules
-        for name in (
-            "totem.hardware.builtin.radio.wifi_provider",
-            "totem.hardware.builtin.radio.drivers.network_manager_wifi",
-        )
     )
+
+    with _catalog_import_probe(module_names):
+        catalog = _catalog()
+
+        assert catalog.diagnostics == ()
+        assert catalog.records[0].manifest.factory == ENTRY_POINT
+        assert catalog.records[0].manifest.capabilities[0].identifier == "wifi.connection@1"
+        assert not any(name in sys.modules for name in module_names)
+
+
+def test_catalog_import_probe_preserves_legacy_driver_module_identity() -> None:
+    initial = importlib.import_module(
+        "totem.hardware.builtin.radio.drivers.network_manager_wifi"
+    )
+    legacy = ModuleType("legacy_network_drivers_probe")
+    exec(
+        "from totem.hardware.builtin.radio.drivers import *",
+        legacy.__dict__,
+    )
+    canonical = importlib.import_module("totem.hardware.builtin.radio.drivers")
+    module_names = (
+        "totem.hardware.builtin.radio.wifi_provider",
+        "totem.hardware.builtin.radio.drivers.network_manager_wifi",
+    )
+
+    with _catalog_import_probe(module_names):
+        _catalog()
+        assert not any(name in sys.modules for name in module_names)
+
+    imported = importlib.import_module(
+        "totem.hardware.builtin.radio.drivers.network_manager_wifi"
+    )
+
+    assert initial is imported
+    assert legacy.network_manager_wifi is imported
+    assert canonical.network_manager_wifi is imported
 
 
 def test_wifi_provider_validates_leased_service_interface_and_phy_before_backend_call() -> None:
