@@ -92,7 +92,7 @@ class DisplayProvider:
             raise DisplaySelectionError("display transport is unavailable until child composition")
 
 
-def create_provider() -> DisplayProvider:
+def create_provider(_bootstrap: object = None) -> DisplayProvider:
     """Return a side-effect-free child factory product.
 
     The worker imports this function only after catalog resolution and broker

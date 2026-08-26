@@ -131,6 +131,7 @@ def test_claimed_fixture_binding_starts_child_and_returns_correlated_bus_result(
     assert result["id"] == "request-1"
     assert result["ok"] is True
     assert result["provider_imported"] is True
+    assert result["bootstrap_binding_id"] == claim.binding.binding_id
     assert os.environ.get("TOTEM_DRIVER_FIXTURE_IMPORTED") is None
 
 

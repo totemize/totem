@@ -42,6 +42,20 @@ class _CancelableProvider:
             return method(request, cancel_event=self._cancellation)
         return method(request)
 
+    def dispatch(
+        self, message: Mapping[str, object], attachments: Mapping[str, object], context: Mapping[str, object]
+    ) -> object:
+        """Forward the versioned provider SPI while preserving cancellation."""
+
+        method = getattr(self._provider, "dispatch")
+        try:
+            accepts_cancel = "cancel_event" in inspect.signature(method).parameters
+        except (TypeError, ValueError):
+            accepts_cancel = False
+        if accepts_cancel:
+            return method(message, attachments, context, cancel_event=self._cancellation)
+        return method(message, attachments, context)
+
     def snapshot(self) -> object:
         """Forward read-only power telemetry through the same host boundary."""
 
@@ -144,7 +158,19 @@ class InProcessDriverHost(DriverHost):
         if not separator or not module_name or not factory_name:
             raise InProcessHostError("invalid_provider_entry_point")
         module = importlib.import_module(module_name)
-        provider = getattr(module, factory_name)()
+        bootstrap = {
+            "bindings": [
+                {
+                    "binding_id": claim.binding_id,
+                    "capability_id": claim.binding.capability_id,
+                    "settings": dict(claim.binding.config),
+                    "claims": [resource.to_json_value() for resource in claim.binding.claims],
+                }
+                for claim in ordered
+            ],
+            "descriptors": [],
+        }
+        provider = getattr(module, factory_name)(bootstrap)
         return cls(ordered, provider, generation=generation, cancellation_grace=cancellation_grace)
 
     @property

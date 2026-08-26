@@ -123,7 +123,7 @@ class StorageProvider:
         return self._driver
 
 
-def create_provider() -> StorageProvider:
+def create_provider(_bootstrap: object = None) -> StorageProvider:
     """Return a side-effect-free provider product after catalog resolution."""
 
     return StorageProvider()

@@ -190,7 +190,7 @@ class BluetoothProvider:
         return Driver(runtime=self._runtime)
 
 
-def create_provider() -> BluetoothProvider:
+def create_provider(_bootstrap: object = None) -> BluetoothProvider:
     """Return a side-effect-free product; composition injects facts and leases later."""
 
     return BluetoothProvider(adapter="unbound", phy="unbound")

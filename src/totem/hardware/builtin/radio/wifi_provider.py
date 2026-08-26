@@ -198,7 +198,7 @@ class WiFiProvider:
         return NetworkManagerWiFiDriver(self.interface, runtime=self._runtime)
 
 
-def create_provider() -> WiFiProvider:
+def create_provider(_bootstrap: object = None) -> WiFiProvider:
     """Return a side-effect-free product; composition injects facts and leases later."""
 
     return WiFiProvider(interface="unbound", phy="unbound")

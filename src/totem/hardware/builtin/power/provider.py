@@ -77,7 +77,7 @@ class PowerProvider:
             raise PowerSelectionError("power driver is unavailable until child composition")
 
 
-def create_provider() -> PowerProvider:
+def create_provider(_bootstrap: object = None) -> PowerProvider:
     """Return a side-effect-free factory product after catalog resolution."""
 
     return PowerProvider()

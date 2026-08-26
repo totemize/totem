@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import json
 import os
 import socket
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 
 from totem_driver_api.capabilities.display import FrameSinkRequest
 from totem_driver_api.capabilities.nfc import NfcWriteRequest
@@ -51,12 +52,19 @@ def main() -> int:
     parser.add_argument("--entry-point", required=True)
     parser.add_argument("--session-id", required=True)
     parser.add_argument("--generation", type=int, required=True)
+    parser.add_argument("--bootstrap-json", required=True)
     args = parser.parse_args()
     module_name, separator, factory_name = args.entry_point.partition(":")
     if not separator or not module_name or not factory_name:
         return 2
+    try:
+        bootstrap = json.loads(args.bootstrap_json)
+    except (TypeError, ValueError):
+        return 2
+    if not isinstance(bootstrap, Mapping):
+        return 2
     module = importlib.import_module(module_name)
-    provider = getattr(module, factory_name)()
+    provider = getattr(module, factory_name)(bootstrap)
     carrier = socket.socket(fileno=args.fd)
     send_frame(
         carrier,
@@ -88,6 +96,20 @@ def _dispatch(provider: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     request_id = message.get("id")
     if not isinstance(request_id, str) or not request_id:
         return _result(message, ok=False, error={"code": "invalid_request"})
+    dispatch = getattr(provider, "dispatch", None)
+    wrapped_provider = getattr(provider, "_provider", provider)
+    if callable(dispatch) and callable(getattr(wrapped_provider, "dispatch", None)):
+        try:
+            response = dispatch(
+                dict(message),
+                dict(message.get("_attachments", {})),
+                {"binding_id": message.get("binding_id")},
+            )
+        except (TypeError, ValueError, AttributeError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+        if not isinstance(response, Mapping):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+        return _result(message, **dict(response))
     message_type = message.get("type")
     if message_type in ("power.telemetry.read", "power.telemetry.push"):
         try:

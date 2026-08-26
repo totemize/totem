@@ -111,7 +111,7 @@ class NfcProvider:
             raise NfcSelectionError("nfc serial/I2C evidence is only supported for PN532")
 
 
-def create_provider() -> NfcProvider:
+def create_provider(_bootstrap: object = None) -> NfcProvider:
     """Return a side-effect-free provider product after catalog resolution."""
 
     return NfcProvider()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import socket
 import subprocess
@@ -67,14 +68,31 @@ class ProcessDriverHost(DriverHost):
         source_root = Path(__file__).resolve().parents[4] / "src"
         # Do not inherit daemon environment or pass undeclared descriptors.
         environment = {"PYTHONPATH": os.pathsep.join((str(site_packages), str(source_root))), "PYTHONNOUSERSITE": "1"}
+        descriptor_fds = tuple(int(descriptor) for descriptor in extra_descriptors)
+        bootstrap = json.dumps(
+            {
+                "bindings": [
+                    {
+                        "binding_id": claim.binding_id,
+                        "capability_id": claim.binding.capability_id,
+                        "settings": dict(claim.binding.config),
+                        "claims": [resource.to_json_value() for resource in claim.binding.claims],
+                    }
+                    for claim in ordered_claims
+                ],
+                "descriptors": list(descriptor_fds),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         command = [
             sys.executable, "-m", "totem.hardware.hosts.worker", "--fd", str(child.fileno()),
             "--entry-point", next(iter(entry_points)), "--session-id", session_id,
             "--generation", str(generation),
+            "--bootstrap-json", bootstrap,
         ]
         for claim in ordered_claims:
             command.extend(("--binding-id", claim.binding_id))
-        descriptor_fds = tuple(int(descriptor) for descriptor in extra_descriptors)
         try:
             process = subprocess.Popen(
                 command, pass_fds=(child.fileno(),) + descriptor_fds, close_fds=True, env=environment,
