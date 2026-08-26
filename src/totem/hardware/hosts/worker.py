@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import inspect
 import json
 import os
 import socket
@@ -64,7 +65,16 @@ def main() -> int:
     if not isinstance(bootstrap, Mapping):
         return 2
     module = importlib.import_module(module_name)
-    provider = getattr(module, factory_name)(bootstrap)
+    factory = getattr(module, factory_name)
+    try:
+        provider = factory(bootstrap)
+    except TypeError:
+        # API-major-one plugins may still expose the original nullary factory;
+        # their manifest remains authoritative, while new providers consume the
+        # explicit selected-binding bootstrap above.
+        if inspect.signature(factory).parameters:
+            raise
+        provider = factory()
     carrier = socket.socket(fileno=args.fd)
     send_frame(
         carrier,
