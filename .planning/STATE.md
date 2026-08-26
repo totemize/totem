@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-13-PLAN.md
-last_updated: "2026-08-26T12:40:14.700Z"
+stopped_at: Completed HW-01-14-PLAN.md
+last_updated: "2026-08-26T12:48:57.978Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 13 of 33
+Plan: 14 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [████░░░░░░] 39%
+Progress: ░░░░░░░░░░ [████░░░░░░] 42%
 
 ## Accumulated Context
 
@@ -77,6 +77,8 @@ Progress: ░░░░░░░░░░ [████░░░░░░] 39%
 - [Phase ?]: Pi 5 hardware-CS and software-CS variants are explicit concrete transport kinds with no import-time device probing.
 - [Phase ?]: Vendored 3.7 support stays child-only and catalog coverage enumerates it by source path without importing hardware-active modules.
 - [Phase ?]: mock_eink remains an explicit test transport and is excluded from the production display manifest.
+- [Phase ?]: Legacy 2.13 facades preserve canonical class identity rather than wrapping or subclassing provider classes.
+- [Phase ?]: Obsolete DeviceDriver inheritance assertions remain a dependency-ordered migration window for Plan 01-28 because satisfying them now would violate API-05 clean-break ownership.
 
 ### Roadmap Evolution
 
@@ -93,8 +95,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T12:40:14.694Z
-Stopped at: Completed HW-01-13-PLAN.md
+Last session: 2026-08-26T12:48:57.971Z
+Stopped at: Completed HW-01-14-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -114,3 +116,4 @@ Resume file: None
 | Phase HW-01 P11 | 5m | 1 tasks | 8 files |
 | Phase HW-01 P12 | 4m | 1 tasks | 8 files |
 | Phase HW-01 P13 | 12min | 1 tasks | 7 files |
+| Phase HW-01 P14 | 5min | 1 tasks | 10 files |

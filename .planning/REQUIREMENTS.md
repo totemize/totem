@@ -112,11 +112,11 @@ without editing Totem core or destabilizing existing capabilities.
 - [ ] **API-03**: The screen application depends on narrow display, power, and
   health ports rather than a multi-purpose object named as a display manager.
 
-- [ ] **API-04**: Existing Python import paths, CLI commands, HTTP routes,
+- [x] **API-04**: Existing Python import paths, CLI commands, HTTP routes,
   environment variables, and systemd units continue to work through explicit
   compatibility facades during migration.
 
-- [ ] **API-05**: Canonical new code never imports through a legacy facade.
+- [x] **API-05**: Canonical new code never imports through a legacy facade.
 
 ### Verification and maintainability
 
