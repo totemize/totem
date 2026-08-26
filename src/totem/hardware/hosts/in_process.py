@@ -77,6 +77,18 @@ class _CancelableProvider:
 
         return getattr(self._provider, "delete")(path)
 
+    def scan(self) -> object:
+        return getattr(self._provider, "scan")()
+
+    def connect(self, ssid: str, password: str = "") -> object:
+        return getattr(self._provider, "connect")(ssid, password)
+
+    def disconnect(self) -> object:
+        return getattr(self._provider, "disconnect")()
+
+    def create_hotspot(self, ssid: str, password: str = "") -> object:
+        return getattr(self._provider, "create_hotspot")(ssid, password)
+
 
 class InProcessDriverHost(DriverHost):
     """Same logical host contract with honest cooperative-only cancellation."""

@@ -134,7 +134,7 @@ def test_mock_radios_report_real_shape_and_transition_idempotently():
 
 
 def test_network_manager_reports_nan_absence_as_typed_unsupported(monkeypatch):
-    from totem.devices.network.drivers.network_manager_wifi import (
+    from totem.hardware.builtin.radio.drivers.network_manager_wifi import (
         NetworkManagerWiFiDriver,
     )
 
@@ -156,7 +156,7 @@ def test_network_manager_reports_nan_absence_as_typed_unsupported(monkeypatch):
 
 
 def test_network_manager_detects_nan_interface_mode(monkeypatch):
-    from totem.devices.network.drivers import network_manager_wifi
+    from totem.hardware.builtin.radio.drivers import network_manager_wifi
 
     NetworkManagerWiFiDriver = network_manager_wifi.NetworkManagerWiFiDriver
 
@@ -181,7 +181,7 @@ def test_network_manager_detects_nan_interface_mode(monkeypatch):
 def test_network_manager_does_not_claim_data_path_without_negotiation_backend(
     monkeypatch,
 ):
-    from totem.devices.network.drivers import network_manager_wifi
+    from totem.hardware.builtin.radio.drivers import network_manager_wifi
 
     NetworkManagerWiFiDriver = network_manager_wifi.NetworkManagerWiFiDriver
 
@@ -203,7 +203,7 @@ def test_network_manager_does_not_claim_data_path_without_negotiation_backend(
 
 
 def test_network_manager_does_not_weaken_privileges_for_nan(monkeypatch):
-    from totem.devices.network.drivers import network_manager_wifi
+    from totem.hardware.builtin.radio.drivers import network_manager_wifi
 
     driver = network_manager_wifi.NetworkManagerWiFiDriver("wlan0", runtime=object())
     driver.initialized = True
@@ -238,7 +238,7 @@ def test_p2p_discovery_group_and_teardown_lifecycle():
 
 
 def test_nan_controller_publish_match_and_cleanup_lifecycle():
-    from totem.devices.network.nan import NanDiscoveryController
+    from totem.hardware.builtin.radio.nan import NanDiscoveryController
 
     commands = []
 
@@ -355,7 +355,7 @@ def test_nan_controller_publish_match_and_cleanup_lifecycle():
 
 
 def test_nan_controller_rolls_back_cluster_when_subscription_fails():
-    from totem.devices.network.nan import NanDiscoveryController
+    from totem.hardware.builtin.radio.nan import NanDiscoveryController
 
     commands = []
 
@@ -397,7 +397,7 @@ def test_nan_controller_rolls_back_cluster_when_subscription_fails():
 
 
 def test_nan_followup_rejects_unrepresentable_or_oversized_payloads():
-    from totem.devices.network.nan import NanDiscoveryController
+    from totem.hardware.builtin.radio.nan import NanDiscoveryController
 
     controller = NanDiscoveryController(
         phy_name="phy9",
@@ -822,7 +822,7 @@ def test_bluez_l2cap_listener_rolls_back_when_advertising_fails(monkeypatch):
 
 
 def test_network_manager_peer_signal_does_not_reenter_dbus_loop():
-    from totem.devices.network.drivers.network_manager_wifi import (
+    from totem.hardware.builtin.radio.drivers.network_manager_wifi import (
         NM_WIFI_P2P,
         NetworkManagerWiFiDriver,
     )

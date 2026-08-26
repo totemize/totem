@@ -36,6 +36,7 @@ builtin-display = "totem.hardware.builtin.display.provider:create_provider"
 builtin-nfc = "totem.hardware.builtin.nfc.provider:create_provider"
 builtin-power = "totem.hardware.builtin.power.provider:create_provider"
 builtin-storage = "totem.hardware.builtin.storage.provider:create_provider"
+builtin-wifi = "totem.hardware.builtin.radio.wifi_provider:create_provider"
 
 [tool.poetry]
 packages = [{ include = "totem", from = "src" }]
@@ -44,6 +45,8 @@ include = [
   "src/totem/hardware/builtin/nfc/totem-driver-manifest.json",
   "src/totem/hardware/builtin/power/totem-driver-manifest.json",
   "src/totem/hardware/builtin/storage/totem-driver-manifest.json",
+  "src/totem/hardware/builtin/radio/wifi-manifest.json",
+  "src/totem/hardware/builtin/radio/totem-driver-manifest.json",
 ]
 
 [tool.poetry.group.dev.dependencies]

@@ -11,6 +11,7 @@ from typing import Any, Dict
 from totem_driver_api.capabilities.display import FrameSinkRequest
 from totem_driver_api.capabilities.nfc import NfcWriteRequest
 from totem_driver_api.capabilities.power import PowerTelemetryRequest
+from totem_driver_api.capabilities.radio.wifi import WifiConnectRequest, WifiHotspotRequest
 from totem_driver_api.capabilities.storage import StoragePath, StorageWriteRequest
 
 from .protocol import ProtocolError, receive_frame, send_frame
@@ -135,6 +136,28 @@ def _dispatch(provider: Any, message: Dict[str, Any]) -> Dict[str, Any]:
         try:
             request = StoragePath(message.get("path"))
             return _result(message, ok=True, deletion=provider.delete(request.value).to_json_value())
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+    if message_type == "wifi.connection.scan":
+        try:
+            return _result(message, ok=True, scan=provider.scan().to_json_value())
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+    if message_type == "wifi.connection.connect":
+        try:
+            request = WifiConnectRequest(message.get("ssid"), message.get("password"))
+            return _result(message, ok=True, connection=provider.connect(request.ssid, request.password or "").to_json_value())
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+    if message_type == "wifi.connection.disconnect":
+        try:
+            return _result(message, ok=True, disconnect=provider.disconnect().to_json_value())
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+    if message_type == "wifi.connection.hotspot":
+        try:
+            request = WifiHotspotRequest(message.get("ssid"))
+            return _result(message, ok=True, hotspot=provider.create_hotspot(request.ssid).to_json_value())
         except (AttributeError, TypeError, ValueError):
             return _result(message, ok=False, error={"code": "invalid_request"})
     if message_type != "display.frame.write":

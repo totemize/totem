@@ -1,0 +1,26 @@
+{
+  "manifest_major": 1,
+  "api_major": 1,
+  "provider_id": "builtin.wifi",
+  "provider_version": "0.2.0",
+  "capabilities": ["wifi.connection@1"],
+  "predicates": [
+    {"fact": "wifi.family", "equals": "builtin"}
+  ],
+  "config_schema": {
+    "host_mode": {"type": "string", "enum": ["process", "in_process"]},
+    "interface": {"type": "string"},
+    "phy": {"type": "string"},
+    "compatibility_group": {"type": "string"},
+    "explicit_mock": {"type": "boolean"}
+  },
+  "defaults": {"host_mode": "process", "compatibility_group": "wifi"},
+  "resources": [
+    {"kind": "dbus", "identifier": "org.freedesktop.NetworkManager", "exclusive": false},
+    {"kind": "interface", "identifier": "wlan0", "exclusive": false, "group": "wifi"},
+    {"kind": "phy", "identifier": "phy0", "exclusive": false, "group": "wifi"}
+  ],
+  "privileges": [],
+  "grouping": "provider",
+  "factory": "totem.hardware.builtin.radio.wifi_provider:create_provider"
+}
