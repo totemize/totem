@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-30-PLAN.md
-last_updated: "2026-08-26T17:48:13.416Z"
+stopped_at: Completed HW-01-31-PLAN.md
+last_updated: "2026-08-26T17:55:56.436Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 30
+  completed_plans: 31
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 30 of 33
+Plan: 31 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [█████████░] 91%
+Progress: ░░░░░░░░░░ [█████████░] 94%
 
 ## Accumulated Context
 
@@ -116,6 +116,8 @@ Progress: ░░░░░░░░░░ [█████████░] 91%
 - [Phase ?]: Display and UPS selection names are inert compatibility configuration; lifecycle methods stay facade-local while operations use the shared canonical client.
 - [Phase ?]: NFC and storage selection inputs remain inert compatibility config; all operations delegate through LegacyHardwareClient.
 - [Phase ?]: NFC and storage facade initialize/close are local transitions so the canonical runtime exclusively owns leases and providers.
+- [Phase ?]: Keep Wi-Fi and Bluetooth driver selections as inert compatibility configuration; wrappers cannot select local backends.
+- [Phase ?]: Route radio families through distinct canonical client operations while shared-PHY admission stays broker policy.
 
 ### Roadmap Evolution
 
@@ -132,8 +134,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T17:48:13.409Z
-Stopped at: Completed HW-01-30-PLAN.md
+Last session: 2026-08-26T17:55:56.429Z
+Stopped at: Completed HW-01-31-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -170,3 +172,4 @@ Resume file: None
 | Phase HW-01 P28 | 18m | 1 tasks | 5 files |
 | Phase HW-01 P29 | 2m | 1 tasks | 4 files |
 | Phase HW-01 P30 | 2m | 1 tasks | 8 files |
+| Phase HW-01 P31 | 3m | 1 tasks | 3 files |
