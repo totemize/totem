@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-23-PLAN.md
-last_updated: "2026-08-26T15:20:06.148Z"
+stopped_at: Completed HW-01-24-PLAN.md
+last_updated: "2026-08-26T15:38:16.481Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 23
+  completed_plans: 24
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 23 of 33
+Plan: 24 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [███████░░░] 70%
+Progress: ░░░░░░░░░░ [███████░░░] 73%
 
 ## Accumulated Context
 
@@ -100,6 +100,8 @@ Progress: ░░░░░░░░░░ [███████░░░] 70%
 - [Phase ?]: Provider-local package-data manifests enable multiple independent built-ins without importing entry points.
 - [Phase ?]: One lifespan-scoped runtime owns hosts and releases ownership only after clean shutdown.
 - [Phase ?]: Applications receive opaque capability/binding handles; provider objects never escape the runtime.
+- [Phase ?]: Loopback bus access trusts only the ASGI peer address; forwarded headers never grant hardware access.
+- [Phase ?]: The hardware app owns exactly one injected or factory-created runtime and exposes lossy SSE backpressure only as an aggregate counter.
 
 ### Roadmap Evolution
 
@@ -116,8 +118,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T15:20:06.141Z
-Stopped at: Completed HW-01-23-PLAN.md
+Last session: 2026-08-26T15:38:16.474Z
+Stopped at: Completed HW-01-24-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -147,3 +149,4 @@ Resume file: None
 | Phase HW-01 P21 | 3min | 1 tasks | 10 files |
 | Phase HW-01 P22 | 8m | 1 tasks | 16 files |
 | Phase HW-01 P23 | 10m | 1 tasks | 14 files |
+| Phase HW-01 P24 | 24m | 1 tasks | 7 files |

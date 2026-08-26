@@ -28,6 +28,7 @@ working environment.
 ## Journal index
 
 | Date | Summary |
+| [2026-08-26 — runtime-owned loopback hardware bus](journal/2026-08-26.md#runtime-owned-loopback-hardware-bus) | Added a sole-runtime NIP-5D bus, peer-enforced loopback health/SSE, bounded attachments, and observable lossy lifecycle events through local ASGI tests only. |
 | [2026-08-26 — Wi-Fi compatibility facade migration](journal/2026-08-26.md#wi-fi-compatibility-facade-migration) | Converted nine Wi-Fi/shared-support legacy paths to exact canonical re-exports with AST, identity, and signature guards; 25 focused local tests passed without hardware or service contact. |
 | [2026-08-26 — radio contracts and coexistence policy](journal/2026-08-26.md#radio-contracts-and-coexistence-policy) | Added separate backend-free Wi-Fi/Bluetooth capability contracts, explicit shared-PHY coexistence policy, and injected provider-side D-Bus support; 29 local focused/regression tests passed without hardware or service contact. |
 | [2026-08-26 — built-in storage provider](journal/2026-08-26.md#built-in-storage-provider) | Moved filesystem and NVMe behavior behind the import-free bounded `storage.files@1` provider with root/mount/block leases, temporary-root both-host conformance, and exact legacy facades; 51 focused local regression tests passed without hardware contact. |

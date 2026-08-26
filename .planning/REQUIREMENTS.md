@@ -102,7 +102,7 @@ without editing Totem core or destabilizing existing capabilities.
 
 ### Capability-facing applications and compatibility
 
-- [ ] **API-01**: HTTP APIs and local applications consume capability handles
+- [x] **API-01**: HTTP APIs and local applications consume capability handles
   without knowing physical device models or concrete driver IDs.
 
 - [x] **API-02**: Wi-Fi station/AP/P2P/Aware and Bluetooth discovery,
