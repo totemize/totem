@@ -6,7 +6,7 @@
 # *----------------
 # * | This version:   V1.2
 # * | Date        :   2022-10-29
-# * | Info        :   
+# * | Info        :
 # ******************************************************************************
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documnetation files (the "Software"), to deal
@@ -51,7 +51,7 @@ class RaspberryPi:
     def __init__(self):
         import spidev
         import gpiozero
-        
+
         self.SPI = spidev.SpiDev()
         self.GPIO_RST_PIN    = gpiozero.LED(self.RST_PIN)
         self.GPIO_DC_PIN     = gpiozero.LED(self.DC_PIN)
@@ -59,7 +59,7 @@ class RaspberryPi:
         self.GPIO_PWR_PIN    = gpiozero.LED(self.PWR_PIN)
         self.GPIO_BUSY_PIN   = gpiozero.Button(self.BUSY_PIN, pull_up = False)
 
-        
+
 
     def digital_write(self, pin, value):
         if pin == self.RST_PIN:
@@ -115,7 +115,7 @@ class RaspberryPi:
 
     def module_init(self, cleanup=False):
         self.GPIO_PWR_PIN.on()
-        
+
         if cleanup:
             find_dirs = [
                 os.path.dirname(os.path.realpath(__file__)),
@@ -153,7 +153,7 @@ class RaspberryPi:
         self.GPIO_DC_PIN.off()
         self.GPIO_PWR_PIN.off()
         logger.debug("close 5V, Module enters 0 power consumption ...")
-        
+
         if cleanup:
             self.GPIO_RST_PIN.close()
             self.GPIO_DC_PIN.close()
@@ -161,7 +161,7 @@ class RaspberryPi:
             self.GPIO_PWR_PIN.close()
             self.GPIO_BUSY_PIN.close()
 
-        
+
 
 
 
@@ -216,9 +216,9 @@ class JetsonNano:
         self.GPIO.setup(self.CS_PIN, self.GPIO.OUT)
         self.GPIO.setup(self.PWR_PIN, self.GPIO.OUT)
         self.GPIO.setup(self.BUSY_PIN, self.GPIO.IN)
-        
+
         self.GPIO.output(self.PWR_PIN, 1)
-        
+
         self.SPI.SYSFS_software_spi_begin()
         return 0
 
@@ -279,7 +279,7 @@ class SunriseX3:
             self.GPIO.setup(self.BUSY_PIN, self.GPIO.IN)
 
             self.GPIO.output(self.PWR_PIN, 1)
-        
+
             # SPI device, bus = 0, device = 0
             self.SPI.open(2, 0)
             self.SPI.max_speed_hz = 4000000

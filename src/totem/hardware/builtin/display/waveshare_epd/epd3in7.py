@@ -100,24 +100,24 @@ class EPD:
         0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
         0x0A,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
         0x05,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 
-        0x00,0x00,0x03,0x05,0x00,0x00,0x00,0x00,0x00,0x00, 
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, 
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        0x00,0x00,0x03,0x05,0x00,0x00,0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
         0x22,0x22,0x22,0x22,0x22
     ]
-        
+
     # Hardware reset
     def reset(self):
         epdconfig.digital_write(self.reset_pin, 1)
-        epdconfig.delay_ms(200) 
+        epdconfig.delay_ms(200)
         epdconfig.digital_write(self.reset_pin, 0)
         epdconfig.delay_ms(5)
         epdconfig.digital_write(self.reset_pin, 1)
-        epdconfig.delay_ms(200)   
+        epdconfig.delay_ms(200)
 
 
     def send_command(self, command):
@@ -133,7 +133,7 @@ class EPD:
         epdconfig.spi_writebyte([data])
         epdconfig.digital_write(self.cs_pin, 1)
 
-    # send a lot of data   
+    # send a lot of data
     def send_data2(self, data):
         epdconfig.digital_write(self.dc_pin, 1)
         epdconfig.digital_write(self.cs_pin, 0)
@@ -144,8 +144,8 @@ class EPD:
     def ReadBusy(self):
         logger.debug("e-Paper busy")
         while(epdconfig.digital_read(self.busy_pin) == 1):      #  0: idle, 1: busy
-            epdconfig.delay_ms(10) 
-        logger.debug("e-Paper busy release") 
+            epdconfig.delay_ms(10)
+        logger.debug("e-Paper busy release")
 
 
     def init(self, mode):
@@ -153,17 +153,17 @@ class EPD:
             return -1
         # EPD hardware init start
         self.reset()
-        
+
         self.send_command(0x12)
         epdconfig.delay_ms(300)
-        
+
         self.send_command(0x46)
         self.send_data(0xF7)
         self.ReadBusy()
         self.send_command(0x47)
         self.send_data(0xF7)
         self.ReadBusy()
-        
+
         self.send_command(0x01) # setting gaet number
         self.send_data(0xDF)
         self.send_data(0x01)
@@ -180,9 +180,9 @@ class EPD:
         self.send_command(0x11) # set data entry sequence
         self.send_data(0x03)
 
-        self.send_command(0x3C) # set border 
+        self.send_command(0x3C) # set border
         self.send_data(0x03)
-        
+
         self.send_command(0x0C) # set booster strength
         self.send_data(0xAE)
         self.send_data(0xC7)
@@ -192,36 +192,36 @@ class EPD:
 
         self.send_command(0x18) # set internal sensor on
         self.send_data(0x80)
-         
+
         self.send_command(0x2C) # set vcom value
         self.send_data(0x44)
-        
+
         if(mode == 0):   #4Gray
             self.send_command(0x37) # set display option, these setting turn on previous function
             self.send_data(0x00)
             self.send_data(0x00)
             self.send_data(0x00)
             self.send_data(0x00)
-            self.send_data(0x00)  
             self.send_data(0x00)
             self.send_data(0x00)
             self.send_data(0x00)
             self.send_data(0x00)
-            self.send_data(0x00)  
+            self.send_data(0x00)
+            self.send_data(0x00)
         elif(mode == 1):      #1Gray
             self.send_command(0x37) # set display option, these setting turn on previous function
             self.send_data(0x00)     #can switch 1 gray or 4 gray
             self.send_data(0xFF)
             self.send_data(0xFF)
             self.send_data(0xFF)
-            self.send_data(0xFF)  
+            self.send_data(0xFF)
             self.send_data(0x4F)
             self.send_data(0xFF)
             self.send_data(0xFF)
             self.send_data(0xFF)
             self.send_data(0xFF)
         else:
-            logger.debug("There is no such mode") 
+            logger.debug("There is no such mode")
 
         self.send_command(0x44) # setting X direction start/end position of RAM
         self.send_data(0x00)
@@ -290,7 +290,7 @@ class EPD:
                     i = i + 1
                     if(i%4 == 0):
                         buf[int((x + (y * self.width))/4)] = ((pixels[x-3, y]&0xc0) | (pixels[x-2, y]&0xc0)>>2 | (pixels[x-1, y]&0xc0)>>4 | (pixels[x, y]&0xc0)>>6)
-                        
+
         elif(imwidth == self.height and imheight == self.width):
             logger.debug("Horizontal")
             for x in range(imwidth):
@@ -303,13 +303,13 @@ class EPD:
                         pixels[x, y] = 0x40
                     i = i + 1
                     if(i%4 == 0):
-                        buf[int((newx + (newy * self.width))/4)] = ((pixels[x, y-3]&0xc0) | (pixels[x, y-2]&0xc0)>>2 | (pixels[x, y-1]&0xc0)>>4 | (pixels[x, y]&0xc0)>>6) 
+                        buf[int((newx + (newy * self.width))/4)] = ((pixels[x, y-3]&0xc0) | (pixels[x, y-2]&0xc0)>>2 | (pixels[x, y-1]&0xc0)>>4 | (pixels[x, y]&0xc0)>>6)
         return buf
 
 
     def display_4Gray(self, image):
         if (image == None):
-            return            
+            return
 
         self.send_command(0x4E)
         self.send_data(0x00)
@@ -342,7 +342,7 @@ class EPD:
                         temp3 |= 0x01           #gray2
                     temp3 <<= 1
                     temp1 <<= 2
-                    temp2 = temp1&0xC0 
+                    temp2 = temp1&0xC0
                     if(temp2 == 0xC0):          #white
                         temp3 |= 0x01
                     elif(temp2 == 0x00):        #black
@@ -381,7 +381,7 @@ class EPD:
                         temp3 |= 0x00       #gray2
                     temp3 <<= 1
                     temp1 <<= 2
-                    temp2 = temp1&0xC0 
+                    temp2 = temp1&0xC0
                     if(temp2 == 0xC0):      #white
                         temp3 |= 0x01
                     elif(temp2 == 0x00):    #black
@@ -400,12 +400,12 @@ class EPD:
         self.send_command(0x22)
         self.send_data(0xC7)
         self.send_command(0x20)
-        self.ReadBusy()   
+        self.ReadBusy()
 
 
     def display_1Gray(self, image):
         if (image == None):
-            return            
+            return
 
         self.send_command(0x4E)
         self.send_data(0x00)
@@ -415,12 +415,12 @@ class EPD:
         self.send_data(0x00)
 
         self.send_command(0x24)
-        self.send_data2(image)   
+        self.send_data2(image)
 
         self.load_lut(self.lut_1Gray_A2)
         self.send_command(0x20)
-        self.ReadBusy()   
-        
+        self.ReadBusy()
+
 
     def Clear(self, color, mode):
         self.send_command(0x4E)
@@ -448,10 +448,10 @@ class EPD:
         elif(mode == 1):            #1Gray
             self.load_lut(self.lut_1Gray_DU)
         else:
-            logger.debug("There is no such mode") 
+            logger.debug("There is no such mode")
 
         self.send_command(0x20)
-        self.ReadBusy()   
+        self.ReadBusy()
 
 
     def sleep(self):
