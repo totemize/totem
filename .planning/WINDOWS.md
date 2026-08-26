@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 0
 waived_count: 0
-fixed_count: 24
-total_count: 25
-last_updated: 2026-08-26T17:59:23.540Z
+fixed_count: 28
+total_count: 28
+last_updated: 2026-08-26T18:22:21.129Z
 ---
 
 # Broken Windows Ledger
@@ -25,7 +25,7 @@ last_updated: 2026-08-26T17:59:23.540Z
 | 8 | HW-01 | deviation | src/totem/hardware/builtin/display/totem-driver-manifest.json |  | Manifest selector was corrected from a V4-specific predicate to the Waveshare 2.13 family. | fixed |  | 2026-08-26T12:15:34.526Z | 2026-08-26T12:15:48.111Z |
 | 9 | HW-01 | deviation | src/totem/hardware/builtin/display/drivers/waveshare_2in13_v3.py | 15 | Restored exact 159-byte V3 full-update LUT after mock initialization detected a shortened transcription. | fixed |  | 2026-08-26T12:24:07.048Z | 2026-08-26T12:24:21.137Z |
 | 10 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | 17 legacy display contract assertions are intentionally pending Plan 01-28: 13 Waveshare 2.13 checks plus three mock/3.7 DeviceDriver inheritance checks and mock_eink.Driver.health(). | fixed |  | 2026-08-26T12:48:47.331Z | 2026-08-26T16:31:56.389Z |
-| 11 | HW-01 | unrun-verify | tests/unit/test_phase1_regression.py |  | SEC-09 final-regression evidence is unavailable until its later owning plan creates this test; Plan 01-15 ran the available resolver/lifecycle evidence subset. | open |  | 2026-08-26T12:53:23.000Z |  |
+| 11 | HW-01 | unrun-verify | tests/unit/test_phase1_regression.py |  | SEC-09 final-regression evidence is unavailable until its later owning plan creates this test; Plan 01-15 ran the available resolver/lifecycle evidence subset. | fixed |  | 2026-08-26T12:53:23.000Z | 2026-08-26T18:22:20.958Z |
 | 12 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | Two UPS legacy DeviceDriver/UPSDeviceInterface inheritance assertions (PiSugar2 and Waveshare UPS HAT C) are intentionally pending Plan 01-28; canonical providers preserve telemetry behavior without legacy inheritance. | fixed |  | 2026-08-26T13:02:21.191Z | 2026-08-26T16:31:56.445Z |
 | 13 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | Four NFC legacy contract assertions (ACR122, PN532, and mock_nfc DeviceDriver inheritance plus mock_nfc.health()) are intentionally pending Plan 01-28; canonical provider drivers preserve NFC behavior without legacy inheritance. | fixed |  | 2026-08-26T13:13:50.155Z | 2026-08-26T16:31:56.502Z |
 | 14 | HW-01 | deviation | src/totem/hardware/hosts/worker.py |  | Added required storage host dispatch and structural legacy driver validation. | fixed |  | 2026-08-26T14:10:00.433Z | 2026-08-26T14:10:27.848Z |
@@ -40,6 +40,9 @@ last_updated: 2026-08-26T17:59:23.540Z
 | 23 | HW-01 | deviation | .journey/journal/2026-08-26.md |  | Recorded the AGENTS.md-required Plan 01-29 session journal entry. | fixed |  | 2026-08-26T17:41:07.720Z | 2026-08-26T17:41:34.656Z |
 | 24 | HW-01 | deviation | .journey/journal/2026-08-26.md |  | Recorded the AGENTS.md-required Plan 01-31 session journal entry. | fixed |  | 2026-08-26T17:55:36.068Z | 2026-08-26T17:55:39.438Z |
 | 25 | HW-01 | deviation | tests/unit/test_pisugar2.py |  | Moved stale UPS facade I2C detection assertion to the injected canonical PiSugar driver seam. | fixed |  | 2026-08-26T17:59:18.466Z | 2026-08-26T17:59:23.540Z |
+| 26 | HW-01 | deviation | tests/conftest.py | 20 | Explicit hardware marker gate corrected so controller-safe benchmark schema tests run locally. | fixed |  | 2026-08-26T18:22:05.936Z | 2026-08-26T18:22:21.015Z |
+| 27 | HW-01 | deviation | tests/unit/test_phase1_regression.py | 21 | Final regression uses current API and facade test inventory after removed test_legacy_facades.py reference. | fixed |  | 2026-08-26T18:22:05.993Z | 2026-08-26T18:22:21.072Z |
+| 28 | HW-01 | deviation | .journey/journal/2026-08-26.md |  | Required Plan 01-33 journal continuity entry recorded during close-out. | fixed |  | 2026-08-26T18:22:06.050Z | 2026-08-26T18:22:21.129Z |
 
 ````json
 [
@@ -170,10 +173,10 @@ last_updated: 2026-08-26T17:59:23.540Z
     "file": "tests/unit/test_phase1_regression.py",
     "line": null,
     "description": "SEC-09 final-regression evidence is unavailable until its later owning plan creates this test; Plan 01-15 ran the available resolver/lifecycle evidence subset.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-26T12:53:23.000Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-26T18:22:20.958Z"
   },
   {
     "id": 12,
@@ -342,6 +345,42 @@ last_updated: 2026-08-26T17:59:23.540Z
     "reason": "",
     "recorded_at": "2026-08-26T17:59:18.466Z",
     "resolved_at": "2026-08-26T17:59:23.540Z"
+  },
+  {
+    "id": 26,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": "tests/conftest.py",
+    "line": 20,
+    "description": "Explicit hardware marker gate corrected so controller-safe benchmark schema tests run locally.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T18:22:05.936Z",
+    "resolved_at": "2026-08-26T18:22:21.015Z"
+  },
+  {
+    "id": 27,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": "tests/unit/test_phase1_regression.py",
+    "line": 21,
+    "description": "Final regression uses current API and facade test inventory after removed test_legacy_facades.py reference.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T18:22:05.993Z",
+    "resolved_at": "2026-08-26T18:22:21.072Z"
+  },
+  {
+    "id": 28,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": ".journey/journal/2026-08-26.md",
+    "line": null,
+    "description": "Required Plan 01-33 journal continuity entry recorded during close-out.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T18:22:06.050Z",
+    "resolved_at": "2026-08-26T18:22:21.129Z"
   }
 ]
 ````
