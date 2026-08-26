@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-18-PLAN.md
-last_updated: "2026-08-26T14:10:00.867Z"
+stopped_at: Completed HW-01-19-PLAN.md
+last_updated: "2026-08-26T14:21:20.438Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 18 of 33
+Plan: 19 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [██████░░░░] 55%
+Progress: ░░░░░░░░░░ [██████░░░░] 58%
 
 ## Accumulated Context
 
@@ -88,6 +88,9 @@ Progress: ░░░░░░░░░░ [██████░░░░] 55%
 - [Phase ?]: Defer four obsolete NFC legacy-contract assertions to Plan 01-28 rather than restore legacy inheritance.
 - [Phase ?]: Storage uses storage.files@1 bounded base64 values and normalized relative POSIX paths before dispatch.
 - [Phase ?]: Storage requires exclusive root, mount, and block leases before injected driver initialization.
+- [Phase ?]: Wi-Fi and Bluetooth publish separate major-versioned data contracts; backend sessions remain a later provider concern.
+- [Phase ?]: Radio coexistence is an explicit symmetric matrix scoped to matching PHY and compatibility group, so independent radios never contend through a global lock.
+- [Phase ?]: Provider-side D-Bus support accepts an injected call seam and names services only; it owns neither a bus connection nor a backend session.
 
 ### Roadmap Evolution
 
@@ -104,8 +107,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T14:10:00.860Z
-Stopped at: Completed HW-01-18-PLAN.md
+Last session: 2026-08-26T14:21:20.432Z
+Stopped at: Completed HW-01-19-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -130,3 +133,4 @@ Resume file: None
 | Phase HW-01 P16 | 12min | 1 tasks | 15 files |
 | Phase HW-01-capability-oriented-hardware-runtime P17 | 4min | 1 tasks | 16 files |
 | Phase HW-01 P18 | 40min | 1 tasks | 16 files |
+| Phase HW-01 P19 | 15min | 1 tasks | 13 files |

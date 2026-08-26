@@ -97,7 +97,7 @@ without editing Totem core or destabilizing existing capabilities.
   network PHYs/interfaces, Bluetooth adapters, D-Bus services, sockets, and
   other exclusive resources before driver initialization.
 
-- [ ] **RUN-03**: Shared-radio concurrency constraints are modeled explicitly
+- [x] **RUN-03**: Shared-radio concurrency constraints are modeled explicitly
   rather than hidden inside a monolithic network manager.
 
 ### Capability-facing applications and compatibility
@@ -105,7 +105,7 @@ without editing Totem core or destabilizing existing capabilities.
 - [ ] **API-01**: HTTP APIs and local applications consume capability handles
   without knowing physical device models or concrete driver IDs.
 
-- [ ] **API-02**: Wi-Fi station/AP/P2P/Aware and Bluetooth discovery,
+- [x] **API-02**: Wi-Fi station/AP/P2P/Aware and Bluetooth discovery,
   advertising, GATT, and L2CAP are separate capability services coordinated by
   shared radio resources.
 

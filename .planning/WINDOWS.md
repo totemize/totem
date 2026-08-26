@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 4
 waived_count: 0
-fixed_count: 11
-total_count: 15
-last_updated: 2026-08-26T14:10:27.903Z
+fixed_count: 12
+total_count: 16
+last_updated: 2026-08-26T14:22:11.760Z
 ---
 
 # Broken Windows Ledger
@@ -30,6 +30,7 @@ last_updated: 2026-08-26T14:10:27.903Z
 | 13 | HW-01 | unmet-truth | tests/unit/test_driver_contracts.py |  | Four NFC legacy contract assertions (ACR122, PN532, and mock_nfc DeviceDriver inheritance plus mock_nfc.health()) are intentionally pending Plan 01-28; canonical provider drivers preserve NFC behavior without legacy inheritance. | open |  | 2026-08-26T13:13:50.155Z |  |
 | 14 | HW-01 | deviation | src/totem/hardware/hosts/worker.py |  | Added required storage host dispatch and structural legacy driver validation. | fixed |  | 2026-08-26T14:10:00.433Z | 2026-08-26T14:10:27.848Z |
 | 15 | HW-01 | deviation | src/totem/hardware/hosts/in_process.py |  | Corrected shared in-process read/write forwarding after storage integration. | fixed |  | 2026-08-26T14:10:00.488Z | 2026-08-26T14:10:27.903Z |
+| 16 | HW-01 | deviation | tests/unit/hardware_runtime/test_radio_resources.py |  | Corrected TDD capability identity assertion to use CapabilityId name and major fields. | fixed |  | 2026-08-26T14:21:20.607Z | 2026-08-26T14:22:11.760Z |
 
 ````json
 [
@@ -212,6 +213,18 @@ last_updated: 2026-08-26T14:10:27.903Z
     "reason": "",
     "recorded_at": "2026-08-26T14:10:00.488Z",
     "resolved_at": "2026-08-26T14:10:27.903Z"
+  },
+  {
+    "id": 16,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": "tests/unit/hardware_runtime/test_radio_resources.py",
+    "line": null,
+    "description": "Corrected TDD capability identity assertion to use CapabilityId name and major fields.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T14:21:20.607Z",
+    "resolved_at": "2026-08-26T14:22:11.760Z"
   }
 ]
 ````
