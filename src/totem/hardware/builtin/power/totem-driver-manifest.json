@@ -1,0 +1,22 @@
+{
+  "manifest_major": 1,
+  "api_major": 1,
+  "provider_id": "builtin.power",
+  "provider_version": "0.2.0",
+  "capabilities": ["power.telemetry@1"],
+  "predicates": [
+    {"fact": "power.ups.family", "equals": "builtin"}
+  ],
+  "config_schema": {
+    "host_mode": {"type": "string", "enum": ["process", "in_process"]},
+    "power_model": {"type": "string", "enum": ["pisugar2", "waveshare_ups_hat_c"]},
+    "i2c_address": {"type": "string", "enum": ["0x75", "0x43"]}
+  },
+  "defaults": {"host_mode": "process"},
+  "resources": [
+    {"kind": "i2c", "identifier": "1", "exclusive": true}
+  ],
+  "privileges": [],
+  "grouping": "provider",
+  "factory": "totem.hardware.builtin.power.provider:create_provider"
+}

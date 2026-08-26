@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import ast
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, List
@@ -109,8 +110,6 @@ def test_power_contract_validates_snapshot_and_typed_push() -> None:
 def test_catalog_reads_power_manifest_without_importing_provider_or_i2c_drivers() -> None:
     for module_name in (
         "totem.hardware.builtin.power.provider",
-        "totem.hardware.builtin.power.drivers.pisugar2",
-        "totem.hardware.builtin.power.drivers.waveshare_ups_hat_c",
         "smbus",
         "smbus2",
     ):
@@ -125,8 +124,6 @@ def test_catalog_reads_power_manifest_without_importing_provider_or_i2c_drivers(
         name in importlib.sys.modules
         for name in (
             "totem.hardware.builtin.power.provider",
-            "totem.hardware.builtin.power.drivers.pisugar2",
-            "totem.hardware.builtin.power.drivers.waveshare_ups_hat_c",
             "smbus",
             "smbus2",
         )
@@ -150,9 +147,15 @@ def test_provider_rejects_missing_claims_or_unknown_hat_before_i2c_access() -> N
 
     driver = _RecordingDriver()
     with pytest.raises(PowerSelectionError, match="claims"):
-        PowerProvider(model="pisugar2", driver=driver).snapshot()
+        PowerProvider(model="pisugar2", i2c_address="0x75", driver=driver).snapshot()
     with pytest.raises(PowerSelectionError, match="model"):
-        PowerProvider(model="unknown", claims=REQUIRED_CLAIMS, driver=driver).snapshot()
+        PowerProvider(
+            model="unknown", i2c_address="0x75", claims=REQUIRED_CLAIMS, driver=driver
+        ).snapshot()
+    with pytest.raises(PowerSelectionError, match="address"):
+        PowerProvider(
+            model="pisugar2", i2c_address="0x43", claims=REQUIRED_CLAIMS, driver=driver
+        ).snapshot()
 
     assert driver.reads == 0
 
@@ -170,7 +173,13 @@ def test_power_provider_has_matching_dual_host_snapshot_and_push_conformance(tmp
     )
     in_process = run_host_conformance(
         lambda: InProcessDriverHost(
-            (claim,), PowerProvider(model="pisugar2", claims=REQUIRED_CLAIMS, driver=driver), generation=1
+            (
+                claim,
+            ),
+            PowerProvider(
+                model="pisugar2", i2c_address="0x75", claims=REQUIRED_CLAIMS, driver=driver
+            ),
+            generation=1,
         ),
         cases,
     )
@@ -184,7 +193,8 @@ def test_power_provider_has_matching_dual_host_snapshot_and_push_conformance(tmp
         "        return type('Status', (), {'model': 'PiSugar 2', 'battery_percent': 80.0, "
         "'voltage_volts': 4.0, 'current_amps': 0.5, 'power_plugged': True})()\n"
         "def create_provider():\n"
-        "    return PowerProvider(model='pisugar2', claims=(ResourceClaim('i2c', '1'),), driver=Driver())\n",
+        "    return PowerProvider(model='pisugar2', i2c_address='0x75', "
+        "claims=(ResourceClaim('i2c', '1'),), driver=Driver())\n",
         encoding="utf-8",
     )
     process_record = SimpleNamespace(
@@ -213,3 +223,21 @@ def test_legacy_ups_modules_are_exact_provider_reexports() -> None:
 
     assert LegacyPiSugar is CanonicalPiSugar
     assert LegacyWaveshare is CanonicalWaveshare
+
+
+def test_legacy_ups_sources_have_no_registry_or_runtime_ownership() -> None:
+    expected = {
+        "pisugar2.py": "totem.hardware.builtin.power.drivers.pisugar2",
+        "waveshare_ups_hat_c.py": "totem.hardware.builtin.power.drivers.waveshare_ups_hat_c",
+    }
+    legacy_root = ROOT / "src" / "totem" / "devices" / "ups" / "drivers"
+
+    for filename, canonical_module in expected.items():
+        module = ast.parse((legacy_root / filename).read_text(encoding="utf-8"))
+        imports = [node for node in module.body if isinstance(node, ast.ImportFrom)]
+        assert len(imports) == 1
+        assert imports[0].module == canonical_module
+        assert [name.name for name in imports[0].names] == ["Driver"]
+        assert not any(
+            isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) for node in module.body
+        )

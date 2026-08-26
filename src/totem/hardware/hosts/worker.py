@@ -9,6 +9,7 @@ import socket
 from typing import Any, Dict
 
 from totem_driver_api.capabilities.display import FrameSinkRequest
+from totem_driver_api.capabilities.power import PowerTelemetryRequest
 
 from .protocol import ProtocolError, receive_frame, send_frame
 
@@ -79,7 +80,18 @@ def _dispatch(provider: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     request_id = message.get("id")
     if not isinstance(request_id, str) or not request_id:
         return _result(message, ok=False, error={"code": "invalid_request"})
-    if message.get("type") != "display.frame.write":
+    message_type = message.get("type")
+    if message_type in ("power.telemetry.read", "power.telemetry.push"):
+        try:
+            PowerTelemetryRequest()
+            if message_type == "power.telemetry.read":
+                telemetry = provider.snapshot().to_json_value()
+            else:
+                telemetry = provider.telemetry_push().to_json_value()
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+        return _result(message, ok=True, telemetry=telemetry)
+    if message_type != "display.frame.write":
         return _result(message, ok=False, error={"code": "unknown_type"})
     frame = message.get("frame")
     attachments = message.get("_attachments")

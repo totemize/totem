@@ -42,6 +42,16 @@ class _CancelableProvider:
             return method(request, cancel_event=self._cancellation)
         return method(request)
 
+    def snapshot(self) -> object:
+        """Forward read-only power telemetry through the same host boundary."""
+
+        return getattr(self._provider, "snapshot")()
+
+    def telemetry_push(self) -> object:
+        """Forward typed power telemetry events through the same boundary."""
+
+        return getattr(self._provider, "telemetry_push")()
+
 
 class InProcessDriverHost(DriverHost):
     """Same logical host contract with honest cooperative-only cancellation."""
