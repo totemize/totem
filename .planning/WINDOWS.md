@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 0
 waived_count: 0
-fixed_count: 8
+fixed_count: 9
 total_count: 9
-last_updated: 2026-08-26T12:24:07.048Z
+last_updated: 2026-08-26T12:24:21.137Z
 ---
 
 # Broken Windows Ledger
@@ -23,7 +23,7 @@ last_updated: 2026-08-26T12:24:07.048Z
 | 6 | HW-01 | deviation | src/totem/hardware/hosts/worker.py |  | Reject unknown binding IDs before worker provider dispatch. | fixed |  | 2026-08-26T11:54:37.471Z | 2026-08-26T11:54:42.388Z |
 | 7 | HW-01 | deviation | tests/unit/hardware_runtime/test_conformance.py |  | Fixture import marker cleanup retained for package-boundary test isolation | fixed |  | 2026-08-26T12:05:30.497Z | 2026-08-26T12:05:47.435Z |
 | 8 | HW-01 | deviation | src/totem/hardware/builtin/display/totem-driver-manifest.json |  | Manifest selector was corrected from a V4-specific predicate to the Waveshare 2.13 family. | fixed |  | 2026-08-26T12:15:34.526Z | 2026-08-26T12:15:48.111Z |
-| 9 | HW-01 | deviation | src/totem/hardware/builtin/display/drivers/waveshare_2in13_v3.py | 15 | Restored exact 159-byte V3 full-update LUT after mock initialization detected a shortened transcription. | open |  | 2026-08-26T12:24:07.048Z |  |
+| 9 | HW-01 | deviation | src/totem/hardware/builtin/display/drivers/waveshare_2in13_v3.py | 15 | Restored exact 159-byte V3 full-update LUT after mock initialization detected a shortened transcription. | fixed |  | 2026-08-26T12:24:07.048Z | 2026-08-26T12:24:21.137Z |
 
 ````json
 [
@@ -130,10 +130,10 @@ last_updated: 2026-08-26T12:24:07.048Z
     "file": "src/totem/hardware/builtin/display/drivers/waveshare_2in13_v3.py",
     "line": 15,
     "description": "Restored exact 159-byte V3 full-update LUT after mock initialization detected a shortened transcription.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-26T12:24:07.048Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-26T12:24:21.137Z"
   }
 ]
 ````
