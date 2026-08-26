@@ -5,13 +5,18 @@ from .lifecycle import BindingState, HealthState, LifecycleEvent
 from .manifest import MANIFEST_MAJOR, DriverManifest, IncompatibleManifestMajor, ManifestPredicate
 from .messages import LogicalMessage, ResultError
 from .resources import ResourceClaim
+from .conformance import ConformanceCase, ConformanceProvider, ConformanceTranscript, FixtureProvider, run_host_conformance
 
 __all__ = [
     "API_MAJOR",
     "BindingState",
     "CapabilityId",
     "ContractError",
+    "ConformanceCase",
+    "ConformanceProvider",
+    "ConformanceTranscript",
     "DriverManifest",
+    "FixtureProvider",
     "HealthState",
     "IncompatibleManifestMajor",
     "IncompatibleApiMajor",
@@ -21,4 +26,5 @@ __all__ = [
     "ManifestPredicate",
     "ResourceClaim",
     "ResultError",
+    "run_host_conformance",
 ]

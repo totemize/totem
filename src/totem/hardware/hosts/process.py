@@ -36,6 +36,7 @@ class ProcessDriverHost(DriverHost):
         self.generation = generation
         self._lock = threading.Lock()
         self._invalidated = False
+        self._ready: Optional[Dict[str, object]] = None
 
     @classmethod
     def start(cls, claim: ClaimRecord, *, site_packages: Path, generation: int = 1, startup_deadline: float = 10.0) -> "ProcessDriverHost":
@@ -92,6 +93,8 @@ class ProcessDriverHost(DriverHost):
     def await_ready(self, deadline: float) -> Dict[str, object]:
         """Validate session, generation, and complete binding membership."""
 
+        if self._ready is not None:
+            return dict(self._ready)
         if deadline <= 0:
             raise TimeoutError("startup deadline elapsed")
         self._carrier.settimeout(deadline)
@@ -109,7 +112,8 @@ class ProcessDriverHost(DriverHost):
             or tuple(sorted(actual)) != expected
         ):
             raise HostError("host ready identity mismatch")
-        return {"type": "host.ready", "generation": self.generation, "binding_ids": expected}
+        self._ready = {"type": "host.ready", "generation": self.generation, "binding_ids": expected}
+        return dict(self._ready)
 
     def display_handle(self, binding_id: str) -> DisplayHandle:
         if binding_id not in self._claims_by_binding:

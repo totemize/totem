@@ -3,18 +3,29 @@
 from __future__ import annotations
 
 import os
+import importlib.metadata as metadata
+from pathlib import Path
 import subprocess
 import sys
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Dict
 
 import pytest
 
 from totem_driver_api.conformance import ConformanceCase, run_host_conformance
 from totem.hardware.hosts.in_process import InProcessDriverHost
+from totem.hardware.hosts.process import ProcessDriverHost
+from totem.hardware.catalog.metadata import CatalogScanner
+from totem.hardware.discovery.facts import HardwareFacts
+from totem.hardware.discovery.resolver import Resolver
 from totem.hardware.runtime.bindings import BindingRecord
+from totem.hardware.runtime.broker import ResourceBroker
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
+
+ROOT = Path(__file__).parents[3]
+API_PACKAGE = ROOT / "packages" / "totem-driver-api"
+FIXTURE_PACKAGE = ROOT / "tests" / "fixtures" / "totem-driver-fixture"
 
 
 def _binding() -> BindingRecord:
@@ -50,6 +61,41 @@ def _host() -> InProcessDriverHost:
     return InProcessDriverHost((_binding(),), _Provider(), generation=1)
 
 
+def _build_and_install_fixture(tmp_path: Path) -> Path:
+    wheels = tmp_path / "wheels"
+    site = tmp_path / "site"
+    wheels.mkdir()
+    for package in (API_PACKAGE, FIXTURE_PACKAGE):
+        subprocess.run(
+            [sys.executable, "-m", "pip", "wheel", "--no-deps", "--wheel-dir", str(wheels), str(package)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    for wheel in sorted(wheels.glob("*.whl")):
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--no-deps", "--target", str(site), str(wheel)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    return site
+
+
+def _claimed_fixture(site: Path):
+    fixture = next(
+        distribution for distribution in metadata.distributions(path=[str(site)])
+        if distribution.metadata["Name"] == "totem-driver-fixture"
+    )
+    catalog = CatalogScanner(distributions=lambda: (fixture,)).snapshot()
+    binding = Resolver().resolve(
+        catalog,
+        facts=HardwareFacts.from_mapping({"resource.spi": "spi0.0"}),
+        capability_id="display.frame-sink@1",
+    ).require_binding()
+    return ResourceBroker().claim(binding)
+
+
 def test_public_conformance_runner_keeps_case_order_and_empty_lifecycle() -> None:
     cases = (
         ConformanceCase("nested", _request("nested", nested={"a": [1, {"b": True}]}), {"frame": b"x"}),
@@ -79,15 +125,30 @@ def test_public_conformance_runner_keeps_case_order_and_empty_lifecycle() -> Non
     )
 
 
-def test_dual_host_logical_transcripts_match_and_containment_remains_explicit() -> None:
-    cases = (ConformanceCase("attachment", _request("request-1"), {"frame": b"x"}),)
+def test_dual_host_logical_transcripts_match_and_containment_remains_explicit(tmp_path: Path) -> None:
+    site = _build_and_install_fixture(tmp_path)
+    claim = _claimed_fixture(site)
+    binding_id = claim.binding_id
+    cases = (
+        ConformanceCase("attachment", {**_request("request-1", nested={"a": [1, {"b": True}]}), "binding_id": binding_id}, {"frame": b"x"}),
+        ConformanceCase("unknown", {"type": "display.unknown", "id": "unknown", "binding_id": binding_id}),
+    )
 
-    in_process = run_host_conformance(_host, cases)
-    process = run_host_conformance(_host, cases)
+    def in_process_factory() -> InProcessDriverHost:
+        sys.path.insert(0, str(site))
+        try:
+            return InProcessDriverHost.start_group((claim,), generation=1)
+        finally:
+            sys.path.remove(str(site))
+
+    in_process = run_host_conformance(in_process_factory, cases)
+    process = run_host_conformance(lambda: ProcessDriverHost.start(claim, site_packages=site), cases)
 
     assert process.items == in_process.items
-    assert _host().health()["mode"] == "in_process"
-    assert "restart_required" in _host().health()
+    host = in_process_factory()
+    assert host.health()["mode"] == "in_process"
+    assert "restart_required" in host.health()
+    host.close()
 
 
 def test_sacrificial_fatal_provider_process_cannot_terminate_the_test_daemon() -> None:
