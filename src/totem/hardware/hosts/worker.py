@@ -12,6 +12,11 @@ from totem_driver_api.capabilities.display import FrameSinkRequest
 from totem_driver_api.capabilities.nfc import NfcWriteRequest
 from totem_driver_api.capabilities.power import PowerTelemetryRequest
 from totem_driver_api.capabilities.radio.wifi import WifiConnectRequest, WifiHotspotRequest
+from totem_driver_api.capabilities.radio.bluetooth import (
+    BluetoothAdvertisementRequest,
+    BluetoothConnectRequest,
+    BluetoothDiscoverRequest,
+)
 from totem_driver_api.capabilities.storage import StoragePath, StorageWriteRequest
 
 from .protocol import ProtocolError, receive_frame, send_frame
@@ -158,6 +163,24 @@ def _dispatch(provider: Any, message: Dict[str, Any]) -> Dict[str, Any]:
         try:
             request = WifiHotspotRequest(message.get("ssid"))
             return _result(message, ok=True, hotspot=provider.create_hotspot(request.ssid).to_json_value())
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+    if message_type == "bluetooth.session.discover":
+        try:
+            BluetoothDiscoverRequest()
+            return _result(message, ok=True, discovery=provider.discover().to_json_value())
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+    if message_type == "bluetooth.session.advertise":
+        try:
+            request = BluetoothAdvertisementRequest(message.get("name"))
+            return _result(message, ok=True, advertisement=provider.advertise(request.name).to_json_value())
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+    if message_type == "bluetooth.session.connect":
+        try:
+            request = BluetoothConnectRequest(message.get("address"))
+            return _result(message, ok=True, connection=provider.connect(request.address).to_json_value())
         except (AttributeError, TypeError, ValueError):
             return _result(message, ok=False, error={"code": "invalid_request"})
     if message_type != "display.frame.write":

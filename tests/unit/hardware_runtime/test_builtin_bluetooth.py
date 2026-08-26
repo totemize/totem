@@ -28,6 +28,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
 
 ROOT = Path(__file__).parents[3]
 MANIFEST_PATH = ROOT / "src" / "totem" / "hardware" / "builtin" / "radio" / "bluetooth-manifest.json"
+WIFI_MANIFEST_PATH = ROOT / "src" / "totem" / "hardware" / "builtin" / "radio" / "totem-driver-manifest.json"
 ENTRY_POINT = "totem.hardware.builtin.radio.bluetooth_provider:create_provider"
 REQUIRED_CLAIMS = (
     ResourceClaim("dbus", "org.bluez"),
@@ -45,11 +46,16 @@ class _EntryPoint:
 class _Distribution:
     metadata = {"Name": "totem", "Version": "0.2.0"}
     entry_points = (_EntryPoint(),)
-    files = (Path("totem/hardware/builtin/radio/bluetooth-manifest.json"),)
+    files = (
+        Path("totem/hardware/builtin/radio/totem-driver-manifest.json"),
+        Path("totem/hardware/builtin/radio/bluetooth-manifest.json"),
+    )
 
     def locate_file(self, path: Path) -> Path:
-        assert str(path) == "totem/hardware/builtin/radio/bluetooth-manifest.json"
-        return MANIFEST_PATH
+        if str(path) == "totem/hardware/builtin/radio/bluetooth-manifest.json":
+            return MANIFEST_PATH
+        assert str(path) == "totem/hardware/builtin/radio/totem-driver-manifest.json"
+        return WIFI_MANIFEST_PATH
 
 
 def _catalog():
@@ -230,3 +236,16 @@ def test_bluetooth_failure_restart_and_shared_phy_denial_are_provider_local() ->
     with pytest.raises(RadioCompatibilityError, match="wifi.hotspot"):
         broker.claim(binding("bluetooth", RadioConstraint("phy0", "hci0", "hci0", "bluetooth.scan", "shared")))
     assert starts == [True, False]
+
+
+def test_legacy_bluetooth_modules_reexport_canonical_implementations() -> None:
+    from totem.devices.network.drivers.bluez import Driver as LegacyBlueZ
+    from totem.devices.network.drivers.mock_bluetooth import Driver as LegacyMockBluetooth
+    from totem.devices.network.l2cap import L2CAPTransport as LegacyL2CAP
+    from totem.hardware.builtin.radio.drivers.bluez import Driver as CanonicalBlueZ
+    from totem.hardware.builtin.radio.drivers.mock_bluetooth import Driver as CanonicalMockBluetooth
+    from totem.hardware.builtin.radio.l2cap import L2CAPTransport as CanonicalL2CAP
+
+    assert LegacyBlueZ is CanonicalBlueZ
+    assert LegacyMockBluetooth is CanonicalMockBluetooth
+    assert LegacyL2CAP is CanonicalL2CAP

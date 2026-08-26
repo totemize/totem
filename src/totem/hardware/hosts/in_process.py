@@ -80,14 +80,23 @@ class _CancelableProvider:
     def scan(self) -> object:
         return getattr(self._provider, "scan")()
 
-    def connect(self, ssid: str, password: str = "") -> object:
-        return getattr(self._provider, "connect")(ssid, password)
+    def connect(self, address_or_ssid: str, password: Optional[str] = None) -> object:
+        if password is None:
+            return getattr(self._provider, "connect")(address_or_ssid)
+        return getattr(self._provider, "connect")(address_or_ssid, password)
 
     def disconnect(self) -> object:
         return getattr(self._provider, "disconnect")()
 
     def create_hotspot(self, ssid: str, password: str = "") -> object:
         return getattr(self._provider, "create_hotspot")(ssid, password)
+
+    def discover(self) -> object:
+        return getattr(self._provider, "discover")()
+
+    def advertise(self, name: str) -> object:
+        return getattr(self._provider, "advertise")(name)
+
 
 
 class InProcessDriverHost(DriverHost):

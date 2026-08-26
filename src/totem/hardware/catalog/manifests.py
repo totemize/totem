@@ -40,9 +40,20 @@ def manifest_for_entry_point(distribution: Any, entry_point: Any) -> DriverManif
     package, separator, _leaf = module.rpartition(".")
     if not separator or not package:
         raise ManifestReadError(CatalogDiagnostic(code="invalid_entry_point"))
-    expected_path = "{}/{}".format(package.replace(".", "/"), MANIFEST_FILENAME)
+    package_path = package.replace(".", "/")
+    # A built-in package can expose more than one independently-hosted
+    # provider.  Prefer an explicit provider-local manifest when present,
+    # otherwise retain the original package-manifest lookup for distributions
+    # with a single provider.
+    leaf = module.rsplit(".", 1)[-1]
+    expected_path = "{}/{}".format(package_path, MANIFEST_FILENAME)
+    provider_path = None
+    if leaf.endswith("_provider"):
+        provider_path = "{}/{}-manifest.json".format(package_path, leaf[:-9])
     files = tuple(distribution.files or ())
-    matches = tuple(path for path in files if str(path) == expected_path)
+    matches = tuple(path for path in files if str(path) == provider_path)
+    if not matches:
+        matches = tuple(path for path in files if str(path) == expected_path)
     if len(matches) != 1:
         raise ManifestReadError(CatalogDiagnostic(code="missing_manifest"))
     try:

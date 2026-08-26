@@ -5,9 +5,10 @@ from typing import Optional
 from totem.logging import logger
 from totem.devices.contracts import DeviceDriver
 from totem.devices.registry import DriverRegistry, DriverSpec, HardwareNotFoundError
+from totem.hardware.builtin.radio.network import WiFiDeviceInterface as _CanonicalWiFiDeviceInterface
 
 
-class WiFiDeviceInterface(DeviceDriver):
+class _LegacyWiFiDeviceInterface(DeviceDriver):
     @abstractmethod
     def init(self):
         """Initialize the Wi-Fi device."""
@@ -129,6 +130,9 @@ class WiFiDeviceInterface(DeviceDriver):
     @abstractmethod
     def remove_nan_data_path(self, data_path_id: str, timeout: float = 15.0):
         pass
+
+
+WiFiDeviceInterface = _CanonicalWiFiDeviceInterface
 
 
 WIFI_DRIVERS = DriverRegistry(

@@ -7,8 +7,16 @@ from typing import Optional
 class WiFiDeviceInterface(ABC):
     def close(self) -> None:
         """Release optional session state; concrete sessions may extend this hook."""
-
+        if hasattr(self, "initialized"):
+            self.initialized = False
+        self._closed = True
         return None
+
+    IS_MOCK = False
+
+    @property
+    def is_mock(self) -> bool:
+        return bool(self.IS_MOCK or getattr(self, "mock_mode", False))
 
     @abstractmethod
     def init(self):
@@ -131,3 +139,19 @@ class WiFiDeviceInterface(ABC):
     @abstractmethod
     def remove_nan_data_path(self, data_path_id: str, timeout: float = 15.0):
         pass
+
+
+class BluetoothDeviceInterface(ABC):
+    """Canonical Bluetooth session protocol with no legacy registry ownership."""
+
+    def close(self) -> None:
+        if hasattr(self, "initialized"):
+            self.initialized = False
+        self._closed = True
+        return None
+
+    IS_MOCK = False
+
+    @property
+    def is_mock(self) -> bool:
+        return bool(self.IS_MOCK or getattr(self, "mock_mode", False))
