@@ -1,27 +1,41 @@
 {
+  "schema": "totem.driver-ipc-v1",
   "protocol_version": 1,
+  "codec": {"id": 1, "name": "canonical-json", "reserved": [2]},
+  "limits": {"header_bytes": 65536, "attachment_bytes": 16777216, "attachments_per_frame": 16},
   "logical_value_model": "strict-json",
-  "vectors": [
-    {
-      "name": "request-with-correlation",
-      "message": {"type": "display.render", "id": "request-1", "frame": {"mode": "mono"}}
-    },
-    {
-      "name": "successful-result",
-      "message": {"type": "display.render.result", "id": "request-1", "ok": true}
-    },
-    {
-      "name": "structured-error",
-      "message": {
-        "type": "display.render.result",
-        "id": "request-1",
-        "ok": false,
-        "error": {"code": "unknown_type", "message": "unknown type: display.render"}
-      }
-    },
-    {
-      "name": "unsolicited-event",
-      "message": {"type": "binding.health", "binding_id": "display-primary", "state": "ready"}
-    }
+  "proven_spike_behaviors": [
+    "control_round_trip",
+    "one_byte_fragmentation",
+    "pipelined_frames",
+    "multiple_verified_attachments",
+    "canonical_attachment_order",
+    "missing_type_rejected",
+    "invalid_id_rejected",
+    "binary_value_outside_attachment_channel_rejected",
+    "non_finite_number_rejected",
+    "integer_outside_signed_64_bit_rejected",
+    "reserved_attachment_field_rejected",
+    "truncated_frame_rejected",
+    "oversized_header_rejected_before_read",
+    "oversized_attachment_rejected_before_read",
+    "oversized_header_rejected_before_write",
+    "invalid_magic_rejected",
+    "protocol_version_mismatch_rejected",
+    "unknown_flags_rejected",
+    "codec_mismatch_rejected",
+    "malformed_header_rejected",
+    "checksum_mismatch_rejected",
+    "duplicate_attachment_id_rejected",
+    "unclaimed_attachment_bytes_rejected",
+    "missing_attachment_is_correlated_error",
+    "socket_request_result_event_flow"
+  ],
+  "production_extensions": ["duplicate_json_keys_rejected", "non_finite_json_header_rejected"],
+  "messages": [
+    {"name": "request-with-correlation", "message": {"type": "display.render", "id": "request-1", "frame": {"mode": "mono"}}},
+    {"name": "successful-result", "message": {"type": "display.render.result", "id": "request-1", "ok": true}},
+    {"name": "structured-error", "message": {"type": "display.render.result", "id": "request-1", "ok": false, "error": {"code": "unknown_type", "message": "unknown type: display.render"}}},
+    {"name": "unsolicited-event", "message": {"type": "binding.health", "binding_id": "display-primary", "state": "ready"}}
   ]
 }

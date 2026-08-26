@@ -160,7 +160,7 @@ def test_concurrent_generic_bus_dispatch_and_safe_errors_use_binding_table(tmp_p
         "type": "display.unknown.result",
         "id": "bad-1",
         "ok": False,
-        "error": {"code": "unknown_type"},
+        "error": {"code": "unknown_type", "message": "unknown message type"},
     }
     assert "router" not in repr(bus).lower()
     assert "traceback" not in repr(unknown).lower()

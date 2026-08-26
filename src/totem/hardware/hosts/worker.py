@@ -13,12 +13,24 @@ from totem_driver_api.capabilities.display import FrameSinkRequest
 from .protocol import ProtocolError, receive_frame, send_frame
 
 
+_PUBLIC_ERROR_MESSAGES = {
+    "invalid_request": "invalid request",
+    "unknown_type": "unknown message type",
+}
+
+
 def _result(message: Dict[str, Any], *, ok: bool, **values: Any) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "type": "{}.result".format(message.get("type", "host.error")),
         "id": message.get("id"),
         "ok": ok,
     }
+    error = values.get("error")
+    if isinstance(error, dict) and isinstance(error.get("code"), str) and "message" not in error:
+        values["error"] = {
+            "code": error["code"],
+            "message": _PUBLIC_ERROR_MESSAGES.get(error["code"], "request failed"),
+        }
     result.update(values)
     return result
 

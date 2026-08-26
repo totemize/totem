@@ -14,8 +14,17 @@ def _error(message: Mapping[str, Any], code: str) -> Dict[str, Any]:
         "type": "{}.result".format(message_type if isinstance(message_type, str) else "error"),
         "id": message.get("id"),
         "ok": False,
-        "error": {"code": code},
+        "error": {"code": code, "message": _public_error_message(code)},
     }
+
+
+def _public_error_message(code: str) -> str:
+    return {
+        "invalid_request": "invalid request",
+        "unknown_type": "unknown message type",
+        "binding_unavailable": "binding unavailable",
+        "host_unavailable": "host unavailable",
+    }.get(code, "request failed")
 
 
 class HardwareBus:

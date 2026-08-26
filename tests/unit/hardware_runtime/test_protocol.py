@@ -6,6 +6,7 @@ import hashlib
 import json
 import socket
 import threading
+from pathlib import Path
 from typing import Optional
 
 import pytest
@@ -235,3 +236,14 @@ def test_real_socketpair_request_result_push_and_unknown_request() -> None:
     client.close()
     thread.join(timeout=2)
     assert not failures
+
+
+def test_protocol_vector_ledger_preserves_proven_spike_cases() -> None:
+    path = Path(__file__).parents[2] / "fixtures" / "hardware_runtime" / "protocol-vectors.json"
+    vectors = json.loads(path.read_text(encoding="utf-8"))
+    assert vectors["schema"] == "totem.driver-ipc-v1"
+    assert vectors["codec"] == {"id": 1, "name": "canonical-json", "reserved": [2]}
+    assert len(vectors["proven_spike_behaviors"]) == 25
+    assert vectors["production_extensions"] == [
+        "duplicate_json_keys_rejected", "non_finite_json_header_rejected"
+    ]
