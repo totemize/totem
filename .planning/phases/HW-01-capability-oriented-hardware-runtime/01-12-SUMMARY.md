@@ -101,7 +101,20 @@ status: complete
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+### Auto-fixed Issues
+
+**1. [Rule 1 - Bug] Restored the complete V3 full-update LUT**
+
+- **Found during:** Task 1: Migrate the complete 2.13 variant family.
+- **Issue:** The first provider-side V3 LUT transcription was shorter than the required 159 bytes, causing mocked `init()` to reject the panel.
+- **Fix:** Restored the exact 159-byte legacy LUT sequence before the GREEN commit.
+- **Files modified:** `src/totem/hardware/builtin/display/drivers/waveshare_2in13_v3.py`.
+- **Verification:** The exhaustive variant suite, display core/import-boundary suite, and complete hardware-runtime suite pass.
+- **Committed in:** `d0ad5e6`.
+
+**Total deviations:** 1 auto-fixed (Rule 1 bug).
+
+**Impact on plan:** Necessary behavior-preservation correction; no scope expansion.
 
 ## Known Stubs
 
