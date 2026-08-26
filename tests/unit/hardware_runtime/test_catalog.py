@@ -82,3 +82,15 @@ def test_complete_manifest_is_immutable_and_safe_for_concurrent_catalog_readers(
         serialized = list(executor.map(lambda _item: manifest.to_json(), range(32)))
     assert len(set(serialized)) == 1
     assert json.loads(serialized[0])["factory"] == manifest.factory
+
+
+def test_manifest_never_accepts_a_secret_value_even_for_secret_reference_schema() -> None:
+    document = _document()
+    document["config_schema"] = {"credential": {"type": "secret-reference"}}
+    document["defaults"] = {"credential": "raw-provider-secret"}
+
+    with pytest.raises(ManifestReadError) as raised:
+        manifest_from_document(document, distribution_name="fixture-package", entry_point_name="fixture")
+
+    assert raised.value.diagnostic.code == "invalid_manifest"
+    assert "raw-provider-secret" not in raised.value.diagnostic.to_json()

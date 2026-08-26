@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Mapping, Optional
 
 from .identifiers import ContractError
 
@@ -14,6 +15,7 @@ class ResourceClaim:
     kind: str
     identifier: str
     exclusive: bool = True
+    group: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not self.kind or not self.kind.strip():
@@ -22,21 +24,30 @@ class ResourceClaim:
             raise ContractError("resource identifier must be non-empty")
         if not isinstance(self.exclusive, bool):
             raise ContractError("resource exclusivity must be boolean")
+        if self.group is not None and (not isinstance(self.group, str) or not self.group.strip()):
+            raise ContractError("resource group must be a non-empty string when supplied")
 
     def to_json_value(self) -> dict[str, object]:
         return {
             "kind": self.kind,
             "identifier": self.identifier,
             "exclusive": self.exclusive,
+            **({"group": self.group} if self.group is not None else {}),
         }
 
     @classmethod
     def from_json_value(cls, value: object) -> "ResourceClaim":
-        if not isinstance(value, dict):
+        if not isinstance(value, Mapping):
             raise ContractError("resource claim must be a JSON object")
+        unknown = set(value).difference({"kind", "identifier", "exclusive", "group"})
+        if unknown:
+            raise ContractError("resource claim has unknown field {}".format(sorted(unknown)[0]))
         kind = value.get("kind")
         identifier = value.get("identifier")
         exclusive = value.get("exclusive", True)
+        group = value.get("group")
         if not isinstance(kind, str) or not isinstance(identifier, str):
             raise ContractError("resource claim kind and identifier must be strings")
-        return cls(kind=kind, identifier=identifier, exclusive=exclusive)
+        if group is not None and not isinstance(group, str):
+            raise ContractError("resource claim group must be a string")
+        return cls(kind=kind, identifier=identifier, exclusive=exclusive, group=group)

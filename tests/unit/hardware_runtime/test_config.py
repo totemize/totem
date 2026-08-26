@@ -63,6 +63,16 @@ def test_binding_plugin_global_and_manifest_defaults_have_exact_precedence() -> 
     effective = runtime.effective_settings(_manifest(), "display.main")
 
     assert effective.to_json_value() == {"host_mode": "process", "timeout": 30}
+    assert RuntimeConfig().effective_settings(_manifest(), "display.none").to_json_value() == {
+        "host_mode": "process",
+        "timeout": 5,
+    }
+    assert RuntimeConfig(
+        plugins=(PluginConfig("fixture.display", {"timeout": 20}),)
+    ).effective_settings(_manifest(), "display.none").to_json_value()["timeout"] == 20
+    assert RuntimeConfig(
+        global_settings={"timeout": 10}
+    ).effective_settings(_manifest(), "display.none").to_json_value()["timeout"] == 10
 
 
 def test_invalid_sibling_binding_is_isolated_and_diagnostics_redact_secret_values() -> None:
@@ -116,8 +126,9 @@ credential = { kind = "credential", reference = "systemd:display" }
         imported.append(name)
         return _Parser()
 
-    assert config.toml_loader_for_version((3, 9), importer) is not None
-    loaded = load_runtime_config(config_path, loader=config.toml_loader_for_version((3, 9), importer))
+    tomli_loader = config.toml_loader_for_version((3, 9), importer)
+    assert tomli_loader is not None
+    loaded = load_runtime_config(config_path, loader=tomli_loader)
     assert imported == ["tomli"]
     assert loaded.effective_settings(_manifest(), "display.main").to_json_value() == {
         "credential": {"kind": "credential", "reference": "systemd:display"},
@@ -150,3 +161,27 @@ def test_secret_references_are_only_descriptors_and_snapshots_are_immutable() ->
         RuntimeConfig.from_toml_value(
             {"bindings": {"display.main": {"plugin": "fixture.display", "credential": "raw"}}}
         )
+
+
+def test_concurrent_config_readers_share_valid_snapshot_and_stable_sibling_rejection() -> None:
+    runtime = RuntimeConfig(
+        bindings=(
+            BindingConfig("display.good", "fixture.display", {"timeout": 8}),
+            BindingConfig("display.bad", "fixture.display", {"unknown": "ignored"}),
+        )
+    )
+
+    def read_good(_item: int) -> str:
+        return runtime.effective_settings(_manifest(), "display.good").to_json()
+
+    def reject_bad(_item: int) -> str:
+        with pytest.raises(ConfigValidationError) as raised:
+            runtime.effective_settings(_manifest(), "display.bad")
+        return raised.value.diagnostic.to_json()
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        good_values = list(executor.map(read_good, range(32)))
+        bad_diagnostics = list(executor.map(reject_bad, range(32)))
+
+    assert len(set(good_values)) == 1
+    assert len(set(bad_diagnostics)) == 1

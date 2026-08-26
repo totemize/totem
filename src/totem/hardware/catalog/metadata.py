@@ -11,6 +11,7 @@ from typing import Any, Callable, Iterable, Optional, Tuple
 
 from totem_driver_api import DriverManifest
 
+from .diagnostics import CatalogDiagnostic
 from .manifests import ManifestReadError, manifest_for_entry_point
 
 
@@ -20,26 +21,6 @@ _NORMALIZED_DISTRIBUTION = re.compile(r"[-_.]+")
 
 def _normalize_distribution_name(name: str) -> str:
     return _NORMALIZED_DISTRIBUTION.sub("-", name).lower()
-
-
-@dataclass(frozen=True)
-class CatalogDiagnostic:
-    """Safe evidence for a catalog record rejected before provider execution."""
-
-    code: str
-    distribution_name: str
-    entry_point_name: str
-
-    @property
-    def sort_key(self) -> Tuple[str, str, str]:
-        return (self.distribution_name, self.entry_point_name, self.code)
-
-    def to_json_value(self) -> dict[str, str]:
-        return {
-            "code": self.code,
-            "distribution_name": self.distribution_name,
-            "entry_point_name": self.entry_point_name,
-        }
 
 
 @dataclass(frozen=True)
@@ -138,15 +119,15 @@ class CatalogScanner:
                 try:
                     manifest = manifest_for_entry_point(distribution, entry_point)
                 except ManifestReadError as exc:
+                    diagnostic = exc.diagnostic
                     diagnostics.append(
                         CatalogDiagnostic(
-                            code=(
-                                "incompatible_api_major"
-                                if "incompatible" in str(exc)
-                                else "invalid_manifest"
-                            ),
-                            distribution_name=distribution_name,
-                            entry_point_name=entry_point.name,
+                            code=diagnostic.code,
+                            distribution_name=diagnostic.distribution_name or distribution_name,
+                            entry_point_name=diagnostic.entry_point_name or entry_point.name,
+                            plugin_id=diagnostic.plugin_id,
+                            binding_id=diagnostic.binding_id,
+                            field=diagnostic.field,
                         )
                     )
                     continue
