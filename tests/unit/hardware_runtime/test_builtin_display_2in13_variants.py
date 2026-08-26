@@ -5,9 +5,11 @@ from __future__ import annotations
 import importlib
 import pkgutil
 import sys
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from types import ModuleType
+from typing import Iterable, Iterator, List, Tuple
 
 import pytest
 from PIL import Image
@@ -71,6 +73,39 @@ VARIANTS = (
 )
 
 
+_MISSING = object()
+
+
+@contextmanager
+def _fresh_variant_import(qualified_name: str) -> Iterator[ModuleType]:
+    """Import one provider module afresh without leaking its new class objects.
+
+    Compatibility facades intentionally retain direct aliases to canonical
+    classes.  A test-only ``sys.modules.pop()`` therefore must restore both the
+    module cache and its parent-package attribute; otherwise a later import can
+    create a second ``Driver`` class with the same qualified name.
+    """
+
+    parent_name, _, module_name = qualified_name.rpartition(".")
+    parent = importlib.import_module(parent_name)
+    previous_module = sys.modules.get(qualified_name, _MISSING)
+    previous_attribute = getattr(parent, module_name, _MISSING)
+
+    try:
+        sys.modules.pop(qualified_name, None)
+        yield importlib.import_module(qualified_name)
+    finally:
+        if previous_module is _MISSING:
+            sys.modules.pop(qualified_name, None)
+        else:
+            sys.modules[qualified_name] = previous_module
+
+        if previous_attribute is _MISSING:
+            delattr(parent, module_name)
+        else:
+            setattr(parent, module_name, previous_attribute)
+
+
 def _provider_variant_names() -> set[str]:
     package = importlib.import_module("totem.hardware.builtin.display.drivers")
     return {
@@ -91,12 +126,26 @@ def test_variant_imports_do_not_load_hardware_libraries_or_legacy_owner(
     qualified_name = "totem.hardware.builtin.display.drivers.{0}".format(module_name)
     hardware_modules = ("spidev", "gpiod", "RPi.GPIO")
     before = {name for name in hardware_modules if name in sys.modules}
-    sys.modules.pop(qualified_name, None)
 
-    module = importlib.import_module(qualified_name)
+    with _fresh_variant_import(qualified_name) as module:
+        assert {name for name in hardware_modules if name in sys.modules} == before
+        assert "totem.devices" not in Path(module.__file__).read_text(encoding="utf-8")
 
-    assert {name for name in hardware_modules if name in sys.modules} == before
-    assert "totem.devices" not in Path(module.__file__).read_text(encoding="utf-8")
+
+def test_fresh_import_probe_preserves_legacy_driver_identity() -> None:
+    legacy = importlib.import_module(
+        "totem.devices.display.drivers.waveshare_2in13"
+    )
+    canonical = importlib.import_module(
+        "totem.hardware.builtin.display.drivers.waveshare_2in13_v2"
+    )
+
+    with _fresh_variant_import(
+        "totem.hardware.builtin.display.drivers.waveshare_2in13_v2"
+    ):
+        pass
+
+    assert legacy.Driver is canonical.Driver
 
 
 @pytest.mark.parametrize("module_name, transport_kind, black_pixel_offset", VARIANTS)
