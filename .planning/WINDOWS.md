@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 6
+open_count: 4
 waived_count: 0
-fixed_count: 12
+fixed_count: 14
 total_count: 18
-last_updated: 2026-08-26T15:10:19.699Z
+last_updated: 2026-08-26T15:11:10.041Z
 ---
 
 # Broken Windows Ledger
@@ -31,8 +31,8 @@ last_updated: 2026-08-26T15:10:19.699Z
 | 14 | HW-01 | deviation | src/totem/hardware/hosts/worker.py |  | Added required storage host dispatch and structural legacy driver validation. | fixed |  | 2026-08-26T14:10:00.433Z | 2026-08-26T14:10:27.848Z |
 | 15 | HW-01 | deviation | src/totem/hardware/hosts/in_process.py |  | Corrected shared in-process read/write forwarding after storage integration. | fixed |  | 2026-08-26T14:10:00.488Z | 2026-08-26T14:10:27.903Z |
 | 16 | HW-01 | deviation | tests/unit/hardware_runtime/test_radio_resources.py |  | Corrected TDD capability identity assertion to use CapabilityId name and major fields. | fixed |  | 2026-08-26T14:21:20.607Z | 2026-08-26T14:22:11.760Z |
-| 17 | HW-01 | deviation | src/totem/hardware/catalog/manifests.py |  | Provider-local manifest lookup was required for Bluetooth discovery beside Wi-Fi. | open |  | 2026-08-26T15:10:19.645Z |  |
-| 18 | HW-01 | deviation | src/totem/devices/network/network.py |  | Canonical radio interface bridge was required for deterministic legacy mock-manager coverage. | open |  | 2026-08-26T15:10:19.699Z |  |
+| 17 | HW-01 | deviation | src/totem/hardware/catalog/manifests.py |  | Provider-local manifest lookup was required for Bluetooth discovery beside Wi-Fi. | fixed |  | 2026-08-26T15:10:19.645Z | 2026-08-26T15:11:09.986Z |
+| 18 | HW-01 | deviation | src/totem/devices/network/network.py |  | Canonical radio interface bridge was required for deterministic legacy mock-manager coverage. | fixed |  | 2026-08-26T15:10:19.699Z | 2026-08-26T15:11:10.041Z |
 
 ````json
 [
@@ -235,10 +235,10 @@ last_updated: 2026-08-26T15:10:19.699Z
     "file": "src/totem/hardware/catalog/manifests.py",
     "line": null,
     "description": "Provider-local manifest lookup was required for Bluetooth discovery beside Wi-Fi.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-26T15:10:19.645Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-26T15:11:09.986Z"
   },
   {
     "id": 18,
@@ -247,10 +247,10 @@ last_updated: 2026-08-26T15:10:19.699Z
     "file": "src/totem/devices/network/network.py",
     "line": null,
     "description": "Canonical radio interface bridge was required for deterministic legacy mock-manager coverage.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-26T15:10:19.699Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-26T15:11:10.041Z"
   }
 ]
 ````
