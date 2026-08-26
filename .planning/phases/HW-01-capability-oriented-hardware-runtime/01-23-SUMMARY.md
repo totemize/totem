@@ -114,7 +114,20 @@ status: complete
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+### Auto-fixed Issues
+
+**1. [Rule 2 - Missing Critical] Exported generic capability handles from the public capability package**
+- **Found during:** Task 1 GREEN implementation.
+- **Issue:** The plan introduced generic application-facing handles, but `totem.hardware.capabilities` did not re-export them, leaving the documented public capability surface incomplete.
+- **Fix:** Added the generic handle, unavailability error, and family-handle exports to the package facade.
+- **Files modified:** `src/totem/hardware/capabilities/__init__.py`.
+- **Verification:** Focused runtime, lifecycle, host, and import-boundary suites passed.
+- **Committed in:** `ed7fec8`.
+
+---
+
+**Total deviations:** 1 auto-fixed (1 Rule 2 missing critical functionality).
+**Impact on plan:** The export is required for a complete, transport-neutral public capability API and does not add provider coupling.
 
 ## Issues Encountered
 
