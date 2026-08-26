@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 4
 waived_count: 0
-fixed_count: 15
-total_count: 19
-last_updated: 2026-08-26T15:49:55.994Z
+fixed_count: 16
+total_count: 20
+last_updated: 2026-08-26T16:03:41.967Z
 ---
 
 # Broken Windows Ledger
@@ -34,6 +34,7 @@ last_updated: 2026-08-26T15:49:55.994Z
 | 17 | HW-01 | deviation | src/totem/hardware/catalog/manifests.py |  | Provider-local manifest lookup was required for Bluetooth discovery beside Wi-Fi. | fixed |  | 2026-08-26T15:10:19.645Z | 2026-08-26T15:11:09.986Z |
 | 18 | HW-01 | deviation | src/totem/devices/network/network.py |  | Canonical radio interface bridge was required for deterministic legacy mock-manager coverage. | fixed |  | 2026-08-26T15:10:19.699Z | 2026-08-26T15:11:10.041Z |
 | 19 | HW-01 | deviation | src/totem/hardware/api/bus.py |  | Added canonical status and power dispatch so screen readiness can avoid the legacy health route. | fixed |  | 2026-08-26T15:49:42.842Z | 2026-08-26T15:49:55.994Z |
+| 20 | HW-01 | deviation | src/totem/api/app.py |  | UPS action identity and runtime event projection correction recorded in 01-26 summary | fixed |  | 2026-08-26T16:03:16.626Z | 2026-08-26T16:03:41.967Z |
 
 ````json
 [
@@ -264,6 +265,18 @@ last_updated: 2026-08-26T15:49:55.994Z
     "reason": "",
     "recorded_at": "2026-08-26T15:49:42.842Z",
     "resolved_at": "2026-08-26T15:49:55.994Z"
+  },
+  {
+    "id": 20,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": "src/totem/api/app.py",
+    "line": null,
+    "description": "UPS action identity and runtime event projection correction recorded in 01-26 summary",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T16:03:16.626Z",
+    "resolved_at": "2026-08-26T16:03:41.967Z"
   }
 ]
 ````

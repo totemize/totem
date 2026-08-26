@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-25-PLAN.md
-last_updated: "2026-08-26T15:49:34.383Z"
+stopped_at: Completed HW-01-26-PLAN.md
+last_updated: "2026-08-26T16:03:07.227Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 25
+  completed_plans: 26
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 25 of 33
+Plan: 26 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [████████░░] 76%
+Progress: ░░░░░░░░░░ [████████░░] 79%
 
 ## Accumulated Context
 
@@ -105,6 +105,8 @@ Progress: ░░░░░░░░░░ [████████░░] 76%
 - [Phase ?]: Screen owns rendering and boot behavior while consuming only narrow frame, health, and power ports.
 - [Phase ?]: Screen frames use bounded raw canonical-bus attachments instead of legacy base64 image routes.
 - [Phase ?]: hardware.status.get projects only ready/degraded values so screen readiness never imports runtime models or calls /health.
+- [Phase ?]: Legacy REST handlers retain response models but delegate through one injected LegacyHardwareClient.
+- [Phase ?]: Legacy environment names are parsed only in totem.compat.hardware_env into typed configuration.
 
 ### Roadmap Evolution
 
@@ -121,8 +123,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T15:49:34.374Z
-Stopped at: Completed HW-01-25-PLAN.md
+Last session: 2026-08-26T16:03:07.221Z
+Stopped at: Completed HW-01-26-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -154,3 +156,4 @@ Resume file: None
 | Phase HW-01 P23 | 10m | 1 tasks | 14 files |
 | Phase HW-01 P24 | 24m | 1 tasks | 7 files |
 | Phase HW-01 P25 | 4m | 2 tasks | 10 files |
+| Phase HW-01 P26 | 25min | 1 tasks | 9 files |
