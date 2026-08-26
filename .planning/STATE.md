@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-12-PLAN.md
-last_updated: "2026-08-26T12:23:28.865Z"
+stopped_at: Completed HW-01-13-PLAN.md
+last_updated: "2026-08-26T12:40:14.700Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 12 of 33
+Plan: 13 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [████░░░░░░] 36%
+Progress: ░░░░░░░░░░ [████░░░░░░] 39%
 
 ## Accumulated Context
 
@@ -75,6 +75,8 @@ Progress: ░░░░░░░░░░ [████░░░░░░] 36%
 - [Phase ?]: Display provider construction is side-effect-free and accepts only injected transports after exact SPI/GPIO claim validation.
 - [Phase ?]: All Waveshare 2.13 variants use the provider-owned injected base; concrete modules preserve controller-specific command and framebuffer behavior.
 - [Phase ?]: Pi 5 hardware-CS and software-CS variants are explicit concrete transport kinds with no import-time device probing.
+- [Phase ?]: Vendored 3.7 support stays child-only and catalog coverage enumerates it by source path without importing hardware-active modules.
+- [Phase ?]: mock_eink remains an explicit test transport and is excluded from the production display manifest.
 
 ### Roadmap Evolution
 
@@ -91,8 +93,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T12:23:28.859Z
-Stopped at: Completed HW-01-12-PLAN.md
+Last session: 2026-08-26T12:40:14.694Z
+Stopped at: Completed HW-01-13-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -111,3 +113,4 @@ Resume file: None
 | Phase HW-01 P10 | 31m | 2 tasks | 11 files |
 | Phase HW-01 P11 | 5m | 1 tasks | 8 files |
 | Phase HW-01 P12 | 4m | 1 tasks | 8 files |
+| Phase HW-01 P13 | 12min | 1 tasks | 7 files |
