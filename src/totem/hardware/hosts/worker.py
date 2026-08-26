@@ -11,6 +11,7 @@ from typing import Any, Dict
 from totem_driver_api.capabilities.display import FrameSinkRequest
 from totem_driver_api.capabilities.nfc import NfcWriteRequest
 from totem_driver_api.capabilities.power import PowerTelemetryRequest
+from totem_driver_api.capabilities.storage import StoragePath, StorageWriteRequest
 
 from .protocol import ProtocolError, receive_frame, send_frame
 
@@ -107,6 +108,33 @@ def _dispatch(provider: Any, message: Dict[str, Any]) -> Dict[str, Any]:
     if message_type == "nfc.tag.poll":
         try:
             return _result(message, ok=True, poll=provider.poll().to_json_value())
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+    if message_type == "storage.files.read":
+        try:
+            request = StoragePath(message.get("path"))
+            return _result(message, ok=True, file=provider.read(request.value).to_json_value())
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+    if message_type == "storage.files.write":
+        try:
+            request = StorageWriteRequest.from_json_value(
+                {"path": message.get("path"), "data_b64": message.get("data_b64")}
+            )
+            provider.write(request.path.value, request.data)
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+        return _result(message, ok=True, accepted=True)
+    if message_type == "storage.files.list":
+        try:
+            request = StoragePath(message.get("path", "."))
+            return _result(message, ok=True, files=provider.list(request.value).to_json_value())
+        except (AttributeError, TypeError, ValueError):
+            return _result(message, ok=False, error={"code": "invalid_request"})
+    if message_type == "storage.files.delete":
+        try:
+            request = StoragePath(message.get("path"))
+            return _result(message, ok=True, deletion=provider.delete(request.value).to_json_value())
         except (AttributeError, TypeError, ValueError):
             return _result(message, ok=False, error={"code": "invalid_request"})
     if message_type != "display.frame.write":

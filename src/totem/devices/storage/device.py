@@ -59,7 +59,7 @@ class Storage:
             module_path = f"totem.devices.storage.drivers.{driver_name}"
             module = importlib.import_module(module_path)
             driver_class = getattr(module, 'Driver')
-            if not issubclass(driver_class, StorageDeviceInterface):
+            if not all(callable(getattr(driver_class, name, None)) for name in ("init", "read_file", "write_file")):
                 raise TypeError(f"{driver_name} does not implement StorageDeviceInterface")
             logger.info(f"Loaded driver: {driver_name}")
             if self.storage_root is None:

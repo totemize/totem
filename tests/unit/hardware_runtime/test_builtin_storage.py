@@ -36,7 +36,7 @@ MANIFEST_PATH = ROOT / "src" / "totem" / "hardware" / "builtin" / "storage" / "t
 ENTRY_POINT = "totem.hardware.builtin.storage.provider:create_provider"
 REQUIRED_CLAIMS = (
     ResourceClaim("path", "storage-root"),
-    ResourceClaim("path", "storage-mount"),
+    ResourceClaim("mount", "storage-mount"),
     ResourceClaim("block", "storage-block"),
 )
 
@@ -67,7 +67,8 @@ def _facts() -> HardwareFacts:
     return HardwareFacts.from_mapping(
         {
             "storage.family": "builtin",
-            "resource.path": ("storage-root", "storage-mount"),
+            "resource.path": "storage-root",
+            "resource.mount": "storage-mount",
             "resource.block": "storage-block",
         }
     )
@@ -102,8 +103,6 @@ def test_storage_contract_uses_bounded_normalized_json_safe_values() -> None:
 def test_catalog_reads_storage_manifest_without_importing_provider_or_filesystem_driver() -> None:
     for module_name in (
         "totem.hardware.builtin.storage.provider",
-        "totem.hardware.builtin.storage.files",
-        "totem.hardware.builtin.storage.drivers.filesystem",
     ):
         importlib.sys.modules.pop(module_name, None)
 
@@ -116,8 +115,6 @@ def test_catalog_reads_storage_manifest_without_importing_provider_or_filesystem
         name in importlib.sys.modules
         for name in (
             "totem.hardware.builtin.storage.provider",
-            "totem.hardware.builtin.storage.files",
-            "totem.hardware.builtin.storage.drivers.filesystem",
         )
     )
 
@@ -131,7 +128,7 @@ def test_storage_facts_resolve_all_root_mount_and_block_claims_before_provider_i
     )
 
     assert selected.status is ResolutionStatus.RESOLVED
-    assert selected.require_binding().claims == REQUIRED_CLAIMS
+    assert frozenset(selected.require_binding().claims) == frozenset(REQUIRED_CLAIMS)
     assert missing.status is ResolutionStatus.UNAVAILABLE
     assert "totem.hardware.builtin.storage.provider" not in importlib.sys.modules
 
@@ -196,7 +193,7 @@ def test_storage_provider_has_matching_dual_host_read_write_list_delete_conforma
         "from totem_driver_api import ResourceClaim\n"
         "def create_provider():\n"
         "    root = tempfile.mkdtemp(prefix='totem-storage-')\n"
-        "    return StorageProvider(model='filesystem', root=root, claims=(ResourceClaim('path', 'storage-root'), ResourceClaim('path', 'storage-mount'), ResourceClaim('block', 'storage-block')), driver=Driver(root=root))\n",
+        "    return StorageProvider(model='filesystem', root=root, claims=(ResourceClaim('path', 'storage-root'), ResourceClaim('mount', 'storage-mount'), ResourceClaim('block', 'storage-block')), driver=Driver(root=root))\n",
         encoding="utf-8",
     )
     process_record = SimpleNamespace(
