@@ -25,6 +25,7 @@ key-files:
     - src/totem/devices/display/__init__.py
     - src/totem/devices/display/display.py
     - src/totem/devices/ups/ups.py
+    - tests/unit/test_pisugar2.py
 key-decisions:
   - "Display and UPS selection names remain inert compatibility configuration; wrappers neither probe nor select a local driver."
   - "Initialize and close are facade-local compatibility transitions, while display writes and power telemetry use the shared canonical client."
@@ -90,6 +91,7 @@ status: complete
 
 1. **Task 1: Delegate display and power wrappers to canonical capabilities (RED)** — `c441046` (`test`)
 2. **Task 1: Delegate display and power wrappers to canonical capabilities (GREEN)** — `5b564c9` (`feat`)
+3. **Integration repair: Keep configured I2C selection at the canonical power seam** — `9bdc04e` (`test`)
 
 ## Verification
 
@@ -97,6 +99,8 @@ status: complete
 - `.venv/bin/python -m compileall -q src/totem/devices/display src/totem/devices/ups` — passed.
 - `git diff --check` — passed.
 - Source audit found no wrapper registry/provider/transport imports, hardware probes, or direct device paths. All verification used injected local fakes only; no SSH, network, deployment, live service, USB/serial/I2C/GPIO, real device, or hardware-marked test was contacted.
+- `.venv/bin/python -m pytest tests/unit/test_device_display_power_facades.py tests/unit/test_pisugar2.py tests/unit/test_waveshare_ups_hat_c.py tests/unit/hardware_runtime/test_builtin_power.py tests/unit/hardware_runtime/test_import_boundaries.py -x` — 30 passed.
+- `.venv/bin/python -m pytest tests/unit -x -q --tb=short` — 458 passed.
 
 ## Files Created/Modified
 
@@ -104,6 +108,7 @@ status: complete
 - `src/totem/devices/display/display.py` — Client-only display facade with local initialization and close state.
 - `src/totem/devices/ups/ups.py` — Client-only UPS telemetry facade with local initialization and close state.
 - `tests/unit/test_device_display_power_facades.py` — Recording-client and AST ownership regression coverage.
+- `tests/unit/test_pisugar2.py` — Canonical injected PiSugar configured-I2C selection regression.
 
 ## Decisions Made
 
@@ -114,7 +119,15 @@ status: complete
 
 ### Auto-fixed Issues
 
-**1. [Rule 2 - Project continuity] Recorded the required session journal entry**
+**1. [Rule 1 - Stale ownership assertion] Kept configured I2C selection at the canonical PiSugar seam**
+- **Found during:** Post-plan full unit-suite integration after 361 passing tests.
+- **Issue:** A historical `UPS._detect_hardware()` assertion required the client-only facade to inspect `/dev/i2c-*`, contradicting the completed clean-break contract.
+- **Fix:** Replaced it with an injected-transport canonical PiSugar test that proves `TOTEM_I2C_BUS` selects bus 7 without contacting I2C.
+- **Files modified:** `tests/unit/test_pisugar2.py`
+- **Verification:** focused display/power/UPS/import suite passed 30 tests; full unit suite passed 458 tests.
+- **Committed in:** `9bdc04e`
+
+**2. [Rule 2 - Project continuity] Recorded the required session journal entry**
 - **Found during:** Plan close-out.
 - **Issue:** `AGENTS.md` requires each completed session to be added to the project journal and index.
 - **Fix:** Added the execution result to the dated journal and journal index.
@@ -124,12 +137,12 @@ status: complete
 
 ---
 
-**Total deviations:** 1 auto-fixed (1 Rule 2 project-continuity requirement).
-**Impact on plan:** Documentation-only; the display/power implementation scope is unchanged.
+**Total deviations:** 2 auto-fixed (1 Rule 1 stale test, 1 Rule 2 project-continuity requirement).
+**Impact on plan:** The repair eliminates an obsolete facade ownership demand; display/power runtime ownership stays unchanged.
 
 ## Issues Encountered
 
-None.
+The full suite initially failed after 361 passing tests because an obsolete PiSugar compatibility test expected the migrated UPS facade to probe local I2C. The assertion now verifies the canonical injected driver instead, and the full 458-test unit suite passes.
 
 ## Known Stubs
 
@@ -157,3 +170,4 @@ None - no external service configuration required.
 
 - Found the declared display, UPS, and facade-test files on disk.
 - Found TDD commits `c441046` and `5b564c9` in repository history.
+- Found integration repair commit `9bdc04e` in repository history.

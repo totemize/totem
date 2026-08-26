@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 1
 waived_count: 0
-fixed_count: 23
-total_count: 24
-last_updated: 2026-08-26T17:55:39.438Z
+fixed_count: 24
+total_count: 25
+last_updated: 2026-08-26T17:59:23.540Z
 ---
 
 # Broken Windows Ledger
@@ -39,6 +39,7 @@ last_updated: 2026-08-26T17:55:39.438Z
 | 22 | HW-01 | deviation | tests/unit/test_mock_transports.py |  | Replaced stale direct-manager mock fixtures with explicit local client fakes. | fixed |  | 2026-08-26T17:27:32.820Z | 2026-08-26T17:27:32.892Z |
 | 23 | HW-01 | deviation | .journey/journal/2026-08-26.md |  | Recorded the AGENTS.md-required Plan 01-29 session journal entry. | fixed |  | 2026-08-26T17:41:07.720Z | 2026-08-26T17:41:34.656Z |
 | 24 | HW-01 | deviation | .journey/journal/2026-08-26.md |  | Recorded the AGENTS.md-required Plan 01-31 session journal entry. | fixed |  | 2026-08-26T17:55:36.068Z | 2026-08-26T17:55:39.438Z |
+| 25 | HW-01 | deviation | tests/unit/test_pisugar2.py |  | Moved stale UPS facade I2C detection assertion to the injected canonical PiSugar driver seam. | fixed |  | 2026-08-26T17:59:18.466Z | 2026-08-26T17:59:23.540Z |
 
 ````json
 [
@@ -329,6 +330,18 @@ last_updated: 2026-08-26T17:55:39.438Z
     "reason": "",
     "recorded_at": "2026-08-26T17:55:36.068Z",
     "resolved_at": "2026-08-26T17:55:39.438Z"
+  },
+  {
+    "id": 25,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": "tests/unit/test_pisugar2.py",
+    "line": null,
+    "description": "Moved stale UPS facade I2C detection assertion to the injected canonical PiSugar driver seam.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T17:59:18.466Z",
+    "resolved_at": "2026-08-26T17:59:23.540Z"
   }
 ]
 ````
