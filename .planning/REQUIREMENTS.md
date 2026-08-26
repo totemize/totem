@@ -64,7 +64,7 @@ without editing Totem core or destabilizing existing capabilities.
 - [x] **ISO-01**: Drivers execute in a supervised child process by default, and
   default mode does not import third-party driver code into the daemon process.
 
-- [ ] **ISO-02**: An operator can select in-process execution globally or for a
+- [x] **ISO-02**: An operator can select in-process execution globally or for a
   specific plugin through configuration.
 
 - [x] **ISO-03**: Isolated and in-process hosts expose the same NIP-5D-shaped
@@ -80,7 +80,7 @@ without editing Totem core or destabilizing existing capabilities.
   deadlines, hard termination, crash detection, bounded restart backoff,
   quarantine, and resource release only after child death is confirmed.
 
-- [ ] **ISO-06**: In-process deadlines use cooperative cancellation. If plugin
+- [x] **ISO-06**: In-process deadlines use cooperative cancellation. If plugin
   code remains live after its grace period, the binding becomes contaminated,
   rejects new work, retains every resource lease, and requires controlled
   daemon restart; native process-fatal failure is an accepted opt-in risk.
@@ -120,7 +120,7 @@ without editing Totem core or destabilizing existing capabilities.
 
 ### Verification and maintainability
 
-- [ ] **TST-01**: A reusable conformance suite verifies every driver against
+- [x] **TST-01**: A reusable conformance suite verifies every driver against
   its declared capability and lifecycle contracts in both execution modes.
 
 - [x] **TST-02**: Resolver fixtures cover exact matches, missing prerequisites,

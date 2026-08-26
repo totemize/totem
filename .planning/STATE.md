@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-09-PLAN.md
-last_updated: "2026-08-26T11:54:37.922Z"
+stopped_at: Completed HW-01-10-PLAN.md
+last_updated: "2026-08-26T12:05:30.881Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 9 of 33
+Plan: 10 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [███░░░░░░░] 27%
+Progress: ░░░░░░░░░░ [███░░░░░░░] 30%
 
 ## Accumulated Context
 
@@ -69,6 +69,8 @@ Progress: ░░░░░░░░░░ [███░░░░░░░] 27%
 - [Phase ?]: Lifecycle transitions are explicit and locked; required readiness is derived independently from optional binding degradation.
 - [Phase ?]: Process lease release requires invalidation, terminate-or-kill, confirmed exit, and carrier closure before broker release.
 - [Phase ?]: Provider identity/version is the default process group; per-binding grouping is an explicit manifest override.
+- [Phase ?]: In-process calls use the existing strict frame codec and live invocations contaminate rather than being claimed killed.
+- [Phase ?]: Host mode resolves binding > plugin > global > manifest with process as the default.
 
 ### Roadmap Evolution
 
@@ -85,8 +87,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T11:54:37.914Z
-Stopped at: Completed HW-01-09-PLAN.md
+Last session: 2026-08-26T12:05:30.875Z
+Stopped at: Completed HW-01-10-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -102,3 +104,4 @@ Resume file: None
 | Phase HW-01 P06 | 8min | 1 tasks | 8 files |
 | Phase HW-01 P07 | 7m | 1 tasks | 2 files |
 | Phase HW-01 P09 | 40m | 2 tasks | 12 files |
+| Phase HW-01 P10 | 31m | 2 tasks | 11 files |

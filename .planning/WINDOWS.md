@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 0
 waived_count: 0
-fixed_count: 6
-total_count: 6
-last_updated: 2026-08-26T11:54:42.388Z
+fixed_count: 7
+total_count: 7
+last_updated: 2026-08-26T12:05:47.435Z
 ---
 
 # Broken Windows Ledger
@@ -21,6 +21,7 @@ last_updated: 2026-08-26T11:54:42.388Z
 | 4 | HW-01 | deviation | src/totem/hardware/runtime/lifecycle.py |  | Corrected idempotent-close re-entry deadlock. | fixed |  | 2026-08-26T11:54:37.356Z | 2026-08-26T11:54:42.274Z |
 | 5 | HW-01 | deviation | src/totem/hardware/runtime/lifecycle.py |  | Made aggregate lifecycle snapshots and event snapshots fully immutable. | fixed |  | 2026-08-26T11:54:37.414Z | 2026-08-26T11:54:42.331Z |
 | 6 | HW-01 | deviation | src/totem/hardware/hosts/worker.py |  | Reject unknown binding IDs before worker provider dispatch. | fixed |  | 2026-08-26T11:54:37.471Z | 2026-08-26T11:54:42.388Z |
+| 7 | HW-01 | deviation | tests/unit/hardware_runtime/test_conformance.py |  | Fixture import marker cleanup retained for package-boundary test isolation | fixed |  | 2026-08-26T12:05:30.497Z | 2026-08-26T12:05:47.435Z |
 
 ````json
 [
@@ -95,6 +96,18 @@ last_updated: 2026-08-26T11:54:42.388Z
     "reason": "",
     "recorded_at": "2026-08-26T11:54:37.471Z",
     "resolved_at": "2026-08-26T11:54:42.388Z"
+  },
+  {
+    "id": 7,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": "tests/unit/hardware_runtime/test_conformance.py",
+    "line": null,
+    "description": "Fixture import marker cleanup retained for package-boundary test isolation",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T12:05:30.497Z",
+    "resolved_at": "2026-08-26T12:05:47.435Z"
   }
 ]
 ````

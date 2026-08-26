@@ -28,6 +28,7 @@ working environment.
 ## Journal index
 
 | Date | Summary |
+| [2026-08-26 — in-process host and dual-host conformance](journal/2026-08-26.md#in-process-host-and-dual-host-conformance) | Added explicit same-contract in-process hosting, cancellation contamination/lease retention, execution-mode precedence, and public dual-host transcript conformance; all 230 local unit tests passed without hardware contact. |
 |------|---------|
 | [2026-08-26 — explicit lifecycle and process supervision](journal/2026-08-26.md#explicit-lifecycle-and-process-supervision) | Added immutable lifecycle/health/events, generation-aware grouped process recovery, confirmed-death lease release, bounded backoff, and quarantine; all 224 local unit tests passed without hardware contact. |
 | [2026-08-26 — atomic resource brokerage](journal/2026-08-26.md#atomic-resource-brokerage) | Added normalized all-or-none generation-scoped resource leases, explicit sharing policy, token-authorized release, and credential-redacted diagnostics; all 215 local unit tests passed without hardware contact. |
