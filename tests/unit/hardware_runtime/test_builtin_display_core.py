@@ -73,7 +73,10 @@ def _profile() -> DeviceProfile:
                 {
                     "kind": "display",
                     "identifier": "panel",
-                    "evidence": {"variant": "waveshare-2in13-v4"},
+                    "evidence": {
+                        "family": "waveshare-2in13",
+                        "variant": "waveshare-2in13-v4",
+                    },
                 }
             ]
         },

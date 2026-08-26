@@ -5,7 +5,7 @@
   "provider_version": "0.2.0",
   "capabilities": ["display.frame-sink@1"],
   "predicates": [
-    {"fact": "display.panel.variant", "equals": "waveshare-2in13-v4"}
+    {"fact": "display.panel.family", "equals": "waveshare-2in13"}
   ],
   "config_schema": {
     "host_mode": {"type": "string", "enum": ["process", "in_process"]},
