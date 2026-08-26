@@ -9,6 +9,11 @@ from typing import Dict, Optional, Tuple
 from totem_driver_api.lifecycle import LifecycleEvent
 
 
+# The driver API event already carries only typed lifecycle fields.  These
+# aliases make that transport-neutral contract discoverable from runtime.
+RuntimeEvent = LifecycleEvent
+
+
 class RuntimeEventStream:
     """Ordered history plus bounded lossy subscriber queues.
 

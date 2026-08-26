@@ -12,6 +12,7 @@ from totem.hardware.capabilities.base import CapabilityUnavailable
 from totem.hardware.runtime.bindings import BindingRecord
 from totem.hardware.runtime.broker import ResourceBroker
 from totem.hardware.runtime.runtime import HardwareRuntime, RuntimeOwnershipError
+from totem.hardware.runtime.supervisor import DriverSupervisor, RestartPolicy
 
 
 @dataclass
@@ -19,6 +20,7 @@ class _Host:
     leases: tuple[object, ...]
     generation: int
     fail_ready: bool = False
+    fail_request: bool = False
     closed: bool = False
 
     def await_ready(self, _deadline: float) -> dict[str, object]:
@@ -31,6 +33,8 @@ class _Host:
         }
 
     def request(self, message: Mapping[str, object], **_kwargs: object) -> dict[str, object]:
+        if self.fail_request:
+            raise TimeoutError("injected operation failure")
         return {"id": message["id"], "binding_id": message["binding_id"], "generation": self.generation}
 
     def invalidate_correlations(self) -> None:
@@ -130,3 +134,30 @@ def test_optional_failure_degrades_but_required_failure_gates_readiness_and_hand
     required_failure.start()
     assert required_failure.health().ready is False
     required_failure.close()
+
+
+def test_runtime_quarantine_makes_an_existing_handle_unavailable() -> None:
+    binding = _binding("display.frame-sink@1", "display")
+
+    runtime = HardwareRuntime(
+        (binding,),
+        broker=ResourceBroker(),
+        host_factory=lambda leases, generation: _Host(leases, generation, fail_request=True),
+        lifespan=object(),
+        supervisor_factory=lambda broker, host_factory: DriverSupervisor(
+            broker,
+            host_factory,
+            policy=RestartPolicy(max_failures=1),
+            sleep=lambda _delay: None,
+        ),
+    )
+    runtime.start()
+    handle = runtime.handle("display.frame-sink@1", "display")
+
+    with pytest.raises(CapabilityUnavailable):
+        handle.dispatch({"type": "display.frame.write", "id": "timeout"})
+
+    health = runtime.health()
+    assert health.bindings["display"].quarantined is True
+    assert health.ready is False
+    runtime.close()
