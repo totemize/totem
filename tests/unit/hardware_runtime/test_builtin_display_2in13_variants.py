@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Iterable, List, Tuple
 
 import pytest
@@ -59,13 +61,13 @@ class RecordingGpio:
 
 
 VARIANTS = (
-    ("waveshare_2in13", "spi-gpio"),
-    ("waveshare_2in13_pi5", "pi5-hardware-cs"),
-    ("waveshare_2in13_pi5_sw_cs", "pi5-software-cs"),
-    ("waveshare_2in13_v1", "spi-gpio"),
-    ("waveshare_2in13_v2", "spi-gpio"),
-    ("waveshare_2in13_v3", "spi-gpio"),
-    ("waveshare_2in13_v4", "spi-gpio"),
+    ("waveshare_2in13", "spi-gpio", 0),
+    ("waveshare_2in13_pi5", "pi5-hardware-cs", 3_984),
+    ("waveshare_2in13_pi5_sw_cs", "pi5-software-cs", 3_984),
+    ("waveshare_2in13_v1", "spi-gpio", 3_984),
+    ("waveshare_2in13_v2", "spi-gpio", 0),
+    ("waveshare_2in13_v3", "spi-gpio", 3_984),
+    ("waveshare_2in13_v4", "spi-gpio", 3_984),
 )
 
 
@@ -79,12 +81,27 @@ def _provider_variant_names() -> set[str]:
 
 
 def test_provider_owns_an_exhaustive_2in13_variant_inventory() -> None:
-    assert _provider_variant_names() == {name for name, _transport in VARIANTS}
+    assert _provider_variant_names() == {name for name, _transport, _offset in VARIANTS}
 
 
-@pytest.mark.parametrize("module_name, transport_kind", VARIANTS)
+@pytest.mark.parametrize("module_name, _transport_kind, _offset", VARIANTS)
+def test_variant_imports_do_not_load_hardware_libraries_or_legacy_owner(
+    module_name: str, _transport_kind: str, _offset: int
+) -> None:
+    qualified_name = "totem.hardware.builtin.display.drivers.{0}".format(module_name)
+    hardware_modules = ("spidev", "gpiod", "RPi.GPIO")
+    before = {name for name in hardware_modules if name in sys.modules}
+    sys.modules.pop(qualified_name, None)
+
+    module = importlib.import_module(qualified_name)
+
+    assert {name for name in hardware_modules if name in sys.modules} == before
+    assert "totem.devices" not in Path(module.__file__).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("module_name, transport_kind, black_pixel_offset", VARIANTS)
 def test_variant_contract_uses_only_injected_mock_transports(
-    module_name: str, transport_kind: str
+    module_name: str, transport_kind: str, black_pixel_offset: int
 ) -> None:
     module = importlib.import_module(
         "totem.hardware.builtin.display.drivers.{0}".format(module_name)
@@ -99,9 +116,25 @@ def test_variant_contract_uses_only_injected_mock_transports(
     assert spi.writes == []
     assert gpio.outputs == []
 
-    frame = panel.getbuffer(Image.new("1", (250, 122), 1))
+    image = Image.new("1", (250, 122), 1)
+    image.putpixel((0, 0), 0)
+    frame = panel.getbuffer(image)
     assert len(frame) == panel.FRAME_BYTES == 4_000
+    assert frame[black_pixel_offset] == 0x7F
 
     panel.init()
     assert spi.opened == [(0, 0)]
     assert spi.writes
+
+
+def test_software_chip_select_wraps_each_spi_transfer() -> None:
+    module = importlib.import_module(
+        "totem.hardware.builtin.display.drivers.waveshare_2in13_pi5_sw_cs"
+    )
+    spi, gpio = RecordingSpi(), RecordingGpio()
+    panel = module.Driver(spi=spi, gpio=gpio, sleep=lambda _seconds: None)
+
+    panel.send_command(0x12)
+
+    assert gpio.outputs == [(panel.cs_pin, gpio.LOW), (panel.dc_pin, gpio.LOW), (panel.cs_pin, gpio.HIGH)]
+    assert spi.writes == [[0x12]]
