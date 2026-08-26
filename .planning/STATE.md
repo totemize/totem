@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-28-PLAN.md integration repairs
-last_updated: "2026-08-26T17:33:48.814Z"
+stopped_at: Completed HW-01-29-PLAN.md
+last_updated: "2026-08-26T17:41:08.036Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 28
+  completed_plans: 29
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 28 of 33
+Plan: 29 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [█████████░] 85%
+Progress: ░░░░░░░░░░ [█████████░] 88%
 
 ## Accumulated Context
 
@@ -113,6 +113,7 @@ Progress: ░░░░░░░░░░ [█████████░] 85%
 - [Phase ?]: Legacy registry records derive only from catalog metadata and can request only existing canonical runtime handles.
 - [Phase ?]: DriverState aliases public BindingState; DeviceDriver no longer infers lifecycle, mock state, or ownership.
 - [Phase ?]: Legacy manager integration tests use explicit local client fakes; tests do not construct direct mock drivers through manager facades.
+- [Phase ?]: Display and UPS selection names are inert compatibility configuration; lifecycle methods stay facade-local while operations use the shared canonical client.
 
 ### Roadmap Evolution
 
@@ -129,8 +130,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T17:33:48.806Z
-Stopped at: Completed HW-01-28-PLAN.md integration repairs
+Last session: 2026-08-26T17:41:08.029Z
+Stopped at: Completed HW-01-29-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -165,3 +166,4 @@ Resume file: None
 | Phase HW-01 P26 | 25min | 1 tasks | 9 files |
 | Phase HW-01 P27 | 8m | 1 tasks | 7 files |
 | Phase HW-01 P28 | 18m | 1 tasks | 5 files |
+| Phase HW-01 P29 | 2m | 1 tasks | 4 files |

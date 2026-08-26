@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 1
 waived_count: 0
-fixed_count: 21
-total_count: 22
-last_updated: 2026-08-26T17:27:32.892Z
+fixed_count: 22
+total_count: 23
+last_updated: 2026-08-26T17:41:34.656Z
 ---
 
 # Broken Windows Ledger
@@ -37,6 +37,7 @@ last_updated: 2026-08-26T17:27:32.892Z
 | 20 | HW-01 | deviation | src/totem/api/app.py |  | UPS action identity and runtime event projection correction recorded in 01-26 summary | fixed |  | 2026-08-26T16:03:16.626Z | 2026-08-26T16:03:41.967Z |
 | 21 | HW-01 | deviation | src/totem/compat/hardware_client.py |  | Completed canonical client action translations required for client-only manager delegation. | fixed |  | 2026-08-26T16:14:42.971Z | 2026-08-26T16:14:58.047Z |
 | 22 | HW-01 | deviation | tests/unit/test_mock_transports.py |  | Replaced stale direct-manager mock fixtures with explicit local client fakes. | fixed |  | 2026-08-26T17:27:32.820Z | 2026-08-26T17:27:32.892Z |
+| 23 | HW-01 | deviation | .journey/journal/2026-08-26.md |  | Recorded the AGENTS.md-required Plan 01-29 session journal entry. | fixed |  | 2026-08-26T17:41:07.720Z | 2026-08-26T17:41:34.656Z |
 
 ````json
 [
@@ -303,6 +304,18 @@ last_updated: 2026-08-26T17:27:32.892Z
     "reason": "",
     "recorded_at": "2026-08-26T17:27:32.820Z",
     "resolved_at": "2026-08-26T17:27:32.892Z"
+  },
+  {
+    "id": 23,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": ".journey/journal/2026-08-26.md",
+    "line": null,
+    "description": "Recorded the AGENTS.md-required Plan 01-29 session journal entry.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T17:41:07.720Z",
+    "resolved_at": "2026-08-26T17:41:34.656Z"
   }
 ]
 ````
