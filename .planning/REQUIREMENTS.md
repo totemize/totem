@@ -109,7 +109,7 @@ without editing Totem core or destabilizing existing capabilities.
   advertising, GATT, and L2CAP are separate capability services coordinated by
   shared radio resources.
 
-- [ ] **API-03**: The screen application depends on narrow display, power, and
+- [x] **API-03**: The screen application depends on narrow display, power, and
   health ports rather than a multi-purpose object named as a display manager.
 
 - [x] **API-04**: Existing Python import paths, CLI commands, HTTP routes,

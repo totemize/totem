@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 4
 waived_count: 0
-fixed_count: 14
-total_count: 18
-last_updated: 2026-08-26T15:11:10.041Z
+fixed_count: 15
+total_count: 19
+last_updated: 2026-08-26T15:49:55.994Z
 ---
 
 # Broken Windows Ledger
@@ -33,6 +33,7 @@ last_updated: 2026-08-26T15:11:10.041Z
 | 16 | HW-01 | deviation | tests/unit/hardware_runtime/test_radio_resources.py |  | Corrected TDD capability identity assertion to use CapabilityId name and major fields. | fixed |  | 2026-08-26T14:21:20.607Z | 2026-08-26T14:22:11.760Z |
 | 17 | HW-01 | deviation | src/totem/hardware/catalog/manifests.py |  | Provider-local manifest lookup was required for Bluetooth discovery beside Wi-Fi. | fixed |  | 2026-08-26T15:10:19.645Z | 2026-08-26T15:11:09.986Z |
 | 18 | HW-01 | deviation | src/totem/devices/network/network.py |  | Canonical radio interface bridge was required for deterministic legacy mock-manager coverage. | fixed |  | 2026-08-26T15:10:19.699Z | 2026-08-26T15:11:10.041Z |
+| 19 | HW-01 | deviation | src/totem/hardware/api/bus.py |  | Added canonical status and power dispatch so screen readiness can avoid the legacy health route. | fixed |  | 2026-08-26T15:49:42.842Z | 2026-08-26T15:49:55.994Z |
 
 ````json
 [
@@ -251,6 +252,18 @@ last_updated: 2026-08-26T15:11:10.041Z
     "reason": "",
     "recorded_at": "2026-08-26T15:10:19.699Z",
     "resolved_at": "2026-08-26T15:11:10.041Z"
+  },
+  {
+    "id": 19,
+    "kind": "deviation",
+    "phase": "HW-01",
+    "file": "src/totem/hardware/api/bus.py",
+    "line": null,
+    "description": "Added canonical status and power dispatch so screen readiness can avoid the legacy health route.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-26T15:49:42.842Z",
+    "resolved_at": "2026-08-26T15:49:55.994Z"
   }
 ]
 ````
