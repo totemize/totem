@@ -81,6 +81,7 @@ status: complete
 
 - Published a package-data Wi-Fi declaration, catalog entry point, and side-effect-free provider factory.
 - Relocated the NetworkManager, mock, onboard, USB, and NAN Wi-Fi implementations under built-in radio ownership.
+- Promoted Wi-Fi's shared models, errors, parsers, D-Bus runtime, and session interface into canonical hardware ownership.
 - Preserved deterministic station, hotspot, P2P, and Aware behavior and added local-only dual-host conformance coverage.
 - Added worker and in-process dispatch for the versioned Wi-Fi contracts, with service/interface/PHY validation before driver work.
 
@@ -93,6 +94,7 @@ status: complete
 
 - `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_builtin_wifi.py tests/unit/test_radio_primitives.py -k 'wifi or nan' -x` — 12 passed.
 - `.venv/bin/python -m pytest tests/unit/hardware_runtime/test_process_host.py tests/unit/hardware_runtime/test_in_process_host.py tests/unit/hardware_runtime/test_radio_resources.py tests/unit/hardware_runtime/test_radio_shared_support.py -x` — 23 passed.
+- `.venv/bin/python -m pytest tests/unit/hardware_runtime -x -q --tb=short` — 170 passed.
 - `.venv/bin/python -m compileall -q src/totem/hardware/builtin/radio src/totem/hardware/hosts` and `git diff --check` — passed.
 - `black --check` was unavailable in `.venv`; it was not a plan verification gate.
 
@@ -101,6 +103,7 @@ status: complete
 - `src/totem/hardware/builtin/radio/wifi_provider.py` — Validates leased facts, manages one Wi-Fi session's local lifecycle, and maps session actions to public contracts.
 - `src/totem/hardware/builtin/radio/{wifi-manifest.json,totem-driver-manifest.json}` — Data-only Wi-Fi provider declarations, including catalog-compatible package metadata.
 - `src/totem/hardware/builtin/radio/{nan.py,drivers/}` — Canonical NetworkManager, mock, onboard, USB, and NAN behavior.
+- `src/totem/hardware/builtin/radio/{capabilities.py,dbus_runtime.py,errors.py,models.py,network.py}` — Canonical shared Wi-Fi dependencies with no legacy owner imports.
 - `src/totem/hardware/hosts/{in_process.py,worker.py}` — Matching Wi-Fi logical dispatch for both host implementations.
 - `tests/unit/hardware_runtime/test_builtin_wifi.py` — Import boundary, claim validation, session, lifecycle, coexistence, and dual-host fixture tests.
 
@@ -130,10 +133,18 @@ status: complete
 - **Verification:** Dual-host Wi-Fi transcript and existing host suites passed.
 - **Committed in:** `a5ea324`.
 
+**3. [Rule 1 - Bug] Removed canonical imports of legacy device owners**
+- **Found during:** Post-task hardware-runtime integration gate.
+- **Issue:** The relocated built-in Wi-Fi modules still imported `totem.devices` models, errors, parsers, D-Bus runtime, and session base, violating the canonical ownership boundary.
+- **Fix:** Moved the shared radio dependencies into `totem.hardware.builtin.radio`, repointed every canonical Wi-Fi module, and retained the legacy error path as a compatibility re-export.
+- **Files modified:** `src/totem/hardware/builtin/radio/{capabilities.py,dbus_runtime.py,errors.py,models.py,network.py,nan.py,drivers/}`, `src/totem/devices/network/errors.py`.
+- **Verification:** Import-boundary test and all 170 hardware-runtime tests passed.
+- **Committed in:** `d1828ee`.
+
 ---
 
-**Total deviations:** 2 auto-fixed (1 Rule 2 missing critical, 1 Rule 3 blocking).
-**Impact on plan:** Both changes are required to make the requested provider discoverable and behaviorally identical under the established host contract.
+**Total deviations:** 3 auto-fixed (1 Rule 1 bug, 1 Rule 2 missing critical, 1 Rule 3 blocking).
+**Impact on plan:** All fixes are required to preserve the provider's discovery, host parity, and one-way canonical ownership boundary.
 
 ## Issues Encountered
 
@@ -160,3 +171,4 @@ None - no external service configuration required.
 
 - Found every declared provider, manifest, relocated session, and focused test file on disk.
 - Found TDD commits `00c3d38` and `a5ea324` in git history.
+- Found post-task canonical-ownership repair `d1828ee` in git history.

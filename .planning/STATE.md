@@ -5,8 +5,8 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-20-PLAN.md
-last_updated: "2026-08-26T14:35:44.560Z"
+stopped_at: Completed HW-01-20 integration repair
+last_updated: "2026-08-26T14:47:10.920Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
@@ -93,6 +93,7 @@ Progress: ░░░░░░░░░░ [██████░░░░] 61%
 - [Phase ?]: Provider-side D-Bus support accepts an injected call seam and names services only; it owns neither a bus connection nor a backend session.
 - [Phase ?]: Wi-Fi validates leased NetworkManager service, interface, and PHY facts before driver composition; caller payloads never select identities.
 - [Phase ?]: The existing catalog filename remains authoritative, so the requested Wi-Fi declaration is accompanied by a package-discoverable totem-driver-manifest.json copy.
+- [Phase ?]: Canonical Wi-Fi modules own their shared radio models, errors, parsers, D-Bus runtime, and session interface; legacy errors are compatibility-only re-exports.
 
 ### Roadmap Evolution
 
@@ -109,8 +110,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T14:35:44.554Z
-Stopped at: Completed HW-01-20-PLAN.md
+Last session: 2026-08-26T14:47:10.913Z
+Stopped at: Completed HW-01-20 integration repair
 Resume file: None
 
 ## Performance Metrics
