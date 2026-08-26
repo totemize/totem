@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 1
 current_phase_name: Capability-Oriented Hardware Runtime
 status: executing
-stopped_at: Completed HW-01-07-PLAN.md
-last_updated: "2026-08-26T11:41:34.994Z"
+stopped_at: Completed HW-01-09-PLAN.md
+last_updated: "2026-08-26T11:54:37.922Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 33
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -29,11 +29,11 @@ without editing Totem core or destabilizing existing capabilities.
 ## Current Position
 
 Phase: 1 (Capability-Oriented Hardware Runtime) — EXECUTING
-Plan: 8 of 33
+Plan: 9 of 33
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 1 execution started
 
-Progress: ░░░░░░░░░░ [██░░░░░░░░] 24%
+Progress: ░░░░░░░░░░ [███░░░░░░░] 27%
 
 ## Accumulated Context
 
@@ -66,6 +66,9 @@ Progress: ░░░░░░░░░░ [██░░░░░░░░] 24%
 - [Phase HW-01]: Explicit bindings select a provider only after capability, config, prerequisite, and resource validation.
 - [Phase ?]: Resource broker atomically grants normalized claim sets or none, with deterministic conflict owners.
 - [Phase ?]: Lease release requires the active binding, generation, and opaque owner token; snapshots redact credentials.
+- [Phase ?]: Lifecycle transitions are explicit and locked; required readiness is derived independently from optional binding degradation.
+- [Phase ?]: Process lease release requires invalidation, terminate-or-kill, confirmed exit, and carrier closure before broker release.
+- [Phase ?]: Provider identity/version is the default process group; per-binding grouping is an explicit manifest override.
 
 ### Roadmap Evolution
 
@@ -82,8 +85,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-26T11:41:34.987Z
-Stopped at: Completed HW-01-07-PLAN.md
+Last session: 2026-08-26T11:54:37.914Z
+Stopped at: Completed HW-01-09-PLAN.md
 Resume file: None
 
 ## Performance Metrics
@@ -98,3 +101,4 @@ Resume file: None
 | Phase HW-01-capability-oriented-hardware-runtime P08 | 24m | 2 tasks | 8 files |
 | Phase HW-01 P06 | 8min | 1 tasks | 8 files |
 | Phase HW-01 P07 | 7m | 1 tasks | 2 files |
+| Phase HW-01 P09 | 40m | 2 tasks | 12 files |

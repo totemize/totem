@@ -61,7 +61,7 @@ without editing Totem core or destabilizing existing capabilities.
 
 ### Driver execution and supervision
 
-- [ ] **ISO-01**: Drivers execute in a supervised child process by default, and
+- [x] **ISO-01**: Drivers execute in a supervised child process by default, and
   default mode does not import third-party driver code into the daemon process.
 
 - [ ] **ISO-02**: An operator can select in-process execution globally or for a
@@ -76,7 +76,7 @@ without editing Totem core or destabilizing existing capabilities.
   serialization format; a carrier encoding may change without changing the
   logical NIP-5D-shaped envelope.
 
-- [ ] **ISO-05**: The process supervisor enforces startup and operation
+- [x] **ISO-05**: The process supervisor enforces startup and operation
   deadlines, hard termination, crash detection, bounded restart backoff,
   quarantine, and resource release only after child death is confirmed.
 
@@ -85,12 +85,12 @@ without editing Totem core or destabilizing existing capabilities.
   rejects new work, retains every resource lease, and requires controlled
   daemon restart; native process-fatal failure is an accepted opt-in risk.
 
-- [ ] **ISO-07**: Isolated hosts receive only declared resources and privileges;
+- [x] **ISO-07**: Isolated hosts receive only declared resources and privileges;
   runtime process isolation is documented separately from package trust.
 
 ### Lifecycle and resources
 
-- [ ] **RUN-01**: Every binding exposes explicit lifecycle states from discovery
+- [x] **RUN-01**: Every binding exposes explicit lifecycle states from discovery
   through binding, startup, readiness/degradation, shutdown, failure, and close.
 
 - [x] **RUN-02**: A resource broker detects conflicts across GPIO, SPI, I2C,
