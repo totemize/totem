@@ -1,0 +1,48 @@
+# Generated resolver evidence and per-provider settings.  This file is the
+# service's typed startup contract, not a driver registry.
+[global]
+
+[global.hardware_facts]
+"wifi.family" = "builtin"
+"bluetooth.family" = "builtin"
+"storage.family" = "builtin"
+"resource.dbus.org.freedesktop.networkmanager" = "present"
+"resource.dbus.org.bluez" = "present"
+"resource.interface.wlan0" = "present"
+"resource.interface.hci0" = "present"
+"resource.phy.phy0" = "present"
+"resource.path.storage-root" = "present"
+"resource.mount.storage-mount" = "present"
+"resource.block.storage-block" = "present"
+{% if totem_eink_driver | length > 0 %}
+"display.panel.family" = "waveshare-2in13"
+"resource.gpio.bcm:17,18,24,25" = "present"
+"resource.spi.spi0.0" = "present"
+{% endif %}
+{% if totem_ups_driver | length > 0 %}
+"power.ups.family" = "builtin"
+"resource.i2c.1" = "present"
+{% endif %}
+
+[plugins."builtin.wifi"]
+interface = "wlan0"
+phy = "phy0"
+
+[plugins."builtin.bluetooth"]
+adapter = "hci0"
+phy = "phy0"
+
+[plugins."builtin.storage"]
+storage_model = "filesystem"
+storage_root_ref = "/var/lib/totem/storage"
+{% if totem_eink_driver | length > 0 %}
+
+[plugins."builtin.display"]
+panel_variant = "{{ totem_eink_driver | replace('_', '-') }}"
+{% endif %}
+{% if totem_ups_driver | length > 0 %}
+
+[plugins."builtin.power"]
+power_model = "{{ totem_ups_driver }}"
+i2c_address = "{% if totem_ups_driver == 'pisugar2' %}0x75{% else %}0x43{% endif %}"
+{% endif %}

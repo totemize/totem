@@ -151,6 +151,17 @@
     - Restart device manager
     - Restart screen state service
 
+- name: Install typed hardware runtime composition
+  ansible.builtin.template:
+    src: totem-hardware.toml.j2
+    dest: /etc/totem/hardware.toml
+    owner: root
+    group: totem
+    mode: "0640"
+  notify:
+    - Restart device manager
+    - Restart screen state service
+
 - name: Install least-privilege NetworkManager radio authorization
   ansible.builtin.template:
     src: 50-totem-radio.rules.j2

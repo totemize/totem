@@ -17,6 +17,7 @@ from totem.hardware.catalog.diagnostics import CatalogDiagnostic
 
 _SECRET_FIELDS = ("credential", "secret", "token", "password")
 _SECRET_KINDS = {"credential", "file", "inherited_descriptor"}
+_RUNTIME_ONLY_GLOBALS = frozenset({"hardware_facts", "no_hardware"})
 
 
 class ConfigValidationError(ValueError):
@@ -129,7 +130,14 @@ class RuntimeConfig:
                 _diagnostic("binding_plugin_mismatch", manifest.provider_id, binding_id, "plugin")
             )
         values = dict(manifest.defaults)
-        values.update(self.global_settings)
+        # Startup evidence controls resolver composition; it is never a
+        # provider setting and therefore must not be validated by every
+        # independently released manifest.
+        values.update(
+            (key, value)
+            for key, value in self.global_settings.items()
+            if key not in _RUNTIME_ONLY_GLOBALS
+        )
         plugin = next((item for item in self.plugins if item.plugin_id == manifest.provider_id), None)
         if plugin is not None:
             values.update(plugin.settings)

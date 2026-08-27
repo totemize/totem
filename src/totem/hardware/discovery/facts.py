@@ -93,7 +93,12 @@ class HardwareFacts:
 
     def supports(self, claim: ResourceClaim) -> bool:
         """Match provider resources only to exact observed resource facts."""
-
-        return self.value_for("resource.{}".format(claim.kind)) == _normalize(
-            claim.identifier, "resource identifier"
+        identifier = _normalize(claim.identifier, "resource identifier")
+        # The original compact spelling remains accepted for a single
+        # resource kind.  The keyed spelling permits a device to report more
+        # than one resource of the same kind (for example NetworkManager and
+        # BlueZ D-Bus names) without a lossy model-specific branch.
+        return (
+            self.value_for("resource.{}".format(claim.kind)) == identifier
+            or self.value_for("resource.{}.{}".format(claim.kind, identifier)) == "present"
         )
