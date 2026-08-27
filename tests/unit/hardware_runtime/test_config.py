@@ -75,6 +75,18 @@ def test_binding_plugin_global_and_manifest_defaults_have_exact_precedence() -> 
     ).effective_settings(_manifest(), "display.none").to_json_value()["timeout"] == 10
 
 
+def test_runtime_only_composition_fields_do_not_leak_into_provider_settings() -> None:
+    effective = RuntimeConfig(
+        global_settings={
+            "hardware_facts": {"resource.spi": "spi0.0"},
+            "no_hardware": False,
+            "timeout": 10,
+        }
+    ).effective_settings(_manifest(), "display.none")
+
+    assert effective.to_json_value() == {"host_mode": "process", "timeout": 10}
+
+
 def test_invalid_sibling_binding_is_isolated_and_diagnostics_redact_secret_values() -> None:
     secret_value = "do-not-leak-this-credential"
     runtime = RuntimeConfig(

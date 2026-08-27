@@ -41,7 +41,7 @@ def test_radio_status_routes_translate_to_independent_canonical_actions():
 
     assert discovery.json() == {"session_id": "scan-1"}
     assert [call["type"] for call in bus.calls] == [
-        "radio.wifi.hotspot.create", "radio.wifi.connection.create",
+        "wifi.connection.hotspot", "wifi.connection.connect",
         "radio.wifi.p2p.discovery.create", "radio.bluetooth.discovery.create",
     ]
 

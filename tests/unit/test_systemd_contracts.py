@@ -27,6 +27,13 @@ def test_package_scripts_and_systemd_service_identities_are_preserved() -> None:
     assert 'totem-screen = "totem.screen.__main__:main"' in package
     assert "User=totem" in api_unit and "Group=totem" in api_unit
     assert "ExecStart=/opt/totem/.venv/bin/totem --host 0.0.0.0 --port 8000" in api_unit
+    assert "--config /etc/totem/hardware.toml" in api_unit
+    hardware_template = (
+        ROOT / "deploy" / "ansible" / "roles" / "device_manager" / "templates" / "totem-hardware.toml.j2"
+    ).read_text(encoding="utf-8")
+    assert "[global.hardware_facts]" in hardware_template
+    assert '"resource.dbus.org.freedesktop.networkmanager" = "present"' in hardware_template
+    assert '"resource.dbus.org.bluez" = "present"' in hardware_template
     assert "Requires=totem.service" in screen_unit
     assert "After=totem.service" in screen_unit
     assert "Before=fips.service strfry.service totemd.service" in screen_unit
