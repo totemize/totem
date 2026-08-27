@@ -10,7 +10,10 @@ validate and render the evidence.  Missing or inconsistent fields fail closed.
 from __future__ import annotations
 
 import argparse
+import base64
 from datetime import datetime, timezone
+import hashlib
+import hmac
 import json
 import math
 import sys
@@ -37,6 +40,66 @@ PINNED_WORKLOAD: Dict[str, object] = {
 
 class BenchmarkEvidenceError(ValueError):
     """Raised when a record cannot be used as Pi acceptance evidence."""
+
+
+def _canonical_bytes(value: object) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+
+
+def _digest(value: object) -> str:
+    return hashlib.sha256(_canonical_bytes(value)).hexdigest()
+
+
+def load_trusted_allocations(path: Path) -> Mapping[str, Mapping[str, str]]:
+    """Load controller-owned allocation identities and HMAC verification keys.
+
+    The trust store is intentionally separate from caller-provided evidence and
+    must remain controller-local.  It maps allocation id to target, device
+    identity, key id, and a base64 HMAC key provisioned to that allocated
+    device.  The key never appears in evidence or rendered acceptance output.
+    """
+
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BenchmarkEvidenceError("cannot load trusted allocation store") from exc
+    allocations = _mapping(value, "trusted_allocations").get("allocations")
+    if not isinstance(allocations, Mapping) or not allocations:
+        raise BenchmarkEvidenceError("trusted allocation store has no allocations")
+    normalized: dict[str, Mapping[str, str]] = {}
+    for allocation, record in allocations.items():
+        allocation_id = _string(allocation, "trusted allocation id")
+        item = _mapping(record, "trusted allocation")
+        fields = {name: _string(item.get(name), "trusted allocation.{}".format(name)) for name in ("target", "device_identity", "key_id", "hmac_key_b64")}
+        try:
+            if not base64.b64decode(fields["hmac_key_b64"], validate=True):
+                raise ValueError
+        except ValueError as exc:
+            raise BenchmarkEvidenceError("trusted allocation HMAC key is invalid") from exc
+        normalized[allocation_id] = fields
+    return normalized
+
+
+def attest_evidence(value: Mapping[str, object], *, hmac_key: bytes, key_id: str, runtime_build: str) -> Dict[str, object]:
+    """Bind a device-captured record to its workload and immutable payload.
+
+    This helper is executed by the allocated-device benchmark runner after its
+    measurement capture.  It never opens hardware itself; measurement code is
+    deliberately kept in the normal device runtime control path.
+    """
+
+    if not hmac_key or not isinstance(key_id, str) or not key_id or not isinstance(runtime_build, str) or not runtime_build:
+        raise BenchmarkEvidenceError("attestation inputs are invalid")
+    record = dict(value)
+    record.pop("attestation", None)
+    capture_sha256 = _digest(record)
+    body = {
+        "target": record.get("target"), "allocation": record.get("allocation"),
+        "device_identity": record.get("device_identity"), "workload_sha256": _digest(PINNED_WORKLOAD),
+        "runtime_build": runtime_build, "capture_sha256": capture_sha256,
+    }
+    signature = hmac.new(hmac_key, _canonical_bytes(body), hashlib.sha256).hexdigest()
+    return {**record, "attestation": {"algorithm": "hmac-sha256", "key_id": key_id, "workload_sha256": body["workload_sha256"], "runtime_build": runtime_build, "capture_sha256": capture_sha256, "signature": signature}}
 
 
 def _mapping(value: object, path: str) -> Mapping[str, object]:
@@ -86,7 +149,10 @@ def _reject_secret_values(value: object, path: str = "evidence") -> None:
             _reject_secret_values(nested, "{}[{}]".format(path, index))
 
 
-def validate_evidence(value: object, *, allow_synthetic: bool = False) -> Dict[str, object]:
+def validate_evidence(
+    value: object, *, trusted_allocations: Optional[Mapping[str, Mapping[str, str]]] = None,
+    allow_synthetic: bool = False,
+) -> Dict[str, object]:
     """Return a normalized complete run record or reject it before acceptance.
 
     A validated record represents a single grouping run.  Architecture-level
@@ -110,11 +176,11 @@ def validate_evidence(value: object, *, allow_synthetic: bool = False) -> Dict[s
         raise BenchmarkEvidenceError("captured_at must be an ISO-8601 timestamp") from exc
     if parsed_capture.tzinfo is None or parsed_capture > datetime.now(timezone.utc):
         raise BenchmarkEvidenceError("captured_at must be a past timestamp with timezone")
-    attestation = _mapping(evidence.get("attestation"), "attestation")
-    _string(attestation.get("operator"), "attestation.operator")
-    _string(attestation.get("device_identity"), "attestation.device_identity")
     target = _string(evidence.get("target"), "target")
     allocation = _string(evidence.get("allocation"), "allocation")
+    device_identity = _string(evidence.get("device_identity"), "device_identity")
+    if not allow_synthetic:
+        _verify_attestation(evidence, trusted_allocations, target, allocation, device_identity)
     architecture = _string(evidence.get("architecture"), "architecture")
     if architecture not in ARCHITECTURES:
         raise BenchmarkEvidenceError("architecture must be one of {}".format(", ".join(ARCHITECTURES)))
@@ -185,6 +251,35 @@ def validate_evidence(value: object, *, allow_synthetic: bool = False) -> Dict[s
     return dict(evidence)
 
 
+def _verify_attestation(
+    evidence: Mapping[str, object], trusted_allocations: Optional[Mapping[str, Mapping[str, str]]],
+    target: str, allocation: str, device_identity: str,
+) -> None:
+    if trusted_allocations is None:
+        raise BenchmarkEvidenceError("trusted allocation verification is required")
+    trusted = trusted_allocations.get(allocation)
+    if trusted is None or trusted.get("target") != target or trusted.get("device_identity") != device_identity:
+        raise BenchmarkEvidenceError("evidence target/allocation is not trusted")
+    attestation = _mapping(evidence.get("attestation"), "attestation")
+    if attestation.get("algorithm") != "hmac-sha256" or attestation.get("key_id") != trusted.get("key_id"):
+        raise BenchmarkEvidenceError("evidence attestation identity is not trusted")
+    signature = _string(attestation.get("signature"), "attestation.signature")
+    record = dict(evidence)
+    record.pop("attestation", None)
+    capture_sha256 = _digest(record)
+    if attestation.get("capture_sha256") != capture_sha256 or attestation.get("workload_sha256") != _digest(PINNED_WORKLOAD):
+        raise BenchmarkEvidenceError("evidence attestation digest does not match capture")
+    runtime_build = _string(attestation.get("runtime_build"), "attestation.runtime_build")
+    body = {"target": target, "allocation": allocation, "device_identity": device_identity, "workload_sha256": _digest(PINNED_WORKLOAD), "runtime_build": runtime_build, "capture_sha256": capture_sha256}
+    try:
+        key = base64.b64decode(trusted["hmac_key_b64"], validate=True)
+    except (KeyError, ValueError) as exc:
+        raise BenchmarkEvidenceError("trusted allocation HMAC key is invalid") from exc
+    expected = hmac.new(key, _canonical_bytes(body), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        raise BenchmarkEvidenceError("evidence attestation signature is invalid")
+
+
 def acceptance_row(evidence: Mapping[str, object]) -> Dict[str, object]:
     """Project one validated run into a credential-free human-table row."""
 
@@ -201,12 +296,15 @@ def acceptance_row(evidence: Mapping[str, object]) -> Dict[str, object]:
     }
 
 
-def architecture_acceptance(records: Iterable[Mapping[str, object]], architecture: str) -> Dict[str, object]:
+def architecture_acceptance(
+    records: Iterable[Mapping[str, object]], architecture: str, *,
+    trusted_allocations: Optional[Mapping[str, Mapping[str, str]]] = None,
+) -> Dict[str, object]:
     """Fail closed unless both required process-group measurements are complete."""
 
     if architecture not in ARCHITECTURES:
         raise BenchmarkEvidenceError("architecture must be one of {}".format(", ".join(ARCHITECTURES)))
-    complete = [validate_evidence(record) for record in records if record.get("architecture") == architecture]
+    complete = [validate_evidence(record, trusted_allocations=trusted_allocations) for record in records if record.get("architecture") == architecture]
     groupings = {str(record["grouping"]) for record in complete}
     missing = [grouping for grouping in GROUPINGS if grouping not in groupings]
     duplicates = sorted(grouping for grouping in groupings if sum(record["grouping"] == grouping for record in complete) != 1)
@@ -227,7 +325,7 @@ def _self_test_evidence() -> Dict[str, object]:
         "evidence_scope": "local-synthetic-only",
         "hardware_contacted": False,
         "captured_at": "2026-08-26T00:00:00+00:00",
-        "attestation": {"operator": "self-test", "device_identity": "synthetic"},
+        "device_identity": "synthetic",
         "target": "local-self-test",
         "allocation": "not-a-hardware-allocation",
         "architecture": "armv6l",
@@ -249,14 +347,14 @@ def _self_test_evidence() -> Dict[str, object]:
     }
 
 
-def _load_records(paths: Sequence[str]) -> list[Dict[str, object]]:
+def _load_records(paths: Sequence[str], *, trusted_allocations: Mapping[str, Mapping[str, str]]) -> list[Dict[str, object]]:
     records = []
     for raw_path in paths:
         try:
             value = json.loads(Path(raw_path).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise BenchmarkEvidenceError("cannot load evidence {}".format(raw_path)) from exc
-        records.append(validate_evidence(value))
+        records.append(validate_evidence(value, trusted_allocations=trusted_allocations))
     return records
 
 
@@ -267,6 +365,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--run-hardware", action="store_true", help="permit validation of explicit allocated-device evidence")
     parser.add_argument("--target", help="allocated device identifier; never discovered by this tool")
     parser.add_argument("--allocation", help="operator allocation/ticket identifier")
+    parser.add_argument("--trusted-allocations", help="controller-local allocation identity/key store")
     parser.add_argument("--evidence-json", action="append", default=[], help="captured evidence record; repeat for both groupings")
     args = parser.parse_args(argv)
     if args.self_test:
@@ -283,11 +382,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not args.evidence_json:
         parser.error("hardware validation requires at least one --evidence-json")
     try:
-        records = _load_records(args.evidence_json)
+        trusted_allocations = load_trusted_allocations(Path(_string(args.trusted_allocations, "--trusted-allocations")))
+        records = _load_records(args.evidence_json, trusted_allocations=trusted_allocations)
         for record in records:
             if record["target"] != target or record["allocation"] != allocation:
                 raise BenchmarkEvidenceError("target/allocation must match every evidence record")
-        matrix = [architecture_acceptance(records, architecture) for architecture in ARCHITECTURES]
+        matrix = [architecture_acceptance(records, architecture, trusted_allocations=trusted_allocations) for architecture in ARCHITECTURES]
     except BenchmarkEvidenceError as exc:
         parser.error(str(exc))
     print(json.dumps({"workload": PINNED_WORKLOAD, "acceptance_matrix": matrix}, sort_keys=True))
