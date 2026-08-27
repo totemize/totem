@@ -32,8 +32,13 @@ runtime workload on the allocated device.
 
 # Allocated-device evidence validation.  Repeat --evidence-json for provider
 # and binding grouping records from exactly this approved target/allocation.
+# The controller-local trust store is JSON: {"allocations": {"<ticket>":
+# {"target": "...", "device_identity": "...", "key_id": "...",
+# "hmac_key_b64": "..."}}}.  It is provisioned out of band and must not be
+# copied into an evidence file.
 .venv/bin/python scripts/benchmark_driver_host.py \
   --run-hardware --target <approved-target> --allocation <ticket> \
+  --trusted-allocations <controller-allocation-store.json> \
   --evidence-json provider.json --evidence-json binding.json
 ```
 

@@ -8,6 +8,7 @@ metadata before it can validate a captured device-evidence record.
 from __future__ import annotations
 
 import json
+import base64
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from scripts.benchmark_driver_host import (
     BenchmarkEvidenceError,
     architecture_acceptance,
     acceptance_row,
+    attest_evidence,
     validate_evidence,
 )
 
@@ -25,13 +27,23 @@ from scripts.benchmark_driver_host import (
 pytestmark = [pytest.mark.unit, pytest.mark.mock_transport]
 
 
+_TEST_HMAC_KEY = b"controller-safe-benchmark-test-key"
+
+
+def _trusted_allocations(architecture: str = "armv6l") -> dict[str, dict[str, str]]:
+    return {"ticket-{}".format(architecture): {
+        "target": "allocated-{}".format(architecture), "device_identity": "test-device-{}".format(architecture),
+        "key_id": "test-key-{}".format(architecture), "hmac_key_b64": base64.b64encode(_TEST_HMAC_KEY).decode("ascii"),
+    }}
+
+
 def _complete_evidence(architecture: str = "armv6l") -> dict[str, object]:
-    return {
+    record = {
         "schema_version": 1,
         "evidence_scope": "allocated-hardware",
         "hardware_contacted": True,
         "captured_at": "2026-08-26T00:00:00+00:00",
-        "attestation": {"operator": "test-operator", "device_identity": "test-device"},
+        "device_identity": "test-device-{}".format(architecture),
         "target": "allocated-{}".format(architecture),
         "allocation": "ticket-{}".format(architecture),
         "architecture": architecture,
@@ -54,6 +66,11 @@ def _complete_evidence(architecture: str = "armv6l") -> dict[str, object]:
         "worker_cleanup": {"workers_remaining": 0, "threads_remaining": 0, "sockets_remaining": 0},
         "rollback": {"procedure": "restore prior package and restart under operator control", "completed": True},
     }
+    return attest_evidence(record, hmac_key=_TEST_HMAC_KEY, key_id="test-key-{}".format(architecture), runtime_build="local-build")
+
+
+def _resign(record: dict[str, object], architecture: str = "armv6l") -> dict[str, object]:
+    return attest_evidence(record, hmac_key=_TEST_HMAC_KEY, key_id="test-key-{}".format(architecture), runtime_build="local-build")
 
 
 def test_pinned_workload_covers_both_grouping_cases_and_required_faults() -> None:
@@ -64,7 +81,7 @@ def test_pinned_workload_covers_both_grouping_cases_and_required_faults() -> Non
 
 
 def test_complete_evidence_is_accepted_and_has_a_human_row() -> None:
-    row = acceptance_row(validate_evidence(_complete_evidence()))
+    row = acceptance_row(validate_evidence(_complete_evidence(), trusted_allocations=_trusted_allocations()))
 
     assert row["run_complete"] is True
     assert row["architecture"] == "armv6l"
@@ -74,18 +91,20 @@ def test_complete_evidence_is_accepted_and_has_a_human_row() -> None:
 def test_missing_recovery_or_lease_evidence_cannot_be_accepted() -> None:
     evidence = _complete_evidence()
     evidence["post_death_leases"] = {"released": False, "remaining": 1}
+    evidence = _resign(evidence)
 
     with pytest.raises(BenchmarkEvidenceError, match="post_death_leases"):
-        validate_evidence(evidence)
+        validate_evidence(evidence, trusted_allocations=_trusted_allocations())
 
 
 def test_architecture_cannot_be_accepted_without_both_grouping_records() -> None:
     provider = _complete_evidence()
     binding = _complete_evidence()
     binding["grouping"] = "binding"
+    binding = _resign(binding)
 
-    pending = architecture_acceptance((provider,), "armv6l")
-    complete = architecture_acceptance((provider, binding), "armv6l")
+    pending = architecture_acceptance((provider,), "armv6l", trusted_allocations=_trusted_allocations())
+    complete = architecture_acceptance((provider, binding), "armv6l", trusted_allocations=_trusted_allocations())
 
     assert pending["accepted"] is False
     assert pending["missing_groupings"] == ["binding"]
@@ -95,19 +114,34 @@ def test_architecture_cannot_be_accepted_without_both_grouping_records() -> None
 def test_non_hardware_or_non_finite_or_duplicate_evidence_cannot_be_accepted() -> None:
     local = _complete_evidence()
     local["hardware_contacted"] = False
+    local = _resign(local)
     with pytest.raises(BenchmarkEvidenceError, match="hardware_contacted"):
-        validate_evidence(local)
+        validate_evidence(local, trusted_allocations=_trusted_allocations())
 
     non_finite = _complete_evidence()
     non_finite["startup_to_ready_ms"] = float("nan")
+    non_finite = _resign(non_finite)
     with pytest.raises(BenchmarkEvidenceError, match="finite"):
-        validate_evidence(non_finite)
+        validate_evidence(non_finite, trusted_allocations=_trusted_allocations())
 
     provider = _complete_evidence()
     duplicate = _complete_evidence()
-    result = architecture_acceptance((provider, duplicate), "armv6l")
+    result = architecture_acceptance((provider, duplicate), "armv6l", trusted_allocations=_trusted_allocations())
     assert result["accepted"] is False
     assert result["duplicate_groupings"] == ["provider"]
+
+
+def test_attestation_rejects_mismatched_allocation_or_signature() -> None:
+    evidence = _complete_evidence()
+    mismatched = dict(evidence)
+    mismatched["allocation"] = "other-ticket"
+    with pytest.raises(BenchmarkEvidenceError, match="not trusted"):
+        validate_evidence(mismatched, trusted_allocations=_trusted_allocations())
+    tampered = dict(evidence)
+    tampered["attestation"] = dict(evidence["attestation"])
+    tampered["attestation"]["signature"] = "00"
+    with pytest.raises(BenchmarkEvidenceError, match="signature"):
+        validate_evidence(tampered, trusted_allocations=_trusted_allocations())
 
 
 @pytest.mark.hardware
@@ -123,4 +157,4 @@ def test_allocated_hardware_evidence_is_explicit_and_pre_captured(tmp_path: Path
     loaded = json.loads(evidence_path.read_text(encoding="utf-8"))
     assert loaded["target"] == target
     assert loaded["allocation"] == allocation
-    assert validate_evidence(loaded)["architecture"] == "armv6l"
+    assert validate_evidence(loaded, trusted_allocations=_trusted_allocations())["architecture"] == "armv6l"
