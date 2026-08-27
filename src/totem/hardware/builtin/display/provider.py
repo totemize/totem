@@ -49,6 +49,25 @@ class FrameTransport(Protocol):
         """Submit one already-validated frame descriptor."""
 
 
+class _DriverFrameTransport:
+    """Keep raw carrier bytes in the child while the provider validates DTOs."""
+
+    def __init__(self, driver: object) -> None:
+        self._driver = driver
+        self._attachment: Optional[bytes] = None
+
+    def set_attachment(self, attachment: bytes) -> None:
+        self._attachment = attachment
+
+    def write_frame(self, _request: FrameSinkRequest) -> None:
+        if self._attachment is None:
+            raise ValueError("frame attachment is missing")
+        writer = getattr(self._driver, "display_bytes", None)
+        if not callable(writer):
+            raise DisplaySelectionError("display driver has no byte frame writer")
+        writer(self._attachment)
+
+
 class DisplayProvider:
     """Validate a selected 2.13 panel frame before touching its transport.
 
@@ -113,6 +132,9 @@ class DisplayProvider:
             )
             if not isinstance(attachments.get(request.attachment_id), bytes):
                 raise ValueError("frame attachment is missing")
+            setter = getattr(self._transport, "set_attachment", None)
+            if callable(setter):
+                setter(attachments[request.attachment_id])
             result = self.write_frame(request)
         except (KeyError, TypeError, ValueError):
             return {"ok": False, "error": {"code": "invalid_request"}}
@@ -131,7 +153,18 @@ def create_provider(bootstrap: object = None) -> DisplayProvider:
     if selected.capability_id != "display.frame-sink@1":
         raise DisplaySelectionError("display bootstrap capability is invalid")
     variant = selected.settings.get("panel_variant")
-    # Concrete panel transports are descriptor-owned and are deliberately not
-    # opened by this generic factory.  Explicit transport composition is
-    # injected by the provider's selected child implementation.
-    return DisplayProvider(variant=variant, claims=selected.claims)
+    modules = {
+        "waveshare-2in13": "waveshare_2in13_v2",
+        "waveshare-2in13-v1": "waveshare_2in13_v1",
+        "waveshare-2in13-v2": "waveshare_2in13_v2",
+        "waveshare-2in13-v3": "waveshare_2in13_v3",
+        "waveshare-2in13-v4": "waveshare_2in13_v4",
+        "waveshare-2in13-pi5": "waveshare_2in13_pi5",
+        "waveshare-2in13-pi5-sw-cs": "waveshare_2in13_pi5_sw_cs",
+    }
+    module_name = modules.get(variant.casefold() if isinstance(variant, str) else "")
+    if module_name is None:
+        raise DisplaySelectionError("display variant is not declared")
+    module = __import__("totem.hardware.builtin.display.drivers." + module_name, fromlist=["Driver"])
+    transport = _DriverFrameTransport(module.Driver())
+    return DisplayProvider(variant=variant, claims=selected.claims, transport=transport)
