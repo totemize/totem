@@ -6,20 +6,8 @@ import argparse
 import importlib
 import inspect
 import json
-import os
 import socket
 from typing import Any, Dict, Mapping
-
-from totem_driver_api.capabilities.display import FrameSinkRequest
-from totem_driver_api.capabilities.nfc import NfcWriteRequest
-from totem_driver_api.capabilities.power import PowerTelemetryRequest
-from totem_driver_api.capabilities.radio.wifi import WifiConnectRequest, WifiHotspotRequest
-from totem_driver_api.capabilities.radio.bluetooth import (
-    BluetoothAdvertisementRequest,
-    BluetoothConnectRequest,
-    BluetoothDiscoverRequest,
-)
-from totem_driver_api.capabilities.storage import StoragePath, StorageWriteRequest
 
 from .protocol import ProtocolError, receive_frame, send_frame
 
@@ -103,144 +91,29 @@ def main() -> int:
 
 
 def _dispatch(provider: Any, message: Dict[str, Any]) -> Dict[str, Any]:
+    """Invoke the provider-owned versioned SPI after generic validation.
+
+    This worker intentionally knows no capability family, provider model, or
+    action spelling.  Independently released providers extend the runtime by
+    implementing ``dispatch(message, attachments, context)``.
+    """
+
     request_id = message.get("id")
     if not isinstance(request_id, str) or not request_id:
         return _result(message, ok=False, error={"code": "invalid_request"})
     dispatch = getattr(provider, "dispatch", None)
-    wrapped_provider = getattr(provider, "_provider", provider)
-    if callable(dispatch) and callable(getattr(wrapped_provider, "dispatch", None)):
-        try:
-            response = dispatch(
-                dict(message),
-                dict(message.get("_attachments", {})),
-                {"binding_id": message.get("binding_id")},
-            )
-        except (TypeError, ValueError, AttributeError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-        if not isinstance(response, Mapping):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-        return _result(message, **dict(response))
-    message_type = message.get("type")
-    if message_type in ("power.telemetry.read", "power.telemetry.push"):
-        try:
-            PowerTelemetryRequest()
-            if message_type == "power.telemetry.read":
-                telemetry = provider.snapshot().to_json_value()
-            else:
-                telemetry = provider.telemetry_push().to_json_value()
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-        return _result(message, ok=True, telemetry=telemetry)
-    if message_type == "nfc.tag.read":
-        try:
-            return _result(message, ok=True, tag=provider.read().to_json_value())
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-    if message_type == "nfc.tag.write":
-        try:
-            request = NfcWriteRequest.from_json_value({"data_b64": message.get("data_b64")})
-            provider.write(request.data)
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-        return _result(message, ok=True, accepted=True)
-    if message_type == "nfc.tag.poll":
-        try:
-            return _result(message, ok=True, poll=provider.poll().to_json_value())
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-    if message_type == "storage.files.read":
-        try:
-            request = StoragePath(message.get("path"))
-            return _result(message, ok=True, file=provider.read(request.value).to_json_value())
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-    if message_type == "storage.files.write":
-        try:
-            request = StorageWriteRequest.from_json_value(
-                {"path": message.get("path"), "data_b64": message.get("data_b64")}
-            )
-            provider.write(request.path.value, request.data)
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-        return _result(message, ok=True, accepted=True)
-    if message_type == "storage.files.list":
-        try:
-            request = StoragePath(message.get("path", "."))
-            return _result(message, ok=True, files=provider.list(request.value).to_json_value())
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-    if message_type == "storage.files.delete":
-        try:
-            request = StoragePath(message.get("path"))
-            return _result(message, ok=True, deletion=provider.delete(request.value).to_json_value())
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-    if message_type == "wifi.connection.scan":
-        try:
-            return _result(message, ok=True, scan=provider.scan().to_json_value())
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-    if message_type == "wifi.connection.connect":
-        try:
-            request = WifiConnectRequest(message.get("ssid"), message.get("password"))
-            return _result(message, ok=True, connection=provider.connect(request.ssid, request.password or "").to_json_value())
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-    if message_type == "wifi.connection.disconnect":
-        try:
-            return _result(message, ok=True, disconnect=provider.disconnect().to_json_value())
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-    if message_type == "wifi.connection.hotspot":
-        try:
-            request = WifiHotspotRequest(message.get("ssid"))
-            return _result(message, ok=True, hotspot=provider.create_hotspot(request.ssid).to_json_value())
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-    if message_type == "bluetooth.session.discover":
-        try:
-            BluetoothDiscoverRequest()
-            return _result(message, ok=True, discovery=provider.discover().to_json_value())
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-    if message_type == "bluetooth.session.advertise":
-        try:
-            request = BluetoothAdvertisementRequest(message.get("name"))
-            return _result(message, ok=True, advertisement=provider.advertise(request.name).to_json_value())
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-    if message_type == "bluetooth.session.connect":
-        try:
-            request = BluetoothConnectRequest(message.get("address"))
-            return _result(message, ok=True, connection=provider.connect(request.address).to_json_value())
-        except (AttributeError, TypeError, ValueError):
-            return _result(message, ok=False, error={"code": "invalid_request"})
-    if message_type != "display.frame.write":
+    if not callable(dispatch):
         return _result(message, ok=False, error={"code": "unknown_type"})
-    frame = message.get("frame")
-    attachments = message.get("_attachments")
-    if not isinstance(frame, dict) or not isinstance(attachments, dict):
-        return _result(message, ok=False, error={"code": "invalid_request"})
     try:
-        request = FrameSinkRequest(
-            attachment_id=frame["attachment_id"],
-            width=frame["width"],
-            height=frame["height"],
-            pixel_format=frame["pixel_format"],
+        response = dispatch(
+            dict(message), dict(message.get("_attachments", {})),
+            {"binding_id": message.get("binding_id")},
         )
-        attachment = attachments.get(request.attachment_id)
-        if not isinstance(attachment, bytes):
-            raise ValueError("missing attachment")
-        provider_result = provider.write_frame(request)
-    except (KeyError, ValueError, TypeError):
+    except (TypeError, ValueError, AttributeError):
         return _result(message, ok=False, error={"code": "invalid_request"})
-    return _result(
-        message,
-        ok=True,
-        attachment_id=provider_result["attachment_id"],
-        accepted=provider_result["accepted"],
-        provider_imported=os.environ.get("TOTEM_DRIVER_FIXTURE_IMPORTED") == "1",
-    )
+    if not isinstance(response, Mapping):
+        return _result(message, ok=False, error={"code": "invalid_request"})
+    return _result(message, **dict(response))
 
 
 if __name__ == "__main__":
