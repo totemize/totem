@@ -585,16 +585,9 @@ def create_app(
     )
     async def bluetooth_discovery_start(request: Request, command: BLEDiscoveryRequest):
         manager = await _get_manager(request, "network")
-        session_id = await _call_hardware(
-            request,
-            "network",
-            manager.start_bluetooth_discovery,
-            duration_seconds=command.duration_seconds,
-            service_uuids=command.service_uuids,
-            duplicate_data=command.duplicate_data,
-            session_id=command.session_id,
-            timeout=command.timeout_seconds,
-        )
+        # The NIP-5D discovery capability owns its fixed discovery policy;
+        # legacy duration/filter knobs were removed with the old radio API.
+        session_id = await _call_hardware(request, "network", manager.start_bluetooth_discovery)
         return BLEDiscoveryResponse(session_id=session_id)
 
     @application.delete("/network/bluetooth/discovery", response_model=Status)

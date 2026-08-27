@@ -9,71 +9,49 @@ from typing import Any, Dict, Optional
 
 
 OPERATION_ACTIONS = {
-    "clear_screen": "display.frame.clear",
-    "display_dimensions": "display.frame.dimensions.get",
-    "display_text": "display.text.write",
     "display_image": "display.frame.write",
-    "display_image_from_file": "display.frame.write",
     "display_bytes": "display.frame.write",
     "display_encoded_image": "display.frame.write",
-    "display_sleep": "display.power.sleep",
-    "display_wake": "display.power.wake",
     "read_card": "nfc.tag.read",
     "write_card": "nfc.tag.write",
     "read_data": "storage.files.read",
     "write_data": "storage.files.write",
-    "create_hotspot": "radio.wifi.hotspot.create",
-    "connect_to_network": "radio.wifi.connection.create",
-    "get_wifi_capabilities": "radio.wifi.capabilities.get",
-    "get_bluetooth_capabilities": "radio.bluetooth.capabilities.get",
-    "get_wifi_status": "radio.wifi.status.get",
-    "get_wifi_radio_state": "radio.wifi.radio.get",
-    "list_wifi_interfaces": "radio.wifi.interfaces.list",
-    "is_p2p_discovering": "radio.wifi.p2p.discovery.get",
-    "get_bluetooth_radio_state": "radio.bluetooth.radio.get",
-    "bluetooth_discovery_session_count": "radio.bluetooth.discovery.count",
-    "list_bluetooth_advertisements": "radio.bluetooth.advertisements.list",
-    "set_wifi_radio_enabled": "radio.wifi.radio.set",
-    "set_bluetooth_radio_enabled": "radio.bluetooth.radio.set",
-    "scan_wifi_networks": "radio.wifi.networks.scan",
-    "disconnect_from_network": "radio.wifi.connection.delete",
-    "stop_hotspot": "radio.wifi.hotspot.delete",
-    "start_p2p_discovery": "radio.wifi.p2p.discovery.create",
-    "stop_p2p_discovery": "radio.wifi.p2p.discovery.delete",
-    "list_p2p_peers": "radio.wifi.p2p.peers.list",
-    "create_p2p_group": "radio.wifi.p2p.groups.create",
-    "list_p2p_groups": "radio.wifi.p2p.groups.list",
-    "remove_p2p_group": "radio.wifi.p2p.groups.delete",
-    "start_nan_discovery": "radio.wifi.aware.discovery.create",
-    "list_nan_discovery_sessions": "radio.wifi.aware.discovery.list",
-    "stop_nan_discovery": "radio.wifi.aware.discovery.delete",
-    "list_nan_matches": "radio.wifi.aware.matches.list",
-    "send_nan_followup": "radio.wifi.aware.followups.create",
-    "list_nan_followups": "radio.wifi.aware.followups.list",
-    "create_nan_data_path": "radio.wifi.aware.data-paths.create",
-    "list_nan_data_paths": "radio.wifi.aware.data-paths.list",
-    "remove_nan_data_path": "radio.wifi.aware.data-paths.delete",
-    "start_bluetooth_discovery": "radio.bluetooth.discovery.create",
-    "stop_bluetooth_discovery": "radio.bluetooth.discovery.delete",
-    "list_bluetooth_devices": "radio.bluetooth.devices.list",
-    "register_bluetooth_advertisement": "radio.bluetooth.advertisements.create",
-    "unregister_bluetooth_advertisement": "radio.bluetooth.advertisements.delete",
-    "create_l2cap_listener": "radio.bluetooth.l2cap.listeners.create",
-    "list_l2cap_listeners": "radio.bluetooth.l2cap.listeners.list",
-    "close_l2cap_listener": "radio.bluetooth.l2cap.listeners.delete",
-    "connect_l2cap": "radio.bluetooth.l2cap.connections.create",
-    "list_l2cap_connections": "radio.bluetooth.l2cap.connections.list",
-    "close_l2cap_connection": "radio.bluetooth.l2cap.connections.delete",
-    "handoff_l2cap_to_fips": "radio.bluetooth.l2cap.connections.handoff",
-    "connect_bluetooth_device": "radio.bluetooth.devices.connect",
-    "disconnect_bluetooth_device": "radio.bluetooth.devices.disconnect",
-    "list_gatt": "radio.bluetooth.gatt.services.list",
-    "read_gatt_characteristic": "radio.bluetooth.gatt.characteristics.read",
-    "write_gatt_characteristic": "radio.bluetooth.gatt.characteristics.write",
-    "subscribe_gatt_characteristic": "radio.bluetooth.gatt.subscriptions.create",
-    "unsubscribe_gatt_characteristic": "radio.bluetooth.gatt.subscriptions.delete",
+    "create_hotspot": "wifi.connection.hotspot",
+    "connect_to_network": "wifi.connection.connect",
+    "scan_wifi_networks": "wifi.connection.scan",
+    "disconnect_from_network": "wifi.connection.disconnect",
+    "start_bluetooth_discovery": "bluetooth.session.discover",
+    "register_bluetooth_advertisement": "bluetooth.session.advertise",
+    "connect_bluetooth_device": "bluetooth.session.connect",
     "get_ups_status": "power.telemetry.read",
 }
+
+# These historical manager methods intentionally have no NIP-5D capability
+# contract.  Routes which have not yet been removed return the stable
+# ``unsupported_feature`` compatibility error instead of manufacturing a
+# generic message that no selected provider can consume.
+DEPRECATED_OPERATIONS = frozenset(
+    {
+        "clear_screen", "display_dimensions", "display_text", "display_image_from_file",
+        "display_sleep", "display_wake", "get_wifi_capabilities",
+        "get_bluetooth_capabilities", "get_wifi_status", "get_wifi_radio_state",
+        "list_wifi_interfaces", "is_p2p_discovering", "get_bluetooth_radio_state",
+        "bluetooth_discovery_session_count", "list_bluetooth_advertisements",
+        "set_wifi_radio_enabled", "set_bluetooth_radio_enabled", "stop_hotspot",
+        "start_p2p_discovery", "stop_p2p_discovery", "list_p2p_peers",
+        "create_p2p_group", "list_p2p_groups", "remove_p2p_group",
+        "start_nan_discovery", "list_nan_discovery_sessions", "stop_nan_discovery",
+        "list_nan_matches", "send_nan_followup", "list_nan_followups",
+        "create_nan_data_path", "list_nan_data_paths", "remove_nan_data_path",
+        "stop_bluetooth_discovery", "list_bluetooth_devices",
+        "unregister_bluetooth_advertisement", "create_l2cap_listener",
+        "list_l2cap_listeners", "close_l2cap_listener", "connect_l2cap",
+        "list_l2cap_connections", "close_l2cap_connection", "handoff_l2cap_to_fips",
+        "disconnect_bluetooth_device", "list_gatt", "read_gatt_characteristic",
+        "write_gatt_characteristic", "subscribe_gatt_characteristic",
+        "unsubscribe_gatt_characteristic",
+    }
+)
 
 
 class LegacyHardwareError(RuntimeError):
@@ -129,6 +107,10 @@ class LegacyHardwareClient:
     def __getattr__(self, operation: str):
         action = OPERATION_ACTIONS.get(operation)
         if action is None:
+            if operation in DEPRECATED_OPERATIONS:
+                def unsupported(*_args: object, **_kwargs: object) -> object:
+                    raise LegacyHardwareError("unsupported_feature", "legacy operation has been removed")
+                return unsupported
             raise AttributeError(operation)
 
         def invoke(*args: object, **kwargs: object) -> object:
@@ -156,7 +138,7 @@ class LegacyHardwareClient:
             return "nfc.tag.write", {"data_b64": base64.b64encode(data).decode("ascii")}, {}
         if operation == "read_data" and len(args) == 1 and not kwargs:
             return "storage.files.read", {"path": LegacyHardwareClient._text(args[0], "path")}, {}
-        if operation == "write_data" and len(args) in {2, 3} and not kwargs:
+        if operation == "write_data" and len(args) == 2 and not kwargs:
             data = LegacyHardwareClient._bytes(args[1], operation)
             return "storage.files.write", {
                 "path": LegacyHardwareClient._text(args[0], "path"),
@@ -169,14 +151,14 @@ class LegacyHardwareClient:
             }, {"frame": data}
         if operation == "scan_wifi_networks" and not args and not kwargs:
             return "wifi.connection.scan", {}, {}
-        if operation == "connect_to_network" and len(args) >= 1 and len(args) <= 3 and not kwargs:
+        if operation == "connect_to_network" and 1 <= len(args) <= 2 and not kwargs:
             payload = {"ssid": LegacyHardwareClient._text(args[0], "ssid")}
             if len(args) > 1:
                 payload["password"] = LegacyHardwareClient._text(args[1], "password", allow_empty=True)
             return "wifi.connection.connect", payload, {}
         if operation == "disconnect_from_network" and not args and not kwargs:
             return "wifi.connection.disconnect", {}, {}
-        if operation == "create_hotspot" and len(args) >= 1 and len(args) <= 2 and not kwargs:
+        if operation == "create_hotspot" and 1 <= len(args) <= 2 and not kwargs:
             payload = {"ssid": LegacyHardwareClient._text(args[0], "ssid")}
             if len(args) == 2:
                 payload["password"] = LegacyHardwareClient._text(args[1], "password", allow_empty=True)
@@ -187,17 +169,13 @@ class LegacyHardwareClient:
             return "bluetooth.session.advertise", {"name": LegacyHardwareClient._text(args[0].get("name"), "name")}, {}
         if operation == "connect_bluetooth_device" and len(args) == 1 and not kwargs:
             return "bluetooth.session.connect", {"address": LegacyHardwareClient._text(args[0], "address")}, {}
-        # Some historical radio extension methods have no v1 public
-        # capability yet.  Preserve their route-visible operation type while
-        # keeping positional compatibility data out of the process boundary;
-        # providers that still advertise one opt into this namespaced payload.
-        attachments: Dict[str, bytes] = {}
-        values = [LegacyHardwareClient._normalize(value, attachments) for value in args]
-        named = {
-            str(key): LegacyHardwareClient._normalize(value, attachments)
-            for key, value in kwargs.items()
-        }
-        return action, {"legacy_call": {"values": values, "options": named}}, attachments
+        if operation == "get_ups_status" and not args and not kwargs:
+            return "power.telemetry.read", {}, {}
+        # Compatibility is deliberately a clean break: every public operation
+        # above has one provider-owned v1 message and a complete translator.
+        # Keeping a generic legacy envelope would create an unrouteable public
+        # operation and let arbitrary schemas cross the process boundary.
+        raise LegacyHardwareError("invalid_request", "unsupported legacy operation signature")
 
     @staticmethod
     def _text(value: object, field: str, *, allow_empty: bool = False) -> str:
