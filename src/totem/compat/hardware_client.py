@@ -132,7 +132,7 @@ class LegacyHardwareClient:
             raise AttributeError(operation)
 
         def invoke(*args: object, **kwargs: object) -> object:
-            canonical_action, payload, attachments = self._translate(operation, args, kwargs)
+            canonical_action, payload, attachments = self._translate(operation, action, args, kwargs)
             response = self.call(canonical_action, payload, attachments=attachments or None)
             return response.get("value", response)
 
@@ -140,7 +140,7 @@ class LegacyHardwareClient:
 
     @staticmethod
     def _translate(
-        operation: str, args: tuple[object, ...], kwargs: Mapping[str, object]
+        operation: str, action: str, args: tuple[object, ...], kwargs: Mapping[str, object]
     ) -> tuple[str, Dict[str, object], Dict[str, bytes]]:
         """Translate historical calls into one exact versioned SPI request.
 
@@ -187,7 +187,17 @@ class LegacyHardwareClient:
             return "bluetooth.session.advertise", {"name": LegacyHardwareClient._text(args[0].get("name"), "name")}, {}
         if operation == "connect_bluetooth_device" and len(args) == 1 and not kwargs:
             return "bluetooth.session.connect", {"address": LegacyHardwareClient._text(args[0], "address")}, {}
-        raise LegacyHardwareError("unsupported_feature")
+        # Some historical radio extension methods have no v1 public
+        # capability yet.  Preserve their route-visible operation type while
+        # keeping positional compatibility data out of the process boundary;
+        # providers that still advertise one opt into this namespaced payload.
+        attachments: Dict[str, bytes] = {}
+        values = [LegacyHardwareClient._normalize(value, attachments) for value in args]
+        named = {
+            str(key): LegacyHardwareClient._normalize(value, attachments)
+            for key, value in kwargs.items()
+        }
+        return action, {"legacy_call": {"values": values, "options": named}}, attachments
 
     @staticmethod
     def _text(value: object, field: str, *, allow_empty: bool = False) -> str:
