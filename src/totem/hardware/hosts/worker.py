@@ -63,6 +63,12 @@ def main() -> int:
         if inspect.signature(factory).parameters:
             raise
         provider = factory()
+    # Factory success alone does not mean a selected backend is usable.  The
+    # child validates it before sending host.ready so failed radios/storage
+    # bindings become failed lifecycle entries rather than false readiness.
+    validator = getattr(provider, "validate_startup", None)
+    if callable(validator):
+        validator()
     carrier = socket.socket(fileno=args.fd)
     send_frame(
         carrier,

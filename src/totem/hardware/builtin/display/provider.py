@@ -100,6 +100,9 @@ class DisplayProvider:
         self._transport.write_frame(request)
         return {"attachment_id": request.attachment_id, "accepted": True}
 
+    def validate_startup(self) -> None:
+        self._require_selected_claimed_transport()
+
     def _require_selected_claimed_transport(self) -> None:
         if self._variant not in _SUPPORTED_2IN13_VARIANTS:
             raise DisplaySelectionError("display variant is not declared")

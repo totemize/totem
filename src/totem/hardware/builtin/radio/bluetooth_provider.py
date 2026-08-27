@@ -104,6 +104,9 @@ class BluetoothProvider:
         self._state = BluetoothProviderState.RUNNING
         return session
 
+    def validate_startup(self) -> None:
+        self.start()
+
     def discover(self) -> BluetoothDiscoveryResult:
         session = self._ready_session()
         discovery_id = session.start_discovery(duration_seconds=1)

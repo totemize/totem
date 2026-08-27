@@ -79,6 +79,9 @@ class NfcProvider:
         poll = getattr(driver, "poll", None)
         return NfcPollResult(bool(poll()) if callable(poll) else True)
 
+    def validate_startup(self) -> None:
+        self._require_ready_driver()
+
     def _require_ready_driver(self) -> NfcDriver:
         self._validate_selection_and_claims()
         if self._driver is None:

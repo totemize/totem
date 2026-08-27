@@ -63,6 +63,10 @@ class PowerProvider:
 
         return self.snapshot().to_push()
 
+    def validate_startup(self) -> None:
+        """Read one typed snapshot before the child reports readiness."""
+        self.snapshot()
+
     def _require_selected_claimed_driver(self) -> None:
         if self._model not in _SUPPORTED_MODELS:
             raise PowerSelectionError("power model is not declared")

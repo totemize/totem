@@ -32,12 +32,22 @@ def test_package_scripts_and_systemd_service_identities_are_preserved() -> None:
         ROOT / "deploy" / "ansible" / "roles" / "device_manager" / "templates" / "totem-hardware.toml.j2"
     ).read_text(encoding="utf-8")
     assert "[global.hardware_facts]" in hardware_template
-    assert '"resource.dbus.org.freedesktop.networkmanager" = "present"' in hardware_template
-    assert '"resource.dbus.org.bluez" = "present"' in hardware_template
+    assert "totem_hardware_inventory.facts" in hardware_template
+    assert "totem_hardware_inventory.plugins" in hardware_template
+    assert '"resource.dbus.org.freedesktop.networkmanager" = "present"' not in hardware_template
     assert "Requires=totem.service" in screen_unit
     assert "After=totem.service" in screen_unit
     assert "Before=fips.service strfry.service totemd.service" in screen_unit
     assert "ExecStart=/opt/totem/.venv/bin/totem-screen run" in screen_unit
+
+
+def test_hardware_template_omits_absent_resources_from_controlled_inventory() -> None:
+    """The deploy template may only serialize facts supplied by preflight."""
+    template = (ROOT / "deploy" / "ansible" / "roles" / "device_manager" / "templates" / "totem-hardware.toml.j2").read_text(encoding="utf-8")
+    assert "totem_hardware_inventory.facts" in template
+    assert "totem_hardware_inventory.plugins" in template
+    assert "org.bluez\" = \"present" not in template
+    assert "storage-root\" = \"present" not in template
 
 
 def test_all_deployed_package_entrypoints_resolve_to_callables() -> None:

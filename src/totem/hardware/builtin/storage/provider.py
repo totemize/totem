@@ -85,6 +85,10 @@ class StorageProvider:
         self.driver_io_count += 1
         return StorageDeleteResult(driver.delete_file(path))
 
+    def validate_startup(self) -> None:
+        """Validate the selected root and initialize its child backend."""
+        self._require_ready_driver()
+
     def _prepare_file(self, requested_path: str) -> tuple[str, StorageDriver]:
         path = self._protocol_path(requested_path)
         driver = self._require_ready_driver()

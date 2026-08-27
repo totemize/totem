@@ -115,6 +115,9 @@ class WiFiProvider:
         self._state = WiFiProviderState.RUNNING
         return session
 
+    def validate_startup(self) -> None:
+        self.start()
+
     def scan(self) -> WifiScanResult:
         """Expose a selected session's scan through the narrow public contract."""
 
