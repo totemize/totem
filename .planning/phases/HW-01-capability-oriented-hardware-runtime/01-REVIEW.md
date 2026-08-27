@@ -1,6 +1,6 @@
 ---
 phase: HW-01-capability-oriented-hardware-runtime
-reviewed: 2026-08-26T18:31:25Z
+reviewed: 2026-08-27T19:19:05Z
 depth: standard
 files_reviewed: 193
 files_reviewed_list:
@@ -198,87 +198,54 @@ files_reviewed_list:
   - tests/unit/test_systemd_contracts.py
   - tests/unit/test_wifi_provider_compat.py
 findings:
-  critical: 6
-  warning: 1
+  critical: 3
+  warning: 0
   info: 0
-  total: 7
+  total: 3
 status: issues_found
 ---
 
 # Phase HW-01: Code Review Report
 
-**Reviewed:** 2026-08-26T18:31:25Z
+**Reviewed:** 2026-08-27T19:19:05Z
 **Depth:** standard
 **Files Reviewed:** 193
 **Status:** issues_found
 
 ## Summary
 
-The summary frontmatter declares 193 existing non-planning files (five more than the supplied 188-file count because Plans 06 and 07 use inline YAML lists); all 193 were parsed/reviewed. The local unit suite passes (470 tests), but the deployed composition never resolves or starts a binding, the compatibility facade cannot produce requests accepted by the canonical bus, and the child host has no composition data for any built-in provider. The architecture therefore cannot perform a real hardware operation despite fixture-level green tests.
+All 193 persisted source paths were re-reviewed at standard depth through `13b7348`. The fixes for the signed benchmark path (former CR-06) and built-in child-startup coverage (former WR-01) hold: the controller-safe benchmark subset passes, the documentation includes the controller trust-store argument, and selected child startup validates before `host.ready`. The retained legacy translation table also no longer emits the unrouteable generic envelope.
+
+The phase is still not shippable. Deployment has no producer for the supposedly observed inventory and therefore starts an empty runtime as READY; two preserved routes bypass the controlled compatibility error path; and the in-process conformance/timeout contract is red after dispatch became provider-owned. Local, no-contact checks: the targeted config/process/bus/CLI group passed (25), the radio/systemd/benchmark group passed (29, 1 hardware test deselected), and the full safe suite reaches three deterministic failures (103 passed before `--maxfail=3`). `scripts/benchmark_driver_host.py --self-test` passed as synthetic-only.
 
 ## Critical Issues
 
-### CR-01: Default deployed startup constructs an empty, permanently unusable runtime — **BLOCKER**
+### CR-01: Deployment has no observed-inventory producer and publishes an empty runtime as healthy — **BLOCKER**
 
-**File:** `src/totem/__main__.py:30-46`
+**File:** `deploy/ansible/roles/device_manager/templates/totem-hardware.toml.j2:6-13`
 
-**Issue:** Both deployed commands call `compose_application()`, which selects `_empty_runtime` when no test-only factory is injected (line 61). That owner contains no bindings and its host factory is deliberately unreachable. Repository-wide composition search finds no production caller that scans the catalog, collects facts, resolves a plan, acquires claims, or builds a process/in-process host. Consequently every real capability request has no binding to dispatch to.
+**Issue:** The template now references `totem_hardware_inventory`, but no Ansible task, role default, inventory, or preflight in the reviewed repository defines it. Its `default({})` therefore renders a valid config with an empty `[global.hardware_facts]`. `compose_runtime` accepts those empty facts (`src/totem/hardware/runtime/composition.py:43-54`), resolves no bindings, and `RuntimeLifecycle.snapshot` defines zero required bindings as READY (`src/totem/hardware/runtime/lifecycle.py:220-234`). A local `compose_runtime(RuntimeConfig()).start()` reproduces `bindings=()` with `ready=True`, despite the comment promising an empty owner is never the default. The deployed service consequently looks healthy while offering no hardware capability.
 
-**Fix:** Replace `_empty_runtime` with production composition that builds one immutable plan (catalog → facts/profile → resolver → broker → selected host factory) and injects that `HardwareRuntime`. Keep an explicit empty runtime only for a documented no-hardware mode, not as the deployed default.
+**Fix:** Add a controlled, local deployment preflight that emits a typed `totem_hardware_inventory` fact only from explicit observed evidence (or require the inventory variable and fail the play if absent). Treat an empty non-`no_hardware` plan as failed/degraded, not READY. Add rendered-template/composition tests for missing inventory, intentionally inert `no_hardware`, and present/absent resources.
 
-### CR-02: Process workers receive no selected binding configuration or child resources, so all built-in providers start unconfigured — **BLOCKER**
+### CR-02: Two preserved network routes bypass the compatibility boundary and crash with HTTP 500 — **BLOCKER**
 
-**File:** `src/totem/hardware/hosts/worker.py:55-60`
+**File:** `src/totem/api/app.py:299-311`
 
-**Issue:** The worker imports the entry point and invokes its factory with zero arguments. `ProcessDriverHost.start_group` passes only fd, entry point, session, generation, and binding IDs at `src/totem/hardware/hosts/process.py:70-80`; it never transfers resolved settings, claims, or approved descriptors. The factories therefore return unusable defaults: for example the display factory returns `DisplayProvider()` at `src/totem/hardware/builtin/display/provider.py:95-103`, power returns `PowerProvider()` at `src/totem/hardware/builtin/power/provider.py:80-83`, and both radio factories use `"unbound"` identifiers at `wifi_provider.py:201-204` and `bluetooth_provider.py:193-196`. Their first real action rejects selection/claim validation instead of touching a driver.
+**Issue:** `LegacyHardwareClient.__getattr__` deliberately raises `AttributeError` for methods that are neither a translated v1 operation nor in `DEPRECATED_OPERATIONS` (`src/totem/compat/hardware_client.py:107-114`). `get_capabilities` and `get_status` are in neither set, but their deployed routes still call them. With an injected local bus, both `GET /network/capabilities` and `GET /network/status` raise `AttributeError` through FastAPI instead of producing the promised stable 501/compatibility response. The new table test covers only translated actions and misses these routes (`tests/unit/test_radio_api.py:47-63`).
 
-**Fix:** Define a bounded child bootstrap contract carrying the selected binding ID, non-secret effective settings, normalized granted claims, and explicitly passed credentials/descriptors. Have each provider factory consume that bootstrap and construct its child-only transport/driver. Exercise it through the production `ProcessDriverHost`, not direct constructor fixtures.
+**Fix:** Either implement explicit capability/status v1 translators and provider payloads, or add both methods to the controlled deprecated surface so the routes return `unsupported_feature`/501. Add ASGI regression tests for every still-mounted route, including these two.
 
-### CR-03: Legacy routes cannot form a request the canonical bus or worker will execute — **BLOCKER**
+### CR-03: The public in-process conformance and timeout guarantees no longer execute their provider calls — **BLOCKER**
 
-**File:** `src/totem/compat/hardware_client.py:106-142`
+**File:** `src/totem/hardware/hosts/in_process.py:186-190`
 
-**Issue:** `LegacyHardwareClient.call` never supplies `binding_id`, while `HardwareBus.dispatch` rejects every capability request lacking one at `src/totem/hardware/api/bus.py:81-85`. Its dynamic adapter then serializes every operation as generic `args`/`kwargs` (lines 126-140), whereas the worker requires operation-specific fields such as `path`/ `data_b64` at `src/totem/hardware/hosts/worker.py:119-145` and frame metadata at lines 188-203. It also maps display text to `display.text.write` and radio operations to `radio.wifi.*`/`radio.bluetooth.*` (lines 13 and 24-73), but the worker accepts neither those spellings nor the full advertised legacy operation surface. With a non-empty runtime these calls still return `binding_unavailable`, `unknown_type`, or `invalid_request`.
+**Issue:** In-process requests now always call the worker's provider-owned `dispatch` SPI. The public `InProcessDriverHost` constructor still accepts the legacy `write_frame`-only provider used by the conformance and cooperative-timeout contracts, so `_dispatch` immediately returns `invalid_request` instead of invoking it. This deterministically fails `test_public_conformance_runner_keeps_case_order_and_empty_lifecycle` and makes both deadline tests report no timeout (`tests/unit/hardware_runtime/test_in_process_host.py:74-106`). Consequently the asserted cancellation, contamination, and held-lease behavior is no longer exercised, and the full local safe suite is red.
 
-**Fix:** Replace generic `__getattr__` forwarding with explicit facade translators that select an approved binding and emit the exact public capability request schema. Either expose binding selection in the client constructor/configuration or have the runtime resolve a deterministic default binding. Add end-to-end tests using `HardwareBus` plus the worker contract for display, storage, NFC, Wi-Fi, and Bluetooth.
-
-### CR-04: The supposedly extensible plugin boundary is a closed core type switch — **BLOCKER**
-
-**File:** `src/totem/hardware/hosts/worker.py:87-210`
-
-**Issue:** The child host hardcodes every message type, request DTO, provider method, and result shape. The parent bus repeats this registry in `src/totem/hardware/api/bus.py:12-20,93-100`, while `HardwareRuntime` repeats capability-family selection in `src/totem/hardware/runtime/runtime.py:216-229`. Installing a third-party provider with a new independently versioned capability necessarily requires editing three canonical modules, contradicting the phase's no-central-registry/independent-provider contract.
-
-**Fix:** Move operation dispatch into the selected provider through a versioned SPI method (for example `provider.dispatch(logical_message, attachments, context)`). The core should validate envelope, session, capability/binding authorization, and result correlation generically; manifests/provider metadata should describe routing without a family switch in the runtime.
-
-### CR-05: A host-factory startup failure leaks the just-acquired resource leases — **BLOCKER**
-
-**File:** `src/totem/hardware/runtime/supervisor.py:210-215`
-
-**Issue:** `_start_group` acquires leases and only then calls the injected host factory. If the factory raises before assigning `host`, the generic exception branch at lines 242-248 only releases when `"host" in locals()`; it records failure and exits while the broker retains every acquired lease. Later starts conflict indefinitely even though no child was ever created.
-
-**Fix:** Track acquisition separately from host creation. On every failure after `acquire_many`, release the exact leases when no host exists; when a host exists, use the existing confirmed-death sequence before release. Add a fault-injection test where `host_factory` raises immediately and assert an empty broker snapshot.
-
-### CR-06: Benchmark acceptance can be fabricated from local/synthetic data — **BLOCKER**
-
-**File:** `scripts/benchmark_driver_host.py:85-165`
-
-**Issue:** `validate_evidence` accepts any caller-authored JSON record; it has no `hardware_contacted`/evidence-scope assertion, no trusted provenance, and accepts `runtime.mode == "in_process"` (lines 106-112) even though the pinned comparison cases are process-host cases. It only requires a non-empty arbitrary `provider_imports` list (lines 119-121), does not compare it with the pinned workload, and `_number` accepts non-finite values such as JSON `NaN` (lines 52-60). Supplying two invented records, one per grouping, makes `architecture_acceptance` report `accepted: true` at lines 184-197, so controller output can be presented as Pi acceptance.
-
-**Fix:** Require and validate immutable capture provenance (`evidence_scope: allocated-hardware`, `hardware_contacted: true`, allocated target identity, collection timestamp, and operator/device attestation), require process mode and exact pinned workload fields, reject non-finite numbers with `math.isfinite`, and reject duplicate/extra grouping rows. Do not emit an accepted matrix without validated device-origin evidence.
-
-## Warnings
-
-### WR-01: Deployment and facade tests are false-positive seams because they replace the failing production boundary — **WARNING**
-
-**File:** `tests/unit/test_cli_compat.py:17-30`
-
-**Issue:** The composition test injects a fake runtime whose `handle` always raises and explicitly says it does not dispatch hardware. Similarly, `tests/unit/test_api_facades.py:20-32` and `tests/unit/test_service_api.py:19-42` use permissive fake buses that return success for arbitrary messages. These tests cannot detect the empty runtime, missing binding ID, incompatible payload schema, or worker routing failures above; this explains why the 470-test suite is green.
-
-**Fix:** Retain unit fakes for translator isolation, but add a production-shape integration test that calls default `compose_application` with a controlled catalog/facts fixture, starts a real process-host fixture, and sends representative legacy routes through `LegacyHardwareClient → HardwareBus → worker`. Assert a real binding is selected, the provider receives the expected request/attachment, and resources are released at shutdown.
+**Fix:** Make the conformance/timeout fixtures implement the required provider-owned `dispatch` SPI (including cancellation propagation), or retain a deliberately versioned compatibility adapter until those test providers are migrated. In either case, restore passing conformance and cooperative/uncooperative deadline tests before release.
 
 ---
 
-_Reviewed: 2026-08-26T18:31:25Z_
+_Reviewed: 2026-08-27T19:19:05Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
-
