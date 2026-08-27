@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Mapping
 from itertools import count
 from typing import Any, Dict, Optional
@@ -131,24 +132,74 @@ class LegacyHardwareClient:
             raise AttributeError(operation)
 
         def invoke(*args: object, **kwargs: object) -> object:
-            attachments: Dict[str, bytes] = {}
-            normalized_args = [self._normalize(value, attachments) for value in args]
-            if operation == "display_encoded_image" and attachments:
-                attachment_id, value = next(iter(attachments.items()))
-                del attachments[attachment_id]
-                attachments["frame"] = value
-                normalized_args = [{"attachment_id": "frame"}]
-            normalized_kwargs = {
-                key: self._normalize(value, attachments) for key, value in kwargs.items()
-            }
-            response = self.call(
-                action,
-                {"args": normalized_args, "kwargs": normalized_kwargs},
-                attachments=attachments or None,
-            )
+            canonical_action, payload, attachments = self._translate(operation, args, kwargs)
+            response = self.call(canonical_action, payload, attachments=attachments or None)
             return response.get("value", response)
 
         return invoke
+
+    @staticmethod
+    def _translate(
+        operation: str, args: tuple[object, ...], kwargs: Mapping[str, object]
+    ) -> tuple[str, Dict[str, object], Dict[str, bytes]]:
+        """Translate historical calls into one exact versioned SPI request.
+
+        The compatibility edge is the only place positional legacy values,
+        bytes, and historical radio spellings are accepted.  The child sees
+        only public capability fields; it never receives ``args``/``kwargs``.
+        """
+
+        if operation == "read_card" and not args and not kwargs:
+            return "nfc.tag.read", {}, {}
+        if operation == "write_card" and len(args) == 1 and not kwargs:
+            data = LegacyHardwareClient._bytes(args[0], operation)
+            return "nfc.tag.write", {"data_b64": base64.b64encode(data).decode("ascii")}, {}
+        if operation == "read_data" and len(args) == 1 and not kwargs:
+            return "storage.files.read", {"path": LegacyHardwareClient._text(args[0], "path")}, {}
+        if operation == "write_data" and len(args) in {2, 3} and not kwargs:
+            data = LegacyHardwareClient._bytes(args[1], operation)
+            return "storage.files.write", {
+                "path": LegacyHardwareClient._text(args[0], "path"),
+                "data_b64": base64.b64encode(data).decode("ascii"),
+            }, {}
+        if operation in {"display_image", "display_bytes", "display_encoded_image"} and len(args) == 1 and not kwargs:
+            data = LegacyHardwareClient._bytes(args[0], operation)
+            return "display.frame.write", {
+                "frame": {"attachment_id": "frame", "width": 250, "height": 122, "pixel_format": "mono1"}
+            }, {"frame": data}
+        if operation == "scan_wifi_networks" and not args and not kwargs:
+            return "wifi.connection.scan", {}, {}
+        if operation == "connect_to_network" and len(args) >= 1 and len(args) <= 3 and not kwargs:
+            payload = {"ssid": LegacyHardwareClient._text(args[0], "ssid")}
+            if len(args) > 1:
+                payload["password"] = LegacyHardwareClient._text(args[1], "password", allow_empty=True)
+            return "wifi.connection.connect", payload, {}
+        if operation == "disconnect_from_network" and not args and not kwargs:
+            return "wifi.connection.disconnect", {}, {}
+        if operation == "create_hotspot" and len(args) >= 1 and len(args) <= 2 and not kwargs:
+            payload = {"ssid": LegacyHardwareClient._text(args[0], "ssid")}
+            if len(args) == 2:
+                payload["password"] = LegacyHardwareClient._text(args[1], "password", allow_empty=True)
+            return "wifi.connection.hotspot", payload, {}
+        if operation == "start_bluetooth_discovery" and not args and not kwargs:
+            return "bluetooth.session.discover", {}, {}
+        if operation == "register_bluetooth_advertisement" and len(args) == 1 and not kwargs and isinstance(args[0], Mapping):
+            return "bluetooth.session.advertise", {"name": LegacyHardwareClient._text(args[0].get("name"), "name")}, {}
+        if operation == "connect_bluetooth_device" and len(args) == 1 and not kwargs:
+            return "bluetooth.session.connect", {"address": LegacyHardwareClient._text(args[0], "address")}, {}
+        raise LegacyHardwareError("unsupported_feature")
+
+    @staticmethod
+    def _text(value: object, field: str, *, allow_empty: bool = False) -> str:
+        if not isinstance(value, str) or (not allow_empty and not value.strip()):
+            raise LegacyHardwareError("invalid_request")
+        return value
+
+    @staticmethod
+    def _bytes(value: object, operation: str) -> bytes:
+        if not isinstance(value, bytes):
+            raise LegacyHardwareError("invalid_request", "{} requires bytes".format(operation))
+        return value
 
     @staticmethod
     def _normalize(value: object, attachments: Dict[str, bytes]) -> object:
