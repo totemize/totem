@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Callable, Iterable, Optional, Tuple
+from typing import Callable, Iterable, Mapping, Optional, Tuple
 
 from totem_driver_api import ResourceClaim
 from totem_driver_api.capabilities.radio.wifi import (
@@ -16,6 +16,7 @@ from totem_driver_api.capabilities.radio.wifi import (
 
 from totem.hardware.builtin.radio.models import RadioService
 from totem.hardware.capabilities.radio.shared import RadioConstraint
+from totem.hardware.builtin.bootstrap import BuiltinBootstrap
 
 
 _SERVICE_CLAIM = ("dbus", RadioService.NETWORK_MANAGER.destination.casefold())
@@ -197,8 +198,42 @@ class WiFiProvider:
 
         return NetworkManagerWiFiDriver(self.interface, runtime=self._runtime)
 
+    def dispatch(
+        self,
+        message: Mapping[str, object],
+        _attachments: Mapping[str, object],
+        _context: Mapping[str, object],
+    ) -> dict[str, object]:
+        """Versioned Wi-Fi SPI; the generic worker never knows these types."""
 
-def create_provider(_bootstrap: object = None) -> WiFiProvider:
+        message_type = message.get("type")
+        try:
+            if message_type == "wifi.connection.scan":
+                return {"ok": True, "scan": self.scan().to_json_value()}
+            if message_type == "wifi.connection.connect":
+                ssid = message.get("ssid")
+                password = message.get("password", "")
+                return {"ok": True, "connection": self.connect(ssid, password).to_json_value()}
+            if message_type == "wifi.connection.disconnect":
+                return {"ok": True, "disconnect": self.disconnect().to_json_value()}
+            if message_type == "wifi.connection.hotspot":
+                ssid = message.get("ssid")
+                password = message.get("password", "")
+                return {"ok": True, "hotspot": self.create_hotspot(ssid, password).to_json_value()}
+        except (TypeError, ValueError):
+            return {"ok": False, "error": {"code": "invalid_request"}}
+        return {"ok": False, "error": {"code": "unknown_type"}}
+
+
+def create_provider(bootstrap: object = None) -> WiFiProvider:
     """Return a side-effect-free product; composition injects facts and leases later."""
 
-    return WiFiProvider(interface="unbound", phy="unbound")
+    selected = BuiltinBootstrap.parse(bootstrap)
+    if selected.capability_id != "wifi.connection@1":
+        raise WiFiSelectionError("wifi bootstrap capability is invalid")
+    settings = selected.settings
+    return WiFiProvider(
+        interface=settings.get("interface"), phy=settings.get("phy"), claims=selected.claims,
+        compatibility_group=settings.get("compatibility_group", "wifi"),
+        explicit_mock=settings.get("explicit_mock", False) is True,
+    )

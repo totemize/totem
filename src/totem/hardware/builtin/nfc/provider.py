@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Protocol, Tuple
+from typing import Iterable, Mapping, Optional, Protocol, Tuple
 
 from totem_driver_api import ResourceClaim
 from totem_driver_api.capabilities.nfc import NfcPollResult, NfcReadResult, NfcWriteRequest
+
+from totem.hardware.builtin.bootstrap import BuiltinBootstrap
 
 
 _REQUIRED_CLAIMS = frozenset({("nfc", "reader")})
@@ -110,8 +112,46 @@ class NfcProvider:
         elif self._model != "pn532":
             raise NfcSelectionError("nfc serial/I2C evidence is only supported for PN532")
 
+    def dispatch(
+        self,
+        message: Mapping[str, object],
+        _attachments: Mapping[str, object],
+        _context: Mapping[str, object],
+    ) -> dict[str, object]:
+        message_type = message.get("type")
+        try:
+            if message_type == "nfc.tag.read":
+                return {"ok": True, "tag": self.read().to_json_value()}
+            if message_type == "nfc.tag.write":
+                request = NfcWriteRequest.from_json_value({"data_b64": message.get("data_b64")})
+                self.write(request.data)
+                return {"ok": True, "accepted": True}
+            if message_type == "nfc.tag.poll":
+                return {"ok": True, "poll": self.poll().to_json_value()}
+        except (TypeError, ValueError):
+            return {"ok": False, "error": {"code": "invalid_request"}}
+        return {"ok": False, "error": {"code": "unknown_type"}}
 
-def create_provider(_bootstrap: object = None) -> NfcProvider:
+
+def create_provider(bootstrap: object = None) -> NfcProvider:
     """Return a side-effect-free provider product after catalog resolution."""
 
-    return NfcProvider()
+    selected = BuiltinBootstrap.parse(bootstrap)
+    if selected.capability_id != "nfc.tag@1":
+        raise NfcSelectionError("nfc bootstrap capability is invalid")
+    settings = selected.settings
+    model = settings.get("nfc_model")
+    if model == "acr122":
+        from .drivers.acr122 import Driver
+    elif model == "pn532":
+        from .drivers.pn532 import Driver
+    elif model == "mock_nfc":
+        from .drivers.mock_nfc import Driver
+    else:
+        raise NfcSelectionError("nfc model is not declared")
+    return NfcProvider(
+        model=model, usb_vid=settings.get("usb_vid"), usb_pid=settings.get("usb_pid"),
+        serial_port=settings.get("serial_port"), i2c_address=settings.get("i2c_address"),
+        explicit_mock=settings.get("explicit_mock", False) is True,
+        claims=selected.claims, driver=Driver(),
+    )

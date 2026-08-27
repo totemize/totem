@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Protocol, Tuple
+from typing import Iterable, Mapping, Optional, Protocol, Tuple
 
 from totem_driver_api import ResourceClaim
 from totem_driver_api.capabilities.power import PowerTelemetryPush, PowerTelemetrySnapshot
+
+from totem.hardware.builtin.bootstrap import BuiltinBootstrap
 
 
 _SUPPORTED_MODELS = {"pisugar2": "0x75", "waveshare_ups_hat_c": "0x43"}
@@ -76,8 +78,35 @@ class PowerProvider:
         if self._driver is None:
             raise PowerSelectionError("power driver is unavailable until child composition")
 
+    def dispatch(
+        self,
+        message: Mapping[str, object],
+        _attachments: Mapping[str, object],
+        _context: Mapping[str, object],
+    ) -> dict[str, object]:
+        message_type = message.get("type")
+        try:
+            if message_type == "power.telemetry.read":
+                return {"ok": True, "telemetry": self.snapshot().to_json_value()}
+            if message_type == "power.telemetry.push":
+                return {"ok": True, "telemetry": self.telemetry_push().to_json_value()}
+        except (TypeError, ValueError):
+            return {"ok": False, "error": {"code": "invalid_request"}}
+        return {"ok": False, "error": {"code": "unknown_type"}}
 
-def create_provider(_bootstrap: object = None) -> PowerProvider:
+
+def create_provider(bootstrap: object = None) -> PowerProvider:
     """Return a side-effect-free factory product after catalog resolution."""
 
-    return PowerProvider()
+    selected = BuiltinBootstrap.parse(bootstrap)
+    if selected.capability_id != "power.telemetry@1":
+        raise PowerSelectionError("power bootstrap capability is invalid")
+    model = selected.settings.get("power_model")
+    address = selected.settings.get("i2c_address")
+    if model == "pisugar2":
+        from .drivers.pisugar2 import Driver
+    elif model == "waveshare_ups_hat_c":
+        from .drivers.waveshare_ups_hat_c import Driver
+    else:
+        raise PowerSelectionError("power model is not declared")
+    return PowerProvider(model=model, i2c_address=address, claims=selected.claims, driver=Driver())

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 from typing import Iterable, Mapping, Optional, Protocol, Tuple
 
@@ -15,6 +16,7 @@ from totem_driver_api.capabilities.storage import (
 )
 
 from .files import ConfinedStorage, StoragePathError
+from totem.hardware.builtin.bootstrap import BuiltinBootstrap
 
 
 _REQUIRED_CLAIMS = frozenset(
@@ -122,8 +124,50 @@ class StorageProvider:
             self._initialized = True
         return self._driver
 
+    def dispatch(
+        self,
+        message: Mapping[str, object],
+        _attachments: Mapping[str, object],
+        _context: Mapping[str, object],
+    ) -> dict[str, object]:
+        """Implement storage.files@1 inside the provider, not the worker."""
 
-def create_provider(_bootstrap: object = None) -> StorageProvider:
+        message_type = message.get("type")
+        try:
+            if message_type == "storage.files.read":
+                path = StoragePath(message.get("path"))
+                return {"ok": True, "file": self.read(path.value).to_json_value()}
+            if message_type == "storage.files.write":
+                request = StorageWriteRequest.from_json_value(
+                    {"path": message.get("path"), "data_b64": message.get("data_b64")}
+                )
+                self.write(request.path.value, request.data)
+                return {"ok": True, "accepted": True}
+            if message_type == "storage.files.list":
+                path = StoragePath(message.get("path", "."))
+                return {"ok": True, "files": self.list(path.value).to_json_value()}
+            if message_type == "storage.files.delete":
+                path = StoragePath(message.get("path"))
+                return {"ok": True, "deletion": self.delete(path.value).to_json_value()}
+        except (TypeError, ValueError):
+            return {"ok": False, "error": {"code": "invalid_request"}}
+        return {"ok": False, "error": {"code": "unknown_type"}}
+
+
+def create_provider(bootstrap: object = None) -> StorageProvider:
     """Return a side-effect-free provider product after catalog resolution."""
 
-    return StorageProvider()
+    selected = BuiltinBootstrap.parse(bootstrap)
+    if selected.capability_id != "storage.files@1":
+        raise StorageSelectionError("storage bootstrap capability is invalid")
+    model = selected.settings.get("storage_model")
+    root = selected.settings.get("storage_root_ref")
+    if not isinstance(root, str) or not root:
+        raise StorageSelectionError("storage root is not declared")
+    if model == "filesystem":
+        from .drivers.filesystem import Driver
+    elif model == "generic_nvme":
+        from .drivers.generic_nvme import Driver
+    else:
+        raise StorageSelectionError("storage model is not declared")
+    return StorageProvider(model=model, root=Path(root), claims=selected.claims, driver=Driver(root))

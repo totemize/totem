@@ -8,10 +8,12 @@ changes.
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Protocol, Tuple
+from typing import Iterable, Mapping, Optional, Protocol, Tuple
 
 from totem_driver_api import ResourceClaim
 from totem_driver_api.capabilities.display import FrameSinkRequest
+
+from totem.hardware.builtin.bootstrap import BuiltinBootstrap
 
 
 _SUPPORTED_2IN13_VARIANTS = frozenset(
@@ -91,8 +93,33 @@ class DisplayProvider:
         if self._transport is None:
             raise DisplaySelectionError("display transport is unavailable until child composition")
 
+    def dispatch(
+        self,
+        message: Mapping[str, object],
+        attachments: Mapping[str, object],
+        _context: Mapping[str, object],
+    ) -> dict[str, object]:
+        """Implement the versioned provider SPI without worker family routing."""
 
-def create_provider(_bootstrap: object = None) -> DisplayProvider:
+        if message.get("type") != "display.frame.write":
+            return {"ok": False, "error": {"code": "unknown_type"}}
+        frame = message.get("frame")
+        if not isinstance(frame, Mapping):
+            return {"ok": False, "error": {"code": "invalid_request"}}
+        try:
+            request = FrameSinkRequest(
+                attachment_id=frame["attachment_id"], width=frame["width"],
+                height=frame["height"], pixel_format=frame["pixel_format"],
+            )
+            if not isinstance(attachments.get(request.attachment_id), bytes):
+                raise ValueError("frame attachment is missing")
+            result = self.write_frame(request)
+        except (KeyError, TypeError, ValueError):
+            return {"ok": False, "error": {"code": "invalid_request"}}
+        return {"ok": True, **result}
+
+
+def create_provider(bootstrap: object = None) -> DisplayProvider:
     """Return a side-effect-free child factory product.
 
     The worker imports this function only after catalog resolution and broker
@@ -100,4 +127,11 @@ def create_provider(_bootstrap: object = None) -> DisplayProvider:
     the selected variant and leased transport before requests are accepted.
     """
 
-    return DisplayProvider()
+    selected = BuiltinBootstrap.parse(bootstrap)
+    if selected.capability_id != "display.frame-sink@1":
+        raise DisplaySelectionError("display bootstrap capability is invalid")
+    variant = selected.settings.get("panel_variant")
+    # Concrete panel transports are descriptor-owned and are deliberately not
+    # opened by this generic factory.  Explicit transport composition is
+    # injected by the provider's selected child implementation.
+    return DisplayProvider(variant=variant, claims=selected.claims)

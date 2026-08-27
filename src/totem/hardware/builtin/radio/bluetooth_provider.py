@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Callable, Iterable, Optional, Tuple
+from typing import Callable, Iterable, Mapping, Optional, Tuple
 
 from totem_driver_api import ResourceClaim
 from totem_driver_api.capabilities.radio.bluetooth import (
@@ -14,6 +14,7 @@ from totem_driver_api.capabilities.radio.bluetooth import (
 )
 
 from totem.hardware.capabilities.radio.shared import RadioConstraint
+from totem.hardware.builtin.bootstrap import BuiltinBootstrap
 
 
 _SERVICE_CLAIM = ("dbus", "org.bluez")
@@ -189,8 +190,38 @@ class BluetoothProvider:
 
         return Driver(runtime=self._runtime)
 
+    def dispatch(
+        self,
+        message: Mapping[str, object],
+        _attachments: Mapping[str, object],
+        _context: Mapping[str, object],
+    ) -> dict[str, object]:
+        """Versioned Bluetooth SPI; action routing belongs to this provider."""
 
-def create_provider(_bootstrap: object = None) -> BluetoothProvider:
+        message_type = message.get("type")
+        try:
+            if message_type == "bluetooth.session.discover":
+                return {"ok": True, "discovery": self.discover().to_json_value()}
+            if message_type == "bluetooth.session.advertise":
+                return {"ok": True, "advertisement": self.advertise(message.get("name")).to_json_value()}
+            if message_type == "bluetooth.session.stop_advertise":
+                return {"ok": True, "advertisement": self.stop_advertising().to_json_value()}
+            if message_type == "bluetooth.session.connect":
+                return {"ok": True, "connection": self.connect(message.get("address")).to_json_value()}
+        except (TypeError, ValueError):
+            return {"ok": False, "error": {"code": "invalid_request"}}
+        return {"ok": False, "error": {"code": "unknown_type"}}
+
+
+def create_provider(bootstrap: object = None) -> BluetoothProvider:
     """Return a side-effect-free product; composition injects facts and leases later."""
 
-    return BluetoothProvider(adapter="unbound", phy="unbound")
+    selected = BuiltinBootstrap.parse(bootstrap)
+    if selected.capability_id != "bluetooth.session@1":
+        raise BluetoothSelectionError("bluetooth bootstrap capability is invalid")
+    settings = selected.settings
+    return BluetoothProvider(
+        adapter=settings.get("adapter"), phy=settings.get("phy"), claims=selected.claims,
+        compatibility_group=settings.get("compatibility_group", "bluetooth"),
+        explicit_mock=settings.get("explicit_mock", False) is True,
+    )
