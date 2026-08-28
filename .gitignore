@@ -17,7 +17,9 @@ __pycache__
 */__pycache__
 logs
 venv
-references/
+# Reference checkouts stay local; our distilled design notes are tracked.
+references/*
+!references/design/
 
 # totemd (Rust + embedded web app)
 totemd/target/

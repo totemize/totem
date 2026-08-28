@@ -29,6 +29,8 @@ working environment.
 
 | Date | Summary |
 |------|---------|
+| [2026-08-28 — microduck architecture study](journal/2026-08-28.md#microduck-architecture-study) | Two-pass study of `references/microduck`; lessons distilled into `references/design/microduck-lessons.md` with a status-tracked borrow list (B1–B9), convergence notes, decided-against items, and open questions for specs 03/09. |
+| [2026-08-21 — fleet convergence and factory reset](journal/2026-08-21.md#fleet-convergence-and-factory-reset) | Converged current software, accepted a three-device reset, restored `NOBIOS`, and corrected the reset command to preserve provisioning configuration. |
 | [2026-08-21 — neutral idle versus lonely idle](journal/2026-08-21.md#neutral-idle-versus-lonely-idle) | Split ambient presentation by authoritative live friendship presence, reproduced the four-peer/two-friend regression, and deployed/converged only on metot. |
 | [2026-08-21 — totem display enablement](journal/2026-08-21.md#totem-display-enablement) | Enabled the same V4 screen profile on the older totem host, fixed fresh-screen deployment ordering, camera-verified the live UI, and converged with `changed=0`. |
 | [2026-08-21 — state-specific word-reveal captions](journal/2026-08-21.md#state-specific-word-reveal-captions) | Added stable randomized captions for all 13 authoritative scenes, independent word timing, exhaustive deterministic proof, and [physical metot evidence](proofs/2026-08-21/state-captions/README.md). |
