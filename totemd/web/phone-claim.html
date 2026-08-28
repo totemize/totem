@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101014">
+  <title>Make this Totem yours</title>
+  <!-- Absolute, because this page is also served at /claim/phone/<answer>,
+       where a relative source would resolve one level too deep. -->
+  <link rel="stylesheet" href="/claim/phone.css">
+  <script defer src="/claim/phone.js"></script>
+</head>
+<body>
+  <main>
+    <div class="mark">T</div>
+    <h1>Make this Totem yours</h1>
+    <p class="lead">
+      Whoever signs first becomes the owner. Your key stays in your key app and
+      never reaches this page.
+    </p>
+
+    <button id="sign" class="primary" type="button">Sign with my key app</button>
+    <p id="status" role="status"></p>
+
+    <p id="hint" class="hint" hidden>
+      Nothing opened? Install <strong>Amber</strong> from F&#8209;Droid or the
+      Play Store, put your key in it, then tap the button again.
+    </p>
+
+    <button id="reveal" class="quiet" type="button">Sign, then paste the answer instead</button>
+
+    <div id="manual" hidden>
+      <label for="pasted">Paste what your key app copied</label>
+      <textarea id="pasted" rows="4" spellcheck="false" autocapitalize="off"></textarea>
+      <button id="use-pasted" class="primary" type="button">Use this answer</button>
+    </div>
+
+    <p class="foot">
+      This runs entirely between your phone and this box. Nothing is sent over
+      the internet, and no other server is involved.
+    </p>
+    <p class="foot">On a computer? <a href="/">Open the full app</a> instead.</p>
+  </main>
+</body>
+</html>

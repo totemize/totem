@@ -97,6 +97,21 @@ pub async fn serve() {
         .route("/app.js", get(app_js))
         .route("/app.css", get(app_css))
         .route("/nsec-signer.js", get(nsec_signer_js))
+        // The claim path a phone can actually walk. The wildcard is the return
+        // leg: a NIP-55 signer appends its answer to the callback address, so
+        // the signed event arrives as a path segment and this page has to be
+        // served for whatever it turns out to be.
+        // Short enough to read off a panel and type into a phone by hand.
+        .route("/claim", get(phone_claim))
+        .route("/claim/", get(phone_claim))
+        .route("/claim/phone", get(phone_claim))
+        // Both, because a wildcard needs at least one segment: the bare callback
+        // address is what a signer hits if it appends nothing, and answering it
+        // with 404 turns a recoverable moment into a dead end.
+        .route("/claim/phone/", get(phone_claim))
+        .route("/claim/phone/{*answer}", get(phone_claim))
+        .route("/claim/phone.js", get(phone_claim_js))
+        .route("/claim/phone.css", get(phone_claim_css))
         .route("/api/status", get(status_get))
         .route("/api/updates", get(web_updates))
         .route("/api/auth/challenge", post(auth_challenge))
@@ -479,6 +494,9 @@ const INDEX_HTML: &str = include_str!("../web/static/index.html");
 const APP_JS: &str = include_str!("../web/static/app.js");
 const APP_CSS: &str = include_str!("../web/static/app.css");
 const NSEC_SIGNER_JS: &str = include_str!("../web/nsec-signer.js");
+const PHONE_CLAIM_HTML: &str = include_str!("../web/phone-claim.html");
+const PHONE_CLAIM_JS: &str = include_str!("../web/phone-claim.js");
+const PHONE_CLAIM_CSS: &str = include_str!("../web/phone-claim.css");
 
 fn text_asset(content_type: &'static str, source: &'static str) -> Response {
     (
@@ -502,6 +520,36 @@ async fn app_css() -> Response {
 
 async fn nsec_signer_js() -> Response {
     text_asset("text/javascript; charset=utf-8", NSEC_SIGNER_JS)
+}
+
+async fn phone_claim_js() -> Response {
+    text_asset("text/javascript; charset=utf-8", PHONE_CLAIM_JS)
+}
+
+async fn phone_claim_css() -> Response {
+    text_asset("text/css; charset=utf-8", PHONE_CLAIM_CSS)
+}
+
+/// The claim page a phone loads over this device's own access point.
+///
+/// Narrower than the app shell's policy: this page talks to no extension and
+/// loads nothing but its own two assets. Navigating to the `nostrsigner:` link
+/// is untouched by any of these directives - `form-action` governs forms, and
+/// `navigate-to` was never shipped - so the hand-off to the signer app is not
+/// something a stricter policy here can break.
+async fn phone_claim() -> Response {
+    (
+        [
+            (header::CACHE_CONTROL, "no-store"),
+            (
+                header::CONTENT_SECURITY_POLICY,
+                "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+            ),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        ],
+        Html(PHONE_CLAIM_HTML),
+    )
+        .into_response()
 }
 
 async fn root() -> Response {

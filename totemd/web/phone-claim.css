@@ -1,0 +1,106 @@
+/* One screen on a phone held in one hand: nothing below the fold that matters,
+   and every target big enough for a thumb. */
+:root {
+  color-scheme: dark;
+  --ground: #101014;
+  --raised: #191921;
+  --ink: #f2f2f6;
+  --dim: #a0a0ae;
+  --edge: #2c2c38;
+  --accent: #d8a24a;
+  --good: #6fcf8a;
+  --bad: #ef8b7a;
+}
+
+* { box-sizing: border-box; }
+
+/* An author display rule outranks the user agent's [hidden] { display: none },
+   so anything laid out with flex or grid stays on screen while the markup says
+   it is hidden. Measured: the paste box stood open on first load. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  padding: 2rem 1.25rem 3rem;
+  background: var(--ground);
+  color: var(--ink);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 26rem;
+  margin: 0 auto;
+}
+
+.mark {
+  align-self: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border: 1px solid var(--edge);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+h1 { margin: 0; font-size: 1.55rem; line-height: 1.2; text-wrap: balance; }
+.lead { margin: 0; color: var(--dim); }
+
+button {
+  font: inherit;
+  min-height: 3.25rem;
+  border-radius: 0.75rem;
+  cursor: pointer;
+}
+
+.primary {
+  border: none;
+  background: var(--accent);
+  color: #17130a;
+  font-weight: 600;
+}
+
+.primary:disabled { opacity: 0.45; cursor: default; }
+
+.quiet {
+  border: 1px solid var(--edge);
+  background: transparent;
+  color: var(--dim);
+  min-height: 2.75rem;
+}
+
+#status { margin: 0; min-height: 1.55rem; color: var(--dim); }
+#status.good { color: var(--good); }
+#status.bad { color: var(--bad); }
+
+.hint { margin: 0; padding: 0.85rem; border: 1px solid var(--edge); border-radius: 0.75rem; }
+.hint strong { color: var(--accent); }
+
+#manual { display: flex; flex-direction: column; gap: 0.6rem; }
+#manual label { color: var(--dim); font-size: 0.9rem; }
+
+textarea {
+  font: 0.85rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  width: 100%;
+  padding: 0.7rem;
+  border: 1px solid var(--edge);
+  border-radius: 0.75rem;
+  background: var(--raised);
+  color: var(--ink);
+  resize: vertical;
+}
+
+.foot { margin: 0.5rem 0 0; color: var(--dim); font-size: 0.85rem; }
+.foot a { color: var(--accent); }
+
+body.done .mark { border-color: var(--good); color: var(--good); }
+body.done #sign, body.done #reveal { display: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .primary { transition: opacity 120ms ease; }
+}
