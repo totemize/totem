@@ -23,12 +23,14 @@ Install the package in a virtual environment:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --editable packages/totem-driver-api
 python -m pip install --editable .
 ```
 
 Raspberry Pi transports also need the optional platform dependencies:
 
 ```bash
+python -m pip install --editable packages/totem-driver-api
 python -m pip install --editable '.[raspberry-pi]'
 ```
 

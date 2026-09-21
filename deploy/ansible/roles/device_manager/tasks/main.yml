@@ -102,7 +102,7 @@
 - name: Install a changed Python device-manager release
   when: not device_manager_release_checkpoint.stat.exists
   block:
-    - name: Install the Python package without rebuilding platform dependencies
+    - name: Install the Python packages without rebuilding platform dependencies
       ansible.builtin.command:
         argv:
           - /opt/totem/.venv/bin/python
@@ -113,6 +113,7 @@
           - --no-deps
           - --no-build-isolation
           - --force-reinstall
+          - "/opt/totem/releases/{{ totem_source_revision }}/app/packages/totem-driver-api"
           - "/opt/totem/releases/{{ totem_source_revision }}/app"
       notify:
         - Restart device manager

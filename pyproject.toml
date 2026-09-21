@@ -6,6 +6,7 @@ authors = [{ name = "Totem contributors" }]
 readme = "README.md"
 requires-python = ">=3.9,<4.0"
 dependencies = [
+    "totem-driver-api>=1.0,<2.0",
     "pillow>=9.2,<12.0",
     "numpy>=1.23",
     "fastapi>=0.110,<1.0",
