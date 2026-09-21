@@ -1,5 +1,5 @@
-"""Compatibility alias for the Waveshare 2.13-inch V2 controller driver."""
+"""Compatibility re-export for the provider-owned Waveshare 2.13 driver."""
 
-from totem.devices.display.drivers.waveshare_2in13_v2 import Driver
+from totem.hardware.builtin.display.drivers.waveshare_2in13 import Driver
 
 __all__ = ["Driver"]

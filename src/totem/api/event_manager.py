@@ -1,9 +1,10 @@
 import asyncio
 import logging
+from queue import Empty
 from typing import Awaitable, Callable, Dict, List, Optional, Set
 from fastapi import WebSocket
 
-from totem.api.models import DeviceEvent, DeviceType, EventType
+from totem.api.models import DeviceEvent, DeviceId, DeviceType, EventType
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,7 @@ class EventManager:
     EventManager handles broadcasting device events to WebSocket clients and event subscribers.
     It also provides methods for device managers to publish events.
     """
-    def __init__(self):
+    def __init__(self, runtime_events=None):
         # Active WebSocket connections
         self.active_connections: Set[WebSocket] = set()
         
@@ -23,8 +24,11 @@ class EventManager:
             for device_type in DeviceType
         }
         
-        # Event queue
+        # Compatibility-only queue for callers that do not provide the canonical
+        # runtime stream.  The app passes runtime_events and never publishes here.
         self.event_queue: asyncio.Queue[DeviceEvent] = asyncio.Queue()
+        self._runtime_events = runtime_events
+        self._runtime_subscription = None
         
         # Tasks are started explicitly from the application's lifespan.
         self.processor_task: Optional[asyncio.Task] = None
@@ -32,7 +36,35 @@ class EventManager:
     async def start(self):
         """Start event processing inside a running event loop."""
         if self.processor_task is None or self.processor_task.done():
-            self.processor_task = asyncio.create_task(self._process_events())
+            processor = self._process_runtime_events if self._runtime_events is not None else self._process_events
+            self.processor_task = asyncio.create_task(processor())
+
+    async def _process_runtime_events(self):
+        """Project the sole runtime event source; do not create a second source."""
+        self._runtime_subscription = self._runtime_events.subscribe()
+        try:
+            while True:
+                try:
+                    source = await asyncio.to_thread(self._runtime_subscription.get, True, 0.25)
+                except Empty:
+                    continue
+                event = DeviceEvent(
+                    device=DeviceId(device_type=DeviceType.NETWORK),
+                    event_type=EventType.HARDWARE_EVENT,
+                    data={
+                        "sequence": source.sequence,
+                        "binding_id": source.binding_id,
+                        "previous": getattr(source.previous, "value", source.previous),
+                        "state": getattr(source.state, "value", source.state),
+                        "code": source.code,
+                    },
+                )
+                await self._broadcast_event(event)
+                await self._notify_subscribers(event)
+        finally:
+            if self._runtime_subscription is not None:
+                self._runtime_events.unsubscribe(self._runtime_subscription)
+                self._runtime_subscription = None
         
     async def connect(self, websocket: WebSocket):
         """Register a new WebSocket connection"""

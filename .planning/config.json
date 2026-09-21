@@ -1,0 +1,8 @@
+{
+  "mode": "interactive",
+  "granularity": "standard",
+  "planning": {
+    "commit_docs": true
+  },
+  "project_code": "HW"
+}

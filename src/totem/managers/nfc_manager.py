@@ -1,27 +1,30 @@
-from totem.devices.nfc.nfc import NFC
-from totem.logging import logger
+"""Legacy NFC name translated through the canonical hardware client."""
+
+from __future__ import annotations
+
+from typing import Optional
+
+from totem.compat.hardware_client import LegacyHardwareClient
 
 class NFCManager:
-    def __init__(self, driver_name: str = None, *, allow_mock: bool = False):
-        self.nfc_device = NFC(driver_name, allow_mock=allow_mock)
-        self.nfc_device.initialize()
+    """Compatibility-only NFC facade; tag reads and writes remain capability calls."""
+
+    def __init__(
+        self,
+        driver_name: Optional[str] = None,
+        *,
+        allow_mock: bool = False,
+        client: Optional[LegacyHardwareClient] = None,
+    ) -> None:
+        self.client = client or LegacyHardwareClient()
+        self.legacy_config = {"driver_name": driver_name, "allow_mock": allow_mock}
+        self._closed = False
 
     def read_card(self) -> str:
-        try:
-            data = self.nfc_device.read_data()
-            logger.info("Successfully read data from NFC card.")
-            return data.decode('utf-8')
-        except Exception as e:
-            logger.error(f"Error reading NFC card: {e}")
-            raise
+        return self.client.read_card()
 
     def write_card(self, data: str):
-        try:
-            self.nfc_device.write_data(data.encode('utf-8'))
-            logger.info("Successfully wrote data to NFC card.")
-        except Exception as e:
-            logger.error(f"Error writing to NFC card: {e}")
-            raise
+        self.client.write_card(data)
 
     def close(self) -> None:
-        self.nfc_device.driver.close()
+        self._closed = True

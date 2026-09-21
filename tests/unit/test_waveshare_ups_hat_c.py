@@ -4,7 +4,6 @@ import pytest
 
 from totem.devices.contracts import DriverState
 from totem.devices.ups.drivers.waveshare_ups_hat_c import Driver
-from totem.devices.ups.ups import UPS_DRIVERS
 
 
 pytestmark = pytest.mark.unit
@@ -34,10 +33,10 @@ def _driver(registers):
     return driver, bus
 
 
-def test_waveshare_driver_is_registered():
-    driver = UPS_DRIVERS.load("waveshare-ups-hat-c")
+def test_waveshare_driver_is_canonical_provider_reexport():
+    from totem.hardware.builtin.power.drivers.waveshare_ups_hat_c import Driver as CanonicalDriver
 
-    assert isinstance(driver, Driver)
+    assert Driver is CanonicalDriver
 
 
 def test_waveshare_reads_voltage_percentage_and_signed_current():

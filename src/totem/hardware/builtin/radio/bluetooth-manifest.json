@@ -1,0 +1,26 @@
+{
+  "manifest_major": 1,
+  "api_major": 1,
+  "provider_id": "builtin.bluetooth",
+  "provider_version": "0.2.0",
+  "capabilities": ["bluetooth.session@1"],
+  "predicates": [
+    {"fact": "bluetooth.family", "equals": "builtin"}
+  ],
+  "config_schema": {
+    "host_mode": {"type": "string", "enum": ["process", "in_process"]},
+    "adapter": {"type": "string"},
+    "phy": {"type": "string"},
+    "compatibility_group": {"type": "string"},
+    "explicit_mock": {"type": "boolean"}
+  },
+  "defaults": {"host_mode": "process", "compatibility_group": "bluetooth"},
+  "resources": [
+    {"kind": "dbus", "identifier": "org.bluez", "exclusive": false},
+    {"kind": "interface", "identifier": "hci0", "exclusive": false, "group": "bluetooth"},
+    {"kind": "phy", "identifier": "phy0", "exclusive": false, "group": "bluetooth"}
+  ],
+  "privileges": [],
+  "grouping": "provider",
+  "factory": "totem.hardware.builtin.radio.bluetooth_provider:create_provider"
+}

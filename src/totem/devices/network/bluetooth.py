@@ -1,64 +1,67 @@
-"""Bluetooth/BLE driver contract and selection."""
+"""Legacy Bluetooth name translated through the canonical hardware client."""
 
-from abc import abstractmethod
-import sys
-from pathlib import Path
+from __future__ import annotations
+
 from typing import Optional
 
-from totem.devices.contracts import DeviceDriver
-from totem.devices.registry import DriverRegistry, DriverSpec, HardwareNotFoundError
-from totem.logging import logger
+from totem.compat.hardware_client import LegacyHardwareClient
+from totem.hardware.builtin.radio.network import BluetoothDeviceInterface
 
 
-class BluetoothDeviceInterface(DeviceDriver):
-    @abstractmethod
-    def get_radio_state(self):
-        pass
+class Bluetooth:
+    """Compatibility-only Bluetooth facade; runtime and broker stay canonical."""
 
-    @abstractmethod
-    def set_radio_enabled(self, enabled: bool, timeout: float = 15.0):
-        pass
-
-    @abstractmethod
-    def get_capabilities(self):
-        pass
-
-    @abstractmethod
-    def start_discovery(
+    def __init__(
         self,
-        duration_seconds: int = 30,
-        service_uuids=None,
-        duplicate_data: bool = True,
-        session_id=None,
-        timeout: float = 15.0,
-    ):
-        pass
+        driver_name: Optional[str] = None,
+        *,
+        allow_mock: bool = False,
+        client: Optional[LegacyHardwareClient] = None,
+    ) -> None:
+        self.client = client or LegacyHardwareClient()
+        self.legacy_config = {"driver_name": driver_name, "allow_mock": allow_mock}
+        self._closed = False
+        self._initialized = False
 
-    @abstractmethod
+    def initialize(self):
+        """Record facade readiness without selecting or starting a backend."""
+
+        self._initialized = True
+        return True
+
+    def set_event_callback(self, callback) -> None:
+        return self.client.set_event_callback(callback)
+
+    def get_radio_state(self):
+        return self.client.get_bluetooth_radio_state()
+
+    def set_radio_enabled(self, enabled: bool, timeout: float = 15.0):
+        return self.client.set_bluetooth_radio_enabled(enabled, timeout)
+
+    def get_capabilities(self):
+        return self.client.get_bluetooth_capabilities()
+
+    def start_discovery(self, **kwargs):
+        return self.client.start_bluetooth_discovery(**kwargs)
+
     def stop_discovery(self, session_id: str, timeout: float = 15.0):
-        pass
+        return self.client.stop_bluetooth_discovery(session_id, timeout)
 
-    @abstractmethod
-    def discovery_session_count(self) -> int:
-        pass
+    def discovery_session_count(self):
+        return self.client.bluetooth_discovery_session_count()
 
-    @abstractmethod
     def list_devices(self):
-        pass
+        return self.client.list_bluetooth_devices()
 
-    @abstractmethod
     def register_advertisement(self, specification, timeout: float = 15.0):
-        pass
+        return self.client.register_bluetooth_advertisement(specification, timeout)
 
-    @abstractmethod
     def unregister_advertisement(self, advertisement_id: str, timeout: float = 15.0):
-        pass
+        return self.client.unregister_bluetooth_advertisement(advertisement_id, timeout)
 
-    @abstractmethod
     def list_advertisements(self):
-        pass
+        return self.client.list_bluetooth_advertisements()
 
-    @abstractmethod
     def create_l2cap_listener(
         self,
         service_uuid: str,
@@ -67,17 +70,16 @@ class BluetoothDeviceInterface(DeviceDriver):
         address_type: str = "public",
         timeout: float = 15.0,
     ):
-        pass
+        return self.client.create_l2cap_listener(
+            service_uuid, psm, mtu, address_type, timeout
+        )
 
-    @abstractmethod
     def list_l2cap_listeners(self):
-        pass
+        return self.client.list_l2cap_listeners()
 
-    @abstractmethod
     def close_l2cap_listener(self, listener_id: str, timeout: float = 15.0):
-        pass
+        return self.client.close_l2cap_listener(listener_id, timeout)
 
-    @abstractmethod
     def connect_l2cap(
         self,
         peer_address: str,
@@ -86,41 +88,33 @@ class BluetoothDeviceInterface(DeviceDriver):
         address_type: str = "public",
         timeout: float = 15.0,
     ):
-        pass
+        return self.client.connect_l2cap(peer_address, psm, mtu, address_type, timeout)
 
-    @abstractmethod
     def list_l2cap_connections(self):
-        pass
+        return self.client.list_l2cap_connections()
 
-    @abstractmethod
     def close_l2cap_connection(self, connection_id: str):
-        pass
+        return self.client.close_l2cap_connection(connection_id)
 
-    @abstractmethod
     def handoff_l2cap_to_fips(
         self, connection_id: str, timeout: float = 15.0, metadata=None
     ):
-        pass
+        return self.client.handoff_l2cap_to_fips(connection_id, timeout, metadata)
 
-    @abstractmethod
     def connect_device(self, device_id: str, timeout: float = 30.0):
-        pass
+        return self.client.connect_bluetooth_device(device_id, timeout)
 
-    @abstractmethod
     def disconnect_device(self, device_id: str, timeout: float = 15.0):
-        pass
+        return self.client.disconnect_bluetooth_device(device_id, timeout)
 
-    @abstractmethod
     def list_gatt(self, device_id: str):
-        pass
+        return self.client.list_gatt(device_id)
 
-    @abstractmethod
     def read_characteristic(
         self, device_id: str, characteristic_id: str, timeout: float = 15.0
     ):
-        pass
+        return self.client.read_gatt_characteristic(device_id, characteristic_id, timeout)
 
-    @abstractmethod
     def write_characteristic(
         self,
         device_id: str,
@@ -129,9 +123,10 @@ class BluetoothDeviceInterface(DeviceDriver):
         with_response: bool = True,
         timeout: float = 15.0,
     ):
-        pass
+        return self.client.write_gatt_characteristic(
+            device_id, characteristic_id, value, with_response, timeout
+        )
 
-    @abstractmethod
     def subscribe_characteristic(
         self,
         device_id: str,
@@ -139,54 +134,14 @@ class BluetoothDeviceInterface(DeviceDriver):
         subscription_id=None,
         timeout: float = 15.0,
     ):
-        pass
-
-    @abstractmethod
-    def unsubscribe_characteristic(self, subscription_id: str, timeout: float = 15.0):
-        pass
-
-
-BLUETOOTH_DRIVERS = DriverRegistry(
-    BluetoothDeviceInterface,
-    (
-        DriverSpec("bluez", "totem.devices.network.drivers.bluez"),
-        DriverSpec(
-            "mock_bluetooth",
-            "totem.devices.network.drivers.mock_bluetooth",
-            is_mock=True,
-        ),
-    ),
-)
-
-
-class Bluetooth:
-    def __init__(self, driver_name: Optional[str] = None, *, allow_mock: bool = False):
-        self.allow_mock = allow_mock
-        if driver_name:
-            selected = driver_name
-        elif self._detect_hardware():
-            selected = "bluez"
-        elif allow_mock:
-            selected = "mock_bluetooth"
-        else:
-            raise HardwareNotFoundError("No supported Bluetooth controller detected")
-        self.driver = BLUETOOTH_DRIVERS.load(selected, allow_mock=allow_mock)
-        logger.info("Loaded Bluetooth driver: %s", selected)
-
-    @staticmethod
-    def _detect_hardware() -> bool:
-        return (
-            sys.platform.startswith("linux")
-            and Path("/sys/class/bluetooth/hci0").exists()
+        return self.client.subscribe_gatt_characteristic(
+            device_id, characteristic_id, subscription_id, timeout
         )
 
-    def initialize(self):
-        self.driver.init()
+    def unsubscribe_characteristic(self, subscription_id: str, timeout: float = 15.0):
+        return self.client.unsubscribe_gatt_characteristic(subscription_id, timeout)
 
-    def set_event_callback(self, callback) -> None:
-        setter = getattr(self.driver, "set_event_callback", None)
-        if setter:
-            setter(callback)
+    def close(self) -> None:
+        """Close this facade only; never stop the shared client or runtime."""
 
-    def __getattr__(self, name):
-        return getattr(self.driver, name)
+        self._closed = True

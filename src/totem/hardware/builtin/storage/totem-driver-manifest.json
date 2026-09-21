@@ -1,0 +1,24 @@
+{
+  "manifest_major": 1,
+  "api_major": 1,
+  "provider_id": "builtin.storage",
+  "provider_version": "0.2.0",
+  "capabilities": ["storage.files@1"],
+  "predicates": [
+    {"fact": "storage.family", "equals": "builtin"}
+  ],
+  "config_schema": {
+    "host_mode": {"type": "string", "enum": ["process", "in_process"]},
+    "storage_model": {"type": "string", "enum": ["filesystem", "generic_nvme"]},
+    "storage_root_ref": {"type": "string"}
+  },
+  "defaults": {"host_mode": "process"},
+  "resources": [
+    {"kind": "path", "identifier": "storage-root", "exclusive": true},
+    {"kind": "mount", "identifier": "storage-mount", "exclusive": true},
+    {"kind": "block", "identifier": "storage-block", "exclusive": true}
+  ],
+  "privileges": [],
+  "grouping": "provider",
+  "factory": "totem.hardware.builtin.storage.provider:create_provider"
+}

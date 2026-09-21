@@ -7,8 +7,8 @@ import os
 import signal
 
 from totem.logging import setup_logger
+from totem.screen.adapters.hardware_bus import HardwareBusScreenAdapter
 from totem.screen.controller import ScreenController
-from totem.screen.display import DeviceManagerDisplay
 from totem.screen.readiness import (
     LiveReadinessMonitor,
     SyntheticReadinessMonitor,
@@ -56,7 +56,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 async def _run(args) -> None:
-    display = DeviceManagerDisplay(args.device_api_url)
+    display = HardwareBusScreenAdapter(args.device_api_url)
     renderer = FrameRenderer(
         width=args.width,
         height=args.height,
@@ -67,7 +67,7 @@ async def _run(args) -> None:
         monitor = SyntheticReadinessMonitor()
         notifier = SystemdNotifier(address="")
     else:
-        monitor = LiveReadinessMonitor(display)
+        monitor = LiveReadinessMonitor(display.health, display.power)
         notifier = SystemdNotifier()
 
     await controller.boot(

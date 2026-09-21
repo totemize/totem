@@ -1,0 +1,63 @@
+{
+  "schema": "totem.nip5d-framed-ipc-spike@1",
+  "codec": "canonical-json",
+  "codec_library_version": "Python standard library",
+  "codec_wire_id": 1,
+  "protocol_version": 1,
+  "platform": "macOS-15.6-arm64-arm-64bit",
+  "python": "3.9.6",
+  "limits": {
+    "header_bytes": 65536,
+    "attachment_bytes": 16777216,
+    "attachments_per_frame": 16
+  },
+  "conformance": {
+    "passed": 25,
+    "checks": [
+      "control_round_trip",
+      "one_byte_fragmentation",
+      "pipelined_frames",
+      "multiple_verified_attachments",
+      "canonical_attachment_order",
+      "missing_type_rejected",
+      "invalid_id_rejected",
+      "binary_value_outside_attachment_channel_rejected",
+      "non_finite_number_rejected",
+      "integer_outside_signed_64_bit_rejected",
+      "reserved_attachment_field_rejected",
+      "truncated_frame_rejected",
+      "oversized_header_rejected_before_read",
+      "oversized_attachment_rejected_before_read",
+      "oversized_header_rejected_before_write",
+      "invalid_magic_rejected",
+      "protocol_version_mismatch_rejected",
+      "unknown_flags_rejected",
+      "codec_mismatch_rejected",
+      "malformed_header_rejected",
+      "checksum_mismatch_rejected",
+      "duplicate_attachment_id_rejected",
+      "unclaimed_attachment_bytes_rejected",
+      "missing_attachment_is_correlated_error",
+      "socket_request_result_event_flow"
+    ]
+  },
+  "benchmark": {
+    "iterations": 2000,
+    "decode_microseconds_per_frame": {
+      "control": 3.524604,
+      "display_with_raw_attachment": 8.150084
+    },
+    "encode_and_decode_microseconds_per_frame": {
+      "control": 7.087271,
+      "display_with_raw_attachment": 17.777082
+    },
+    "wire_sizes_bytes": {
+      "control": 62,
+      "display_total": 4132,
+      "display_header": 303,
+      "display_raw_attachment": 3813,
+      "display_inline_base64_total": 5240,
+      "raw_savings_over_inline_base64": 1108
+    }
+  }
+}

@@ -17,7 +17,7 @@ __pycache__
 */__pycache__
 logs
 venv
-references/
+/references/
 
 # totemd (Rust + embedded web app)
 totemd/target/

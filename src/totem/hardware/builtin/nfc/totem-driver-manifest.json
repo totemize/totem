@@ -1,0 +1,26 @@
+{
+  "manifest_major": 1,
+  "api_major": 1,
+  "provider_id": "builtin.nfc",
+  "provider_version": "0.2.0",
+  "capabilities": ["nfc.tag@1"],
+  "predicates": [
+    {"fact": "nfc.family", "equals": "builtin"}
+  ],
+  "config_schema": {
+    "host_mode": {"type": "string", "enum": ["process", "in_process"]},
+    "nfc_model": {"type": "string", "enum": ["acr122", "pn532", "mock_nfc"]},
+    "usb_vid": {"type": "string"},
+    "usb_pid": {"type": "string"},
+    "serial_port": {"type": "string"},
+    "i2c_address": {"type": "string"},
+    "explicit_mock": {"type": "boolean"}
+  },
+  "defaults": {"host_mode": "process"},
+  "resources": [
+    {"kind": "nfc", "identifier": "reader", "exclusive": true}
+  ],
+  "privileges": [],
+  "grouping": "provider",
+  "factory": "totem.hardware.builtin.nfc.provider:create_provider"
+}

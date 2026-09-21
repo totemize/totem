@@ -1,14 +1,13 @@
-"""UPS device contract and driver selection."""
+"""Legacy UPS name translated through the canonical hardware client."""
+
+from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-import os
-from pathlib import Path
 from typing import Optional
 
+from totem.compat.hardware_client import LegacyHardwareClient
 from totem.devices.contracts import DeviceDriver
-from totem.devices.registry import DriverRegistry, DriverSpec, HardwareNotFoundError
-from totem.logging import logger
 
 
 @dataclass(frozen=True)
@@ -23,7 +22,7 @@ class UPSStatus:
 
 
 class UPSDeviceInterface(DeviceDriver):
-    """Operations every UPS driver exposes to the device manager."""
+    """Historical UPS-driver contract retained for import compatibility."""
 
     @abstractmethod
     def init(self):
@@ -36,43 +35,30 @@ class UPSDeviceInterface(DeviceDriver):
         raise NotImplementedError
 
 
-UPS_DRIVERS = DriverRegistry(
-    UPSDeviceInterface,
-    (
-        DriverSpec("pisugar2", "totem.devices.ups.drivers.pisugar2"),
-        DriverSpec(
-            "waveshare_ups_hat_c",
-            "totem.devices.ups.drivers.waveshare_ups_hat_c",
-        ),
-    ),
-)
-
-
 class UPS:
-    """Select and expose the attached UPS through a stable primitive."""
+    """Compatibility-only UPS facade; telemetry ownership stays canonical."""
 
-    def __init__(self, driver_name: Optional[str] = None):
-        selected = driver_name or self._detect_hardware()
-        if selected is None:
-            raise HardwareNotFoundError("No supported UPS hardware detected")
-        self.driver = UPS_DRIVERS.load(selected)
-        logger.info("Loaded UPS driver: %s", selected)
-
-    @staticmethod
-    def _detect_hardware() -> Optional[str]:
-        bus_number = os.environ.get("TOTEM_I2C_BUS", "1").strip() or "1"
-        if Path("/dev/i2c-{}".format(bus_number)).exists():
-            # Preserve PiSugar2 as the legacy fallback. Other I2C UPS models
-            # must be selected explicitly because a bus node alone cannot
-            # identify which HAT is attached.
-            return "pisugar2"
-        return None
+    def __init__(
+        self,
+        driver_name: Optional[str] = None,
+        *,
+        client: Optional[LegacyHardwareClient] = None,
+    ) -> None:
+        self.client = client or LegacyHardwareClient()
+        self.legacy_config = {"driver_name": driver_name}
+        self._closed = False
+        self._initialized = False
 
     def initialize(self):
-        return self.driver.init()
+        """Record local compatibility readiness without starting a driver."""
+
+        self._initialized = True
+        return True
 
     def get_status(self) -> UPSStatus:
-        return self.driver.get_status()
+        return self.client.get_ups_status()
 
     def close(self) -> None:
-        self.driver.close()
+        """Close this facade only; never stop the shared client or runtime."""
+
+        self._closed = True

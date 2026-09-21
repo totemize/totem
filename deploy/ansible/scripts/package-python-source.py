@@ -14,18 +14,37 @@ import tempfile
 
 
 def source_files(repository: Path) -> list[Path]:
-    required = [repository / "README.md", repository / "pyproject.toml"]
+    driver_api_root = repository / "packages" / "totem-driver-api"
+    required = [
+        repository / "README.md",
+        repository / "pyproject.toml",
+        driver_api_root / "pyproject.toml",
+    ]
     source_root = repository / "src"
+    driver_api_source_root = driver_api_root / "src"
     missing = [path for path in required if not path.is_file()]
     if missing:
         raise SystemExit("missing deployable source: {}".format(missing[0]))
     if not source_root.is_dir():
         raise SystemExit("missing deployable source directory: {}".format(source_root))
+    if not driver_api_source_root.is_dir():
+        raise SystemExit(
+            "missing deployable driver API source directory: {}".format(
+                driver_api_source_root
+            )
+        )
 
     files = list(required)
     files.extend(
         path
         for path in source_root.rglob("*")
+        if path.is_file()
+        and "__pycache__" not in path.parts
+        and path.suffix not in {".pyc", ".pyo"}
+    )
+    files.extend(
+        path
+        for path in driver_api_source_root.rglob("*")
         if path.is_file()
         and "__pycache__" not in path.parts
         and path.suffix not in {".pyc", ".pyo"}

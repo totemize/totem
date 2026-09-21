@@ -1,0 +1,120 @@
+{
+  "schema": "totem.dual-driver-host-spike@1",
+  "functional_conformance": {
+    "passed_per_host": 8,
+    "checks": [
+      "nested_json_echo",
+      "binary_attachment_result",
+      "typed_push",
+      "provider_error",
+      "unknown_request",
+      "short_operation",
+      "deadline_result",
+      "usable_after_cooperative_or_contained_timeout"
+    ],
+    "transcripts_identical": true,
+    "in_process_stats": {
+      "mode": "in_process",
+      "generation": 1,
+      "restarts": 0,
+      "contaminated": false,
+      "cooperative_cancellations": 1,
+      "uncooperative_timeouts": 0,
+      "live_invocation_threads": 0
+    },
+    "process_stats": {
+      "mode": "process",
+      "generation": 2,
+      "restarts": 1,
+      "contaminated": false,
+      "last_exit_code": -15,
+      "child_alive": true
+    }
+  },
+  "uncooperative_hang": {
+    "in_process": {
+      "deadline_result": {
+        "type": "fixture.hang.result",
+        "id": "hang-in_process",
+        "ok": false,
+        "error": {
+          "code": "deadline_exceeded",
+          "message": "operation exceeded its deadline"
+        }
+      },
+      "stats_at_deadline": {
+        "mode": "in_process",
+        "generation": 1,
+        "restarts": 0,
+        "contaminated": true,
+        "cooperative_cancellations": 0,
+        "uncooperative_timeouts": 1,
+        "live_invocation_threads": 1
+      },
+      "follow_up": {
+        "type": "fixture.echo.result",
+        "id": "after-hang-in_process",
+        "ok": false,
+        "error": {
+          "code": "host_contaminated",
+          "message": "an in-process call is still running; daemon restart required"
+        }
+      },
+      "resources_releasable": false,
+      "requires_daemon_restart": true
+    },
+    "process": {
+      "deadline_result": {
+        "type": "fixture.hang.result",
+        "id": "hang-process",
+        "ok": false,
+        "error": {
+          "code": "deadline_exceeded",
+          "message": "operation exceeded its deadline"
+        }
+      },
+      "stats_at_deadline": {
+        "mode": "process",
+        "generation": 2,
+        "restarts": 1,
+        "contaminated": false,
+        "last_exit_code": -15,
+        "child_alive": true
+      },
+      "follow_up": {
+        "id": "after-hang-process",
+        "ok": true,
+        "type": "fixture.echo.result",
+        "value": "alive"
+      },
+      "resources_releasable": true,
+      "requires_daemon_restart": false
+    }
+  },
+  "native_style_crash": {
+    "in_process": {
+      "probe_exit_code": 86,
+      "daemon_survived": false
+    },
+    "process": {
+      "probe_exit_code": 0,
+      "daemon_survived": true,
+      "driver_exit_code": 86,
+      "restarted": true,
+      "follow_up_succeeded": true
+    }
+  },
+  "contract_refinement": {
+    "same": [
+      "logical request/result/event envelopes",
+      "attachment validation",
+      "structured provider errors",
+      "caller-visible deadline result"
+    ],
+    "different": [
+      "hard termination and restart",
+      "native crash containment",
+      "safe resource-lease release after uncooperative timeout"
+    ]
+  }
+}

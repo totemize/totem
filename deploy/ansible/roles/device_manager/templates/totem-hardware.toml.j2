@@ -1,0 +1,15 @@
+# Generated resolver evidence and per-provider settings.  This file is the
+# service's typed startup contract, not a driver registry.
+[global]
+
+[global.hardware_facts]
+{% for key, value in (totem_hardware_inventory.facts | default({})).items() | sort %}
+"{{ key }}" = "{{ value }}"
+{% endfor %}
+{% for plugin_name, settings in (totem_hardware_inventory.plugins | default({})).items() | sort %}
+
+[plugins."{{ plugin_name }}"]
+{% for key, value in settings.items() | sort %}
+{{ key }} = "{{ value }}"
+{% endfor %}
+{% endfor %}

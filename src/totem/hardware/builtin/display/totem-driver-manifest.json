@@ -1,0 +1,33 @@
+{
+  "manifest_major": 1,
+  "api_major": 1,
+  "provider_id": "builtin.display",
+  "provider_version": "0.2.0",
+  "capabilities": ["display.frame-sink@1"],
+  "predicates": [
+    {"fact": "display.panel.family", "equals": "waveshare-2in13"}
+  ],
+  "config_schema": {
+    "host_mode": {"type": "string", "enum": ["process", "in_process"]},
+    "panel_variant": {
+      "type": "string",
+      "enum": [
+        "waveshare-2in13",
+        "waveshare-2in13-pi5",
+        "waveshare-2in13-pi5-sw-cs",
+        "waveshare-2in13-v1",
+        "waveshare-2in13-v2",
+        "waveshare-2in13-v3",
+        "waveshare-2in13-v4"
+      ]
+    }
+  },
+  "defaults": {"host_mode": "process"},
+  "resources": [
+    {"kind": "gpio", "identifier": "bcm:17,18,24,25", "exclusive": true},
+    {"kind": "spi", "identifier": "spi0.0", "exclusive": true}
+  ],
+  "privileges": [],
+  "grouping": "provider",
+  "factory": "totem.hardware.builtin.display.provider:create_provider"
+}

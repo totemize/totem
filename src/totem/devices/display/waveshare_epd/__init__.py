@@ -1,8 +1,6 @@
-"""
-Waveshare e-Paper Display Python driver
+"""Compatibility re-export for canonical Waveshare vendor support."""
 
-This package contains the driver files for Waveshare e-Paper displays.
-"""
+from totem.hardware.builtin.display.waveshare_epd import __version__
 
-# Version
-__version__ = '1.0.0' 
+
+__all__ = ["__version__"]

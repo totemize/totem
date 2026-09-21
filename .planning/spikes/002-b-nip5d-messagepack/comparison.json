@@ -1,0 +1,80 @@
+{
+  "schema": "totem.nip5d-codec-comparison@1",
+  "trials": 5,
+  "iterations_per_inner_sample": 2000,
+  "conformance_checks_per_codec": 25,
+  "codec_versions": {
+    "json": "Python standard library",
+    "messagepack": "1.1.2 msgpack._cmsgpack",
+    "messagepack_pure_python": "1.1.2 fallback"
+  },
+  "json": {
+    "wire_sizes_bytes": {
+      "control": 62,
+      "display_total": 4132,
+      "display_header": 303,
+      "display_raw_attachment": 3813,
+      "display_inline_base64_total": 5240,
+      "raw_savings_over_inline_base64": 1108
+    },
+    "decode_microseconds_per_frame": {
+      "control": 3.590688,
+      "display_with_raw_attachment": 8.121834
+    },
+    "encode_and_decode_microseconds_per_frame": {
+      "control": 7.123958,
+      "display_with_raw_attachment": 17.642666
+    }
+  },
+  "messagepack": {
+    "wire_sizes_bytes": {
+      "control": 54,
+      "display_total": 4085,
+      "display_header": 256,
+      "display_raw_attachment": 3813,
+      "display_inline_base64_total": 5210,
+      "raw_savings_over_inline_base64": 1125
+    },
+    "decode_microseconds_per_frame": {
+      "control": 2.977479,
+      "display_with_raw_attachment": 7.085168
+    },
+    "encode_and_decode_microseconds_per_frame": {
+      "control": 5.140855,
+      "display_with_raw_attachment": 14.133918
+    }
+  },
+  "messagepack_pure_python": {
+    "wire_sizes_bytes": {
+      "control": 54,
+      "display_total": 4085,
+      "display_header": 256,
+      "display_raw_attachment": 3813,
+      "display_inline_base64_total": 5210,
+      "raw_savings_over_inline_base64": 1125
+    },
+    "decode_microseconds_per_frame": {
+      "control": 8.954979,
+      "display_with_raw_attachment": 30.369416
+    },
+    "encode_and_decode_microseconds_per_frame": {
+      "control": 15.612271,
+      "display_with_raw_attachment": 56.274834
+    }
+  },
+  "ratios_messagepack_over_json": {
+    "control_wire_size": 0.871,
+    "display_wire_size": 0.9886,
+    "control_decode_time": 0.8292,
+    "display_decode_time": 0.8724,
+    "control_encode_decode_time": 0.7216,
+    "display_encode_decode_time": 0.8011
+  },
+  "ratios_messagepack_pure_python_over_json": {
+    "control_decode_time": 2.4939,
+    "display_decode_time": 3.7392,
+    "control_encode_decode_time": 2.1915,
+    "display_encode_decode_time": 3.1897
+  },
+  "pi_gate": "Repeat on armv6/armv7/aarch64 devices, including install/build path and pure-Python fallback if a compatible wheel is unavailable."
+}

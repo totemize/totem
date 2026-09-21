@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "totem-driver-fixture"
+version = "1.0.0"
+description = "Independent fixture provider for Totem driver contract tests"
+requires-python = ">=3.9"
+dependencies = ["totem-driver-api>=1,<2"]
+
+[project.entry-points."totem.hardware.drivers"]
+fixture-display = "totem_driver_fixture.provider:create_provider"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+totem_driver_fixture = ["totem-driver-manifest.json"]

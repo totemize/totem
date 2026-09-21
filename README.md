@@ -20,12 +20,14 @@ set `TOTEM_ALLOW_MOCK_DRIVERS=1` when running the API.
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --editable packages/totem-driver-api
 python -m pip install --editable .
 ```
 
 Install Raspberry Pi transport dependencies with:
 
 ```bash
+python -m pip install --editable packages/totem-driver-api
 python -m pip install --editable ".[raspberry-pi]"
 ```
 
@@ -53,15 +55,16 @@ the boot state machine without rebooting with `totem-screen replay-boot`.
 ## Test
 
 ```bash
+python -m pip install --editable packages/totem-driver-api
 python -m pip install --editable .
 python -m pip install "pytest>=7.3,<9" "pytest-cov>=4,<7" "httpx>=0.27,<0.28"
-pytest -m "unit and not hardware"
+python -m pytest -m "unit and not hardware"
 ```
 
 Physical hardware checks are opt-in:
 
 ```bash
-pytest tests/hardware -m hardware --run-hardware
+python -m pytest tests/hardware -m hardware --run-hardware
 ```
 
 The source-controlled `metot` hardware profile is

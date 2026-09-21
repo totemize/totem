@@ -17,6 +17,10 @@ that provides the `fips0` overlay network our devices run on) and
 `references/strfry/`. These are reference checkouts: read them, don't
 refactor them.
 
+## Project Skills
+
+- **Spike findings for totem** (implementation patterns, constraints, gotchas) → `Skill("spike-findings-totem")`
+
 ## Journal (.journey/)
 
 The project keeps a dated journal in `.journey/journal/YYYY-MM-DD.md` —
