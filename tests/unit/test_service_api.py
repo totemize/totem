@@ -45,7 +45,9 @@ def make_client():
 def test_api_translates_legacy_service_shapes_to_canonical_bus_requests():
     client, bus = make_client()
     with client:
-        assert client.post("/display/text", json={"text": "hello", "font_size": 18, "x": 4, "y": 9}).status_code == 200
+        text = client.post("/display/text", json={"text": "hello", "font_size": 18, "x": 4, "y": 9})
+        assert text.status_code == 501
+        assert text.json()["detail"]["code"] == "unsupported_feature"
         assert client.post("/display/image", json={"image_base64": base64.b64encode(b"image").decode("ascii")}).status_code == 200
         assert client.post("/nfc/write", json={"data": "payload"}).status_code == 200
         assert "totem-tag" in client.post("/nfc/read").json()["message"]
@@ -59,12 +61,12 @@ def test_api_translates_legacy_service_shapes_to_canonical_bus_requests():
 
     actions = [call["type"] for call in bus.calls]
     assert actions == [
-        "display.text.write", "display.frame.write", "nfc.tag.write", "nfc.tag.read",
-        "storage.files.write", "radio.wifi.hotspot.create", "radio.wifi.connection.create",
+        "display.frame.write", "nfc.tag.write", "nfc.tag.read",
+        "storage.files.write", "wifi.connection.hotspot", "wifi.connection.connect",
         "power.telemetry.read",
     ]
-    assert bus.calls[1]["_attachments"] == {"frame": b"image"}
-    assert bus.calls[4]["_attachments"] == {"attachment-1": b"stored"}
+    assert bus.calls[0]["_attachments"] == {"frame": b"image"}
+    assert base64.b64decode(bus.calls[3]["data_b64"]) == b"stored"
 
 
 def test_storage_read_returns_binary_as_base64():

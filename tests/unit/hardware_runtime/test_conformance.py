@@ -53,8 +53,17 @@ def _request(request_id: str, *, nested: object = None) -> Dict[str, object]:
 
 
 class _Provider:
-    def write_frame(self, request: object) -> Dict[str, object]:
-        return {"attachment_id": getattr(request, "attachment_id"), "accepted": True}
+    def dispatch(
+        self,
+        message: Dict[str, object],
+        attachments: Dict[str, object],
+        context: Dict[str, object],
+    ) -> Dict[str, object]:
+        assert context == {"binding_id": "display"}
+        if message["type"] != "display.frame.write":
+            return {"ok": False, "error": {"code": "unknown_type"}}
+        assert attachments == {"frame": b"x"}
+        return {"ok": True, "attachment_id": "frame", "accepted": True}
 
 
 def _host() -> InProcessDriverHost:

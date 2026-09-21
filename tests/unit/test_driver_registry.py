@@ -5,6 +5,7 @@ import pytest
 from totem.devices.registry import (
     DriverLoadError,
     DriverRegistry,
+    DriverSpec,
     HardwareNotFoundError,
     MockDriverNotAllowedError,
     UnknownDriverError,
@@ -29,8 +30,13 @@ def test_legacy_registry_errors_remain_importable() -> None:
 
 
 def test_legacy_constructor_cannot_reactivate_static_driver_specs() -> None:
-    registry = DriverRegistry(object, ())
+    legacy_spec = DriverSpec("made_up_driver", module="legacy.driver")
+    registry = DriverRegistry(
+        object,
+        (legacy_spec,),
+        catalog=CatalogSnapshot(records=(), diagnostics=()),
+    )
 
-    assert registry.names
-    with pytest.raises((UnknownDriverError, DriverLoadError)):
+    assert registry.names == ()
+    with pytest.raises(UnknownDriverError):
         registry.load("made_up_driver")

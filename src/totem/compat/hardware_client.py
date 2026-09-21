@@ -134,7 +134,11 @@ class LegacyHardwareClient:
         if operation == "read_card" and not args and not kwargs:
             return "nfc.tag.read", {}, {}
         if operation == "write_card" and len(args) == 1 and not kwargs:
-            data = LegacyHardwareClient._bytes(args[0], operation)
+            data = (
+                args[0].encode("utf-8")
+                if isinstance(args[0], str)
+                else LegacyHardwareClient._bytes(args[0], operation)
+            )
             return "nfc.tag.write", {"data_b64": base64.b64encode(data).decode("ascii")}, {}
         if operation == "read_data" and len(args) == 1 and not kwargs:
             return "storage.files.read", {"path": LegacyHardwareClient._text(args[0], "path")}, {}

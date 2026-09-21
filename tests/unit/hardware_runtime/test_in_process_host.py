@@ -57,20 +57,40 @@ def _request(request_id: str = "request-1") -> Dict[str, object]:
 
 
 class CooperativeProvider:
-    def write_frame(self, request: object, *, cancel_event: Optional[threading.Event] = None) -> Dict[str, object]:
+    def dispatch(
+        self,
+        message: Dict[str, object],
+        attachments: Dict[str, object],
+        context: Dict[str, object],
+        *,
+        cancel_event: Optional[threading.Event] = None,
+    ) -> Dict[str, object]:
+        assert message["type"] == "display.frame.write"
+        assert attachments == {"frame": b"x"}
+        assert context == {"binding_id": "display"}
         assert cancel_event is not None
         cancel_event.wait(1.0)
-        return {"attachment_id": getattr(request, "attachment_id"), "accepted": False}
+        return {"ok": True, "attachment_id": "frame", "accepted": False}
 
 
 class UncooperativeProvider:
     def __init__(self) -> None:
         self.release = threading.Event()
 
-    def write_frame(self, request: object, *, cancel_event: Optional[threading.Event] = None) -> Dict[str, object]:
+    def dispatch(
+        self,
+        message: Dict[str, object],
+        attachments: Dict[str, object],
+        context: Dict[str, object],
+        *,
+        cancel_event: Optional[threading.Event] = None,
+    ) -> Dict[str, object]:
+        assert message["type"] == "display.frame.write"
+        assert attachments == {"frame": b"x"}
+        assert context == {"binding_id": "display"}
         del cancel_event
         self.release.wait(1.0)
-        return {"attachment_id": getattr(request, "attachment_id"), "accepted": True}
+        return {"ok": True, "attachment_id": "frame", "accepted": True}
 
 
 def test_cooperative_deadline_signals_cancellation_and_returns_ready_for_follow_up() -> None:
